@@ -9,9 +9,21 @@ public actor EditorAssetLibrary {
     private let storageRoot: URL
     private let cachePolicy: EditorCachePolicy
 
-    /// Bundle builds in flight, keyed by the directory each writes. Every service builds its own
-    /// library, so this is shared across all of them.
+    /// Bundle builds in flight, keyed by the directory named for the manifest each builds. Every
+    /// service builds its own library, so this is shared across all of them.
     static let inFlightBuilds = InFlightTasks<URL, EditorAssetBundle>()
+
+    /// Guards every change to a library's storage. Every service builds
+    /// its own library, so an actor's isolation doesn't order these between libraries.
+    ///
+    /// Storage changes in two ways and no others, each one step taken with this lock held:
+    ///
+    /// - ``publish(_:)`` moves a finished bundle in.
+    /// - ``cleanup()`` and ``purge()`` remove whole bundles.
+    ///
+    /// So a bundle in storage is always complete and never gains or loses a file. Assets are
+    /// only ever written into a ``Draft``, in a temporary directory that none of this can see.
+    private static let storageLock = NSLock()
 
     /// Creates a new `EditorAssetLibrary` instance.
     ///
@@ -62,12 +74,21 @@ public actor EditorAssetLibrary {
     /// The downloaded asset bundles for a given `EditorConfiguration`. Ordered newest to oldest.
     ///
     public func readAssetBundles() throws -> [EditorAssetBundle] {
+        try self.readAssetBundles { _ in true }
+    }
+
+    /// The bundles in the directories whose names `isIncluded` accepts, newest first. Only those are
+    /// read, and reading a bundle means decoding its manifest.
+    private func readAssetBundles(inDirectoriesNamed isIncluded: (String) -> Bool) throws -> [EditorAssetBundle] {
         try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
         return try FileManager.default
             .contentsOfDirectory(at: self.storageRoot, includingPropertiesForKeys: [.isDirectoryKey])
             .filter { $0.hasDirectoryPath }  // Only include directories
             .filter { $0.pathExtension != "download" }  // Don't include bundles that are being downloaded
-            .map { $0.appending(path: "manifest.json") }
+            .filter { isIncluded($0.lastPathComponent) }
+            // Not the listed URL itself: a listing resolves symlinks in the path (`/var` to `/private/var`), which
+            // would make a bundle read here unequal to the same bundle built or looked up by checksum.
+            .map { self.bundleManifestPath(for: $0.lastPathComponent) }
             .compactMap { try? EditorAssetBundle(url: $0) }  // Skip invalid/incomplete bundles
             .sorted { $0.downloadDate > $1.downloadDate }
     }
@@ -89,28 +110,25 @@ public actor EditorAssetLibrary {
     ///
     /// A bundle is considered complete only if both `manifest.json` and `editor-representation.json` exist.
     func hasBundle(forManifestChecksum checksum: String) -> Bool {
-        let bundleRoot = self.bundleRoot(for: checksum)
-        let manifestExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "manifest.json").path)
-        let editorRepExists = FileManager.default.fileExists(atPath: bundleRoot.appending(path: "editor-representation.json").path)
-        return manifestExists && editorRepExists
+        self.existingBundle(forManifestChecksum: checksum) != nil
     }
 
     /// Retrieves an existing bundle from disk if one exists for the given manifest checksum.
     ///
+    /// A manifest can have more than one, if something was already in its directory when its bundle was put
+    /// in place. This is the newest of them.
     func existingBundle(forManifestChecksum checksum: String) -> EditorAssetBundle? {
-        guard self.hasBundle(forManifestChecksum: checksum) else {
-            return nil
-        }
-
-        return try? EditorAssetBundle(url: self.bundleManifestPath(for: checksum))
+        // Every bundle is in a directory named for its manifest's checksum, alone or with more after it
+        try? self.readAssetBundles { $0.hasPrefix(checksum) }.first { $0.id == checksum }
     }
 
     // MARK: - Individual Asset Handling
 
     /// Downloads all of the assets for a given manifest and assembles them into a bundle.
     ///
-    /// Assets are downloaded concurrently and stored in a temporary directory. Once all downloads
-    /// complete successfully, the bundle is atomically moved to its final location.
+    /// Assets are downloaded concurrently, all into a temporary directory. Once all downloads complete
+    /// successfully, the bundle is atomically moved into the library's storage — unless a bundle for the
+    /// manifest is already there, which is returned instead.
     func buildBundle(
         for manifest: LocalEditorAssetManifest,
         progress: EditorProgressCallback? = nil
@@ -122,37 +140,111 @@ public actor EditorAssetLibrary {
             return .empty
         }
 
-        // Every build of one manifest writes the same directory, whichever library runs it:
-        // join a build in flight rather than race a second one into it.
-        let destination = self.bundleRoot(for: manifest.checksum).standardizedFileURL
-        return try await Self.inFlightBuilds.value(for: destination, progress: progress) { report in
-            try await self.build(manifest, reportingTo: report)
+        // Every build of one manifest does the same work, whichever library runs it: join a build in
+        // flight rather than download it all a second time.
+        let key = self.bundleRoot(for: manifest.checksum).standardizedFileURL
+        return try await Self.inFlightBuilds.value(for: key, progress: progress) { report in
+            let draft = try await self.build(manifest, reportingTo: report)
+            return try await self.publish(draft)
         }
     }
 
+    /// A bundle while it's being assembled, in a temporary directory that nothing else can see or delete.
+    ///
+    /// It's the only thing an asset is ever written into. A draft can't be made of a bundle in storage — the
+    /// one way to make one starts a directory of its own — so nothing that downloads an asset can
+    /// reach a bundle an editor may be reading. Publishing a draft is the one way it becomes such a bundle.
+    private struct Draft: Sendable {
+        /// The bundle as it stands in the temporary directory.
+        let bundle: EditorAssetBundle
+
+        /// Starts a draft of the bundle for `manifest`, in a temporary directory of its own.
+        init(manifest: LocalEditorAssetManifest) throws {
+            self.bundle = try EditorAssetBundle(
+                manifest: manifest,
+                bundleRoot: URL.temporaryDirectory.appending(path: UUID().uuidString)
+            )
+        }
+
+        /// Removes the draft's directory, for a draft that won't be published.
+        func discard() {
+            try? FileManager.default.removeItem(at: self.bundle.bundleRoot)
+        }
+    }
+
+    /// Moves `draft` into the library's storage — unless a bundle for its manifest is there already, which is
+    /// kept and given instead.
+    ///
+    /// It's all one step for anything else that changes storage. And it's a move, into a directory that didn't
+    /// exist, so nothing sees the bundle half there and no bundle on disk is written over.
+    private func publish(_ draft: Draft) throws -> EditorAssetBundle {
+        do {
+            return try Self.storageLock.withLock {
+                // Another build of the manifest finished first. Its bundle is as good as this one, and an
+                // editor may be reading it.
+                if let existingBundle = self.existingBundle(forManifestChecksum: draft.bundle.id) {
+                    draft.discard()
+                    return existingBundle
+                }
+
+                return try self.place(draft)
+            }
+        } catch {
+            draft.discard()
+            throw error
+        }
+    }
+
+    /// Moves `draft` into the library's storage as it stands. Call it with `storageLock` held.
+    private func place(_ draft: Draft) throws -> EditorAssetBundle {
+        try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
+
+        // The manifest's own directory, unless something is already there
+        var destination = self.bundleRoot(for: draft.bundle.id)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            destination = self.storageRoot.appending(path: "\(draft.bundle.id)-\(UUID().uuidString)")
+        }
+
+        try FileManager.default.moveItem(at: draft.bundle.bundleRoot, to: destination)
+
+        return try EditorAssetBundle(url: self.bundleManifestPath(relativeTo: destination))
+    }
+
+    /// Assembles a bundle for `manifest` as a draft, for the caller to put in the library's storage with
+    /// ``publish(_:)``. A build that fails discards the draft itself.
     private func build(
         _ manifest: LocalEditorAssetManifest,
         reportingTo progress: EditorProgressCallback
-    ) async throws -> EditorAssetBundle {
+    ) async throws -> Draft {
+        let draft = try Draft(manifest: manifest)
+
+        do {
+            let editorRepresentation = try manifest.buildEditorRepresentation(for: self.configuration)
+            try draft.bundle.writeManifest(editorRepresentation: editorRepresentation)
+
+            let assets = (manifest.scripts + manifest.styles).filter { self.isSupportedAsset($0) }
+            try await self.downloadAssets(assets, into: draft, reportingTo: progress)
+
+            return draft
+        } catch {
+            draft.discard()
+            throw error
+        }
+    }
+
+    /// Downloads `assets` into `draft` concurrently, tolerating any that fail.
+    private func downloadAssets(
+        _ assets: [URL],
+        into draft: Draft,
+        reportingTo progress: EditorProgressCallback
+    ) async throws {
         var complete = 0
 
-        let tempDirectory = URL.temporaryDirectory.appending(path: UUID().uuidString)
-
-        let bundle = try EditorAssetBundle(
-            manifest: manifest,
-            bundleRoot: tempDirectory
-        )
-
-        let editorRepresentation = try manifest.buildEditorRepresentation(for: self.configuration)
-        try bundle.writeManifest(editorRepresentation: editorRepresentation)
-
         await withTaskGroup { group in
-            let links = (manifest.scripts + manifest.styles).filter { self.isSupportedAsset($0) }
-
-            for asset in links {
+            for asset in assets {
                 group.addTask {
                     do {
-                        try await self.fetchAsset(url: asset, into: bundle)
+                        try await self.fetchAsset(url: asset, into: draft)
                     } catch {
                         // Log and continue - individual asset failures shouldn't block the editor
                         // This handles cases like content blockers blocking analytics scripts
@@ -163,40 +255,44 @@ public actor EditorAssetLibrary {
 
             for await _ in group {
                 complete += 1
-                await progress(EditorProgress(completed: complete, total: links.count))
+                await progress(EditorProgress(completed: complete, total: assets.count))
             }
         }
 
         // The group swallows every per-asset failure, cancellation included, so a
-        // cancelled build still arrives here with assets missing. Nothing downstream
+        // cancelled download still arrives here with assets missing. Nothing downstream
         // checks for them — `readAssetBundles()` reads only the manifest — so publishing
-        // it would serve the gap on every later launch.
+        // the bundle, or recording it as the latest, would serve the gap on every later
+        // launch.
         try Task.checkCancellation()
-
-        return try bundle.copy(to: self.bundleRoot(for: bundle))
     }
 
-    /// Downloads a single asset and moves it into the temporary bundle directory.
-    ///
-    @discardableResult
-    private func fetchAsset(url: URL, into bundle: EditorAssetBundle) async throws -> URL {
+    /// Downloads a single asset into `draft`.
+    private func fetchAsset(url: URL, into draft: Draft) async throws {
         let tempUrl = try await logExecutionTime("Downloading \(url.lastPathComponent)") {
             try await httpClient.download(URLRequest(method: .GET, url: url)).0
         }
 
-        // The download's file is this method's to deal with. It's moved into the bundle below; when it
+        // The download's file is this method's to deal with. It's moved into the draft below; when it
         // isn't, because something fails first, it's removed.
         defer { try? FileManager.default.removeItem(at: tempUrl) }
 
-        let destinationPath = bundle.bundleRoot.appending(path: url.path(percentEncoded: false))
-        let destinationParent = destinationPath.deletingLastPathComponent()
+        try FileManager.default.moveItem(at: tempUrl, to: try self.destination(for: url, in: draft))
+    }
 
-        // Ensure the destination directory exists
-        try FileManager.default.createDirectory(at: destinationParent, withIntermediateDirectories: true)
+    /// Where the asset at `url` is stored in `bundle`: at its URL's path, under the bundle's root.
+    private func assetPath(for url: URL, in bundle: EditorAssetBundle) -> URL {
+        bundle.bundleRoot.appending(path: url.path(percentEncoded: false))
+    }
 
-        try FileManager.default.moveItem(at: tempUrl, to: destinationPath)
-
-        return destinationPath
+    /// Where `draft` keeps the asset at `url`, in a directory that's there to write it into.
+    private func destination(for url: URL, in draft: Draft) throws -> URL {
+        let destination = self.assetPath(for: url, in: draft.bundle)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        return destination
     }
 
     /// Checks if the given `url` is eligible to be downloaded into the local bundle
@@ -240,10 +336,10 @@ public actor EditorAssetLibrary {
     ///
     /// - Throws: An error if the list of bundles cannot be read, or any bundle cannot be removed.
     public func cleanup() throws {
-        let bundles = try self.readAssetBundles().dropFirst()
-
-        for bundle in bundles {
-            try FileManager.default.removeItem(at: self.bundleRoot(for: bundle))
+        try Self.storageLock.withLock {
+            for bundle in try self.readAssetBundles().dropFirst() {
+                try FileManager.default.removeItem(at: bundle.bundleRoot)
+            }
         }
     }
 
@@ -254,26 +350,29 @@ public actor EditorAssetLibrary {
     ///
     /// - Throws: An error if the storage directory cannot be removed or recreated.
     public func purge() throws {
-        guard FileManager.default.directoryExists(at: self.storageRoot) else {
-            return
-        }
+        try Self.storageLock.withLock {
+            guard FileManager.default.directoryExists(at: self.storageRoot) else {
+                return
+            }
 
-        try FileManager.default.removeItem(at: self.storageRoot)
-        try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
+            try FileManager.default.removeItem(at: self.storageRoot)
+            try FileManager.default.createDirectory(at: self.storageRoot, withIntermediateDirectories: true)
+        }
     }
 
     // MARK: - File Path Helpers
+    /// Where `bundle` is on disk. Not derived from its checksum: a manifest can have more than one bundle.
     func bundleRoot(for bundle: EditorAssetBundle) -> URL {
-        assert(!bundle.id.isEmpty, "Bundle must have a valid ID")
-        return self.bundleRoot(for: bundle.id)
+        bundle.bundleRoot
     }
 
+    /// Where a manifest's bundle goes, unless something is already there.
     func bundleRoot(for checksum: String) -> URL {
         self.storageRoot.appending(path: checksum)
     }
 
     func bundleManifestPath(for bundle: EditorAssetBundle) -> URL {
-        bundleManifestPath(relativeTo: self.bundleRoot(for: bundle))
+        bundleManifestPath(relativeTo: bundle.bundleRoot)
     }
 
     func bundleManifestPath(relativeTo path: URL) -> URL {

@@ -204,27 +204,6 @@ public struct EditorAssetBundle: Sendable, Equatable, Hashable {
         }
     }
 
-    /// Copies the bundle to the given directoy.
-    ///
-    /// APFS makes this instant and zero-cost.
-    func copy(to destination: URL) throws -> EditorAssetBundle {
-
-        // Don't bother persisting an empty bundle
-        guard self != .empty else {
-            return .empty
-        }
-
-        if FileManager.default.directoryExists(at: destination) {
-            try FileManager.default.removeItem(at: destination)
-        }
-
-        let destinationParent = destination.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: destinationParent, withIntermediateDirectories: true)
-        try FileManager.default.copyItem(at: self.bundleRoot, to: destination)
-
-        return try EditorAssetBundle(url: destination.appending(path: "manifest.json"))
-    }
-
     static let empty = EditorAssetBundle(
         raw: RawAssetBundle(
             manifest: .empty,

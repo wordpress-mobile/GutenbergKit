@@ -584,10 +584,10 @@ struct EditorAssetLibraryTests {
     // MARK: - buildBundle Tests
 
     /// Helper to create a unique manifest JSON for each test
-    private func uniqueManifestJSON(identifier: String) -> String {
+    private func uniqueManifestJSON(identifier: String, script: String? = nil) -> String {
     """
     {
-        "scripts": "",
+        "scripts": "\(script.map { #"<script src=\"\#($0)\"></script>"# } ?? "")",
         "styles": "",
         "allowed_block_types": ["\(identifier)"]
     }
@@ -959,6 +959,65 @@ struct EditorAssetLibraryTests {
 
         #expect(mockClient.downloadedFiles.count == 4)
         #expect(mockClient.downloadedFiles.allSatisfy { !FileManager.default.fileExists(at: $0) })
+    }
+
+    @Test(
+        "a build leaves nothing in the temporary directory once its bundle is in place",
+        arguments: [EditorCachePolicy.always, .ignore]
+    )
+    func buildLeavesNothingInTemporaryDirectory(cachePolicy: EditorCachePolicy) async throws {
+        let manifestJSON = uniqueManifestJSON(
+            identifier: "test-temporary-directory-\(UUID().uuidString)",
+            script: "https://example.com/script.js"
+        )
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifestJSON)
+
+        let bundle = try await makeLibrary(httpClient: mockClient, cachePolicy: cachePolicy).downloadAssetBundle()
+
+        #expect(bundle.hasAssetData(for: URL(string: "https://example.com/script.js")!))
+        #expect(buildsLeftInTemporaryDirectory(ofManifest: bundle.id).isEmpty)
+    }
+
+    @Test("a build that's cancelled leaves nothing in the temporary directory")
+    func cancelledBuildLeavesNothingInTemporaryDirectory() async throws {
+        let manifest = try LocalEditorAssetManifest(
+            remoteManifest: RemoteEditorAssetManifest(
+                data: Data(
+                    uniqueManifestJSON(
+                        identifier: "test-cancelled-temporary-directory-\(UUID().uuidString)",
+                        script: "https://example.com/script.js"
+                    ).utf8
+                )
+            )
+        )
+
+        let session = ParkedURLSession()
+        defer { session.release() }
+        let library = makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"))
+        let destination = await library.bundleRoot(for: manifest.checksum).standardizedFileURL
+
+        let build = Task { try await library.buildBundle(for: manifest) }
+        try await session.waitUntilStarted()
+        let abandoned = try #require(EditorAssetLibrary.inFlightBuilds.task(for: destination))
+        #expect(buildsLeftInTemporaryDirectory(ofManifest: manifest.checksum).count == 1)
+        build.cancel()
+
+        await #expect(throws: CancellationError.self) { try await build.value }
+        await abandoned.value
+        #expect(buildsLeftInTemporaryDirectory(ofManifest: manifest.checksum).isEmpty)
+    }
+
+    /// The bundles for the manifest with `checksum` that are in the temporary directory itself, which is where a
+    /// build assembles one before putting it in the library's storage.
+    private func buildsLeftInTemporaryDirectory(ofManifest checksum: String) -> [URL] {
+        let directories = try? FileManager.default.contentsOfDirectory(
+            at: .temporaryDirectory,
+            includingPropertiesForKeys: nil
+        )
+        return (directories ?? []).filter {
+            (try? EditorAssetBundle(url: $0.appending(path: "manifest.json")))?.id == checksum
+        }
     }
 
     @Test("builds of one bundle share one build, whichever library runs them")
