@@ -271,6 +271,8 @@ The old bundle stays on disk for as long as the app is running, because an open 
 
 Which bundle is a site's latest goes by the date each records, taken from the device's clock when the site's manifest was last found to match it. If that clock was ahead and has been set back since, a bundle built for a changed manifest in the meantime comes behind the earlier one until the clock passes the earlier one's date. `purge()` clears it.
 
+Each asset is one file in the bundle's `assets` directory, named for its URL: `example.com_wp-content_plugins_jetpack_blocks_editor.js_ver=15.2.<digest>.js`. The name spells out the host, the path and the query, so a bundle on disk can be read by eye, and two assets that share a path but differ in their host or their query are stored apart. A bundle stored before assets were named this way kept each one at its URL's path; it reads as missing its assets, and is downloaded again once.
+
 #### When an asset fails to download
 
 An asset fails to download when its request fails, or is answered with an error. It never stops a bundle being built, or `prepare()` returning, and it's handled the same way under every policy:

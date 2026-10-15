@@ -9,6 +9,10 @@ public actor EditorAssetLibrary {
     private let storageRoot: URL
     private let cachePolicy: EditorCachePolicy
 
+    /// The assets of each manifest this library has been asked about, by the manifest's checksum. Working
+    /// them out means reading every link in the manifest, and one prepare asks several times.
+    private var downloadableAssetsByManifest: [String: [URL]] = [:]
+
     /// Bundle builds in flight, keyed by the directory named for the manifest each builds. Every
     /// service builds its own library, so this is shared across all of them.
     static let inFlightBuilds = InFlightTasks<URL, EditorAssetBundle>()
@@ -362,9 +366,9 @@ public actor EditorAssetLibrary {
         /// The bundle as it stands in the temporary directory.
         private(set) var bundle: EditorAssetBundle
 
-        /// The assets the draft took as they were from the bundle on disk for its manifest, because the
-        /// manifest hasn't changed: each is a copy of that bundle's file.
-        var assetsKeptFromExistingBundle: Set<URL> = []
+        /// The keys of the assets the draft took as they were from the bundle on disk for its manifest,
+        /// because the manifest hasn't changed: each is a copy of that bundle's file.
+        var assetsKeptFromExistingBundle: Set<String> = []
 
         /// Starts a draft of the bundle for `manifest`, in a temporary directory of its own.
         init(manifest: LocalEditorAssetManifest) throws {
@@ -484,7 +488,7 @@ public actor EditorAssetLibrary {
                 return !FileManager.default.fileExists(atPath: otherPath)
             }
 
-            guard !draft.assetsKeptFromExistingBundle.contains(asset) else {
+            guard !draft.assetsKeptFromExistingBundle.contains(EditorAssetBundle.assetKey(for: asset)) else {
                 return FileManager.default.fileExists(atPath: otherPath)
             }
 
@@ -617,22 +621,20 @@ public actor EditorAssetLibrary {
     /// The latest of `sources` that has `asset` under the same URL. That isn't always the site's latest
     /// bundle: a site can go back to a manifest it had before, whose assets only that manifest's bundle has.
     ///
-    /// The same URL: a bundle keeps an asset at its URL's path, which a URL on another host, or with
-    /// another query, can share.
+    /// The same URL, scheme included: a bundle keeps an asset by its host, path and query, but a copy that
+    /// came over `http` isn't one to take in place of asking over `https`.
     private func source(of asset: URL, in sources: [EditorAssetBundle]) -> EditorAssetBundle? {
-        sources.first {
-            FileManager.default.fileExists(at: self.assetPath(for: asset, in: $0)) && $0.manifest.assetUrls.contains(asset)
-        }
+        sources.first { $0.hasAssetData(for: asset) && $0.manifest.assetUrls.contains(asset) }
     }
 
-    /// Copies into `draft` each of `assets` that one of `sources` has, and returns those it copied.
+    /// Copies into `draft` each of `assets` that one of `sources` has, and returns the keys of those it copied.
     @discardableResult
     private func carryForward(
         _ assets: [URL],
         from sources: [EditorAssetBundle],
         into draft: Draft
-    ) -> Set<URL> {
-        var carried: Set<URL> = []
+    ) -> Set<String> {
+        var carried: Set<String> = []
 
         for asset in assets {
             let destination = self.assetPath(for: asset, in: draft.bundle)
@@ -651,7 +653,7 @@ public actor EditorAssetLibrary {
                     to: self.destination(for: asset, in: draft)
                 )
 
-                carried.insert(asset)
+                carried.insert(EditorAssetBundle.assetKey(for: asset))
             } catch {
                 // The bundle has been removed since. Leave nothing behind, so that it reads as missing.
                 try? FileManager.default.removeItem(at: destination)
@@ -670,8 +672,33 @@ public actor EditorAssetLibrary {
 
     /// The assets in `manifest` that belong in its bundle: the links its script and stylesheet tags load over
     /// HTTP, to files ending `.js`, `.css` or `.js.map`.
+    ///
+    /// Each is listed once. A manifest can link one asset twice, or under two URLs that a bundle keeps as
+    /// one — over `http` and over `https` — and it's one file to download either way. The `https` link is
+    /// the one to ask for: over `http`, the request may not be allowed at all.
     private func downloadableAssets(in manifest: LocalEditorAssetManifest) -> [URL] {
-        (manifest.scripts + manifest.styles).filter { self.isDownloadable($0) }
+        if let assets = self.downloadableAssetsByManifest[manifest.checksum] {
+            return assets
+        }
+
+        var assets: [URL] = []
+        var positions: [String: Int] = [:]
+
+        for link in manifest.scripts + manifest.styles where self.isDownloadable(link) {
+            let key = EditorAssetBundle.assetKey(for: link)
+
+            if let position = positions[key] {
+                if assets[position].scheme != "https", link.scheme == "https" {
+                    assets[position] = link
+                }
+            } else {
+                positions[key] = assets.count
+                assets.append(link)
+            }
+        }
+
+        self.downloadableAssetsByManifest[manifest.checksum] = assets
+        return assets
     }
 
     /// Downloads `assets` into `draft` concurrently, tolerating any that fail.
@@ -733,9 +760,10 @@ public actor EditorAssetLibrary {
         return request
     }
 
-    /// Where the asset at `url` is stored in `bundle`: at its URL's path, under the bundle's root.
+    /// Where the asset at `url` is stored in `bundle`, which is for the bundle to say: the editor reads it
+    /// from there.
     private func assetPath(for url: URL, in bundle: EditorAssetBundle) -> URL {
-        bundle.bundleRoot.appending(path: url.path(percentEncoded: false))
+        bundle.assetDataPath(for: url)
     }
 
     /// Where `draft` keeps the asset at `url`, in a directory that's there to write it into.

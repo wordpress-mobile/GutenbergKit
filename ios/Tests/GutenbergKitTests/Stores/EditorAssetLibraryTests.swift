@@ -495,9 +495,9 @@ struct EditorAssetLibraryTests {
         #expect(refreshed == earlier)
     }
 
-    @Test("under .ignore, assets stored at one path that fail to download keep the copy on disk")
-    func assetsStoredAtOnePathKeepCopyOnDiskWhenDownloadsFail() async throws {
-        // The same file on two hosts: a bundle stores an asset by its path alone
+    @Test("under .ignore, assets that share a path and fail to download each keep their copy on disk")
+    func assetsSharingAPathKeepTheirCopiesOnDiskWhenDownloadsFail() async throws {
+        // The same file on two hosts, which a bundle stores apart: each under its whole URL
         let manifest = """
             {
                 "scripts": "<script src=\\"https://example.com/plugin.js?ver=1\\"></script><script src=\\"https://cdn.example.com/plugin.js?ver=1\\"></script>",
@@ -517,6 +517,7 @@ struct EditorAssetLibraryTests {
         let refreshed = try await library.downloadAssetBundle()
 
         #expect(try refreshed.assetData(for: Self.scriptURL) == Data("mock content".utf8))
+        #expect(try refreshed.assetData(for: URL(string: "https://cdn.example.com/plugin.js?ver=1")!) == Data("mock content".utf8))
         #expect(refreshed == bundle)
     }
 
@@ -543,6 +544,73 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.downloadCallCount == 2)
         #expect(refreshed == bundle)
         #expect(try refreshed.assetData(for: Self.scriptURL) == Data("mock content".utf8))
+    }
+
+    /// One file to download, however many times it's linked.
+    @Test("an asset a manifest links more than once is downloaded once")
+    func assetLinkedMoreThanOnceIsDownloadedOnce() async throws {
+        let manifest = """
+            {
+                "scripts": "<script src=\\"https://example.com/plugin.js?ver=1\\"></script><script src=\\"https://example.com/plugin.js?ver=1\\"></script><script src=\\"http://example.com/plugin.js?ver=1\\"></script>",
+                "styles": "",
+                "allowed_block_types": ["core/paragraph"]
+            }
+            """
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifest)
+        let library = makeLibrary(httpClient: mockClient)
+
+        let bundle = try await library.downloadAssetBundle()
+
+        #expect(mockClient.downloadCallCount == 1)
+        #expect(await library.missingAssets(of: bundle).isEmpty)
+    }
+
+    /// Over `http`, a request may not be allowed at all.
+    @Test("an asset a manifest links over both http and https is asked for over https")
+    func assetLinkedOverBothSchemesIsAskedForOverHTTPS() async throws {
+        let manifest = """
+            {
+                "scripts": "<script src=\\"http://example.com/plugin.js?ver=1\\"></script><script src=\\"https://example.com/plugin.js?ver=1\\"></script>",
+                "styles": "",
+                "allowed_block_types": ["core/paragraph"]
+            }
+            """
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifest)
+        let library = makeLibrary(httpClient: mockClient)
+
+        let bundle = try await library.downloadAssetBundle()
+
+        #expect(mockClient.downloadedURLs == [Self.scriptURL])
+        #expect(await library.missingAssets(of: bundle).isEmpty)
+    }
+
+    /// A copy that came over `http` isn't one to take in place of asking over `https`.
+    @Test("a changed manifest's bundle asks again for an asset the latest bundle has by another scheme")
+    func changedBundleAsksAgainForAssetLinkedByAnotherScheme() async throws {
+        func manifest(scheme: String, blockType: String) -> String {
+            """
+            {
+                "scripts": "<script src=\\"\(scheme)://example.com/plugin.js?ver=1\\"></script>",
+                "styles": "",
+                "allowed_block_types": ["\(blockType)"]
+            }
+            """
+        }
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(0))
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifest(scheme: "http", blockType: "one"))
+        _ = try await library.downloadAssetBundle()
+
+        mockClient.urlResponseHandler = Self.responses(
+            forManifest: manifest(scheme: "https", blockType: "two"),
+            assetContent: "new content"
+        )
+        let changed = try await library.downloadAssetBundle()
+
+        #expect(mockClient.downloadedURLs.last == Self.scriptURL)
+        #expect(try changed.assetData(for: Self.scriptURL) == Data("new content".utf8))
     }
 
     /// Looking at a bundle isn't handing it out. One that's passed over for missing an asset is as free to
@@ -581,6 +649,70 @@ struct EditorAssetLibraryTests {
         #expect(repaired.hasAssetData(for: Self.scriptURL))
         #expect(mockClient.downloadCallCount == 2)
         #expect(try await library.readAssetBundles().first?.bundleRoot == repaired.bundleRoot)
+    }
+
+    /// A bundle as the last release left it on disk. Its manifest file holds no more than a manifest and a
+    /// download date, and its assets are at their URLs' paths, where a bundle doesn't look now. So it reads
+    /// as one that's missing them, and is repaired the way one is: they're downloaded once more, into a
+    /// bundle beside it.
+    @Test("a bundle as the last release stored it reads as missing its assets, and they're downloaded again, once")
+    func bundleAsLastReleaseStoredItIsDownloadedAgain() async throws {
+        let storageRoot = URL.randomTemporaryDirectory
+        let script = URL(string: "https://example.com/wp-content/plugins/a-plugin/build/index.js?ver=1.2")!
+        let style = URL(string: "https://example.com/wp-content/plugins/a-plugin/build/style.css?ver=1.2")!
+        let manifestJSON = """
+            {
+                "scripts": "<script src=\\"\(script.absoluteString)\\"></script>",
+                "styles": "<link rel=\\"stylesheet\\" href=\\"\(style.absoluteString)\\">",
+                "allowed_block_types": ["a-plugin/block"]
+            }
+            """
+        let manifest = try LocalEditorAssetManifest(
+            remoteManifest: RemoteEditorAssetManifest(data: Data(manifestJSON.utf8))
+        )
+        let bundleRoot = storageRoot.appending(path: manifest.checksum)
+        let downloadDate = Date(timeIntervalSinceReferenceDate: 780_000_000)
+        try FileManager.default.createDirectory(
+            at: bundleRoot.appending(path: "wp-content/plugins/a-plugin/build"),
+            withIntermediateDirectories: true
+        )
+        try JSONSerialization.data(withJSONObject: [
+            "manifest": try JSONSerialization.jsonObject(with: JSONEncoder().encode(manifest)),
+            "downloadDate": downloadDate.timeIntervalSinceReferenceDate,
+        ]).write(to: bundleRoot.appending(path: "manifest.json"))
+        try JSONEncoder()
+            .encode(manifest.buildEditorRepresentation(for: Self.testConfiguration))
+            .write(to: bundleRoot.appending(path: "editor-representation.json"))
+        try Data("script".utf8).write(to: bundleRoot.appending(path: "wp-content/plugins/a-plugin/build/index.js"))
+        try Data("style".utf8).write(to: bundleRoot.appending(path: "wp-content/plugins/a-plugin/build/style.css"))
+
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { _ in throw URLError(.notConnectedToInternet) }
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .always, storageRoot: storageRoot)
+
+        // It's still the site's bundle, and as old as it was
+        let onDisk = try #require(try await library.readAssetBundles().first)
+
+        #expect(onDisk.id == manifest.checksum)
+        #expect(onDisk.downloadDate == downloadDate)
+        #expect(onDisk.lastCheckedDate == nil)
+        #expect(await library.missingAssets(of: onDisk) == [script, style])
+        // It's missing assets, so it isn't one to settle for
+        #expect(try await library.readLatestAssetBundle() == nil)
+
+        // Once the site can be reached, everything is asked for
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifestJSON, assetContent: "new content")
+        let repaired = try await library.downloadAssetBundle()
+
+        #expect(Set(mockClient.downloadedURLs) == [script, style])
+        #expect(repaired.id == onDisk.id)
+        #expect(repaired.bundleRoot != onDisk.bundleRoot)
+        #expect(try repaired.assetData(for: script) == Data("new content".utf8))
+        #expect(await library.missingAssets(of: repaired).isEmpty)
+
+        // And once is enough
+        #expect(try await library.readLatestAssetBundle() == repaired)
+        #expect(mockClient.downloadCallCount == 2)
     }
 
     /// A refresh that changes a bundle's assets publishes a bundle of its own, which a check of the same
@@ -1451,13 +1583,9 @@ struct EditorAssetLibraryTests {
         let bundleRoot = await library.bundleRoot(for: bundle)
         #expect(FileManager.default.fileExists(at: bundleRoot))
 
-        // Verify the nested directory structure was created for the script
-        let scriptPath = bundleRoot.appending(path: "/wp-content/plugins/jetpack/assets/js/editor.js")
-        #expect(FileManager.default.fileExists(at: scriptPath))
-
-        // Verify the nested directory structure was created for the style
-        let stylePath = bundleRoot.appending(path: "/wp-content/themes/theme/css/blocks/gallery.css")
-        #expect(FileManager.default.fileExists(at: stylePath))
+        // Verify both assets are in the bundle
+        #expect(bundle.hasAssetData(for: URL(string: "https://example.com/wp-content/plugins/jetpack/assets/js/editor.js")!))
+        #expect(bundle.hasAssetData(for: URL(string: "https://example.com/wp-content/themes/theme/css/blocks/gallery.css")!))
     }
 
     @Test("downloadAssetBundle reports progress")
@@ -1520,15 +1648,11 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.downloadCallCount == 3)
 
         // Verify the successful assets were downloaded
-        let bundleRoot = await library.bundleRoot(for: bundle)
-        let goodScriptPath = bundleRoot.appending(path: "/good-script.js")
-        let stylePath = bundleRoot.appending(path: "/style.css")
-        #expect(FileManager.default.fileExists(at: goodScriptPath))
-        #expect(FileManager.default.fileExists(at: stylePath))
+        #expect(bundle.hasAssetData(for: URL(string: "https://example.com/good-script.js")!))
+        #expect(bundle.hasAssetData(for: URL(string: "https://example.com/style.css")!))
 
         // The failed asset should not exist
-        let failedScriptPath = bundleRoot.appending(path: "/stats.js")
-        #expect(!FileManager.default.fileExists(at: failedScriptPath))
+        #expect(!bundle.hasAssetData(for: URL(string: "https://blocked.com/stats.js")!))
     }
 
     @Test("buildBundle publishes nothing when it is cancelled mid-download")
@@ -1586,6 +1710,102 @@ struct EditorAssetLibraryTests {
                 "data:text/css,a%7Bcolor:red%7D",
             ]
         )
+    }
+
+    /// A manifest is whatever the site sends. An asset is stored under a name made from its URL, never at
+    /// its path, so `..` in one takes it nowhere.
+    @Test(
+        "an asset whose path climbs out of the site is stored inside the bundle like any other",
+        arguments: ["/wp-content/../../", "/wp-content/%2e%2e/%2e%2e/"]
+    )
+    func assetWhosePathClimbsIsStoredInsideBundle(pathOutOfSite: String) async throws {
+        // Where it would land if its path were followed: beside the directory the bundle is assembled in
+        let name = "escaped-\(UUID().uuidString).js"
+        let landing = URL.temporaryDirectory.appending(path: name)
+        defer { try? FileManager.default.removeItem(at: landing) }
+
+        let climbing = try #require(URL(string: "https://example.com\(pathOutOfSite)\(name)"))
+        let manifest = """
+            {
+                "scripts": "<script src=\\"https://example.com/plugin.js?ver=1\\"></script><script src=\\"\(climbing.absoluteString)\\"></script>",
+                "styles": "",
+                "allowed_block_types": ["\(name)"]
+            }
+            """
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifest)
+        let library = makeLibrary(httpClient: mockClient)
+
+        let bundle = try await library.downloadAssetBundle()
+
+        #expect(!FileManager.default.fileExists(at: landing))
+        #expect(bundle.hasAssetData(for: Self.scriptURL))
+        #expect(bundle.hasAssetData(for: climbing))
+        #expect(await library.missingAssets(of: bundle).isEmpty)
+
+        let assets = await library.bundleRoot(for: bundle).appending(path: "assets")
+        #expect(
+            bundle.assetDataPath(for: climbing).deletingLastPathComponent().standardizedFileURL.path
+                == assets.standardizedFileURL.path
+        )
+        #expect(try FileManager.default.contentsOfDirectory(atPath: assets.path).count == 2)
+    }
+
+    /// WordPress tells one version of a file from another by its query, and one host's file from another's
+    /// by its host.
+    @Test("assets that share a path are each stored, with their own content")
+    func assetsSharingAPathAreEachStored() async throws {
+        let assets = [
+            "https://example.com/wp-content/app.js?ver=1",
+            "https://example.com/wp-content/app.js?ver=2",
+            "https://cdn.example.com/wp-content/app.js?ver=1",
+        ]
+        let scripts = assets.map { "<script src=\\\"\($0)\\\"></script>" }.joined()
+        let manifest = """
+            {
+                "scripts": "\(scripts)",
+                "styles": "",
+                "allowed_block_types": ["assets-sharing-a-path"]
+            }
+            """
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { url in
+            url.path.contains("editor-assets") ? Data(manifest.utf8) : Data("content of \(url.absoluteString)".utf8)
+        }
+
+        let bundle = try await makeLibrary(httpClient: mockClient).downloadAssetBundle()
+
+        for asset in assets {
+            let url = try #require(URL(string: asset))
+            #expect(try bundle.assetData(for: url) == Data("content of \(asset)".utf8))
+        }
+    }
+
+    /// The library writes an asset and the bundle reads it, so the two have to agree on where.
+    @Test(
+        "an asset is read from where it was written, whatever characters its path has",
+        arguments: [
+            "https://example.com/wp-content/plugins/my%20plugin/script.js",
+            "https://example.com/wp-content/plugins/a%23b/script.js",
+            "https://example.com/wp-content/plugins/a%3Fb/script.js",
+            "https://example.com/wp-content/plugins/50%25/script.js",
+        ]
+    )
+    func assetIsReadFromWhereItWasWritten(asset: String) async throws {
+        let manifest = """
+            {
+                "scripts": "<script src=\\"\(asset)\\"></script>",
+                "styles": "",
+                "allowed_block_types": ["\(asset)"]
+            }
+            """
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifest)
+
+        let bundle = try await makeLibrary(httpClient: mockClient).downloadAssetBundle()
+
+        let url = try #require(URL(string: asset))
+        #expect(try bundle.assetData(for: url) == Data("mock content".utf8))
     }
 
     @Test("a download's file is moved into the bundle, not left where the download put it")

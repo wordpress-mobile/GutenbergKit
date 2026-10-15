@@ -134,47 +134,171 @@ public struct EditorAssetBundle: Sendable {
         )
     }
 
-    /// Checks whether the given asset URL resolves to a valid path within the bundle root.
+    /// Where the asset at `url` is stored in the bundle.
     ///
-    /// Use this method to validate URLs before calling `assetDataPath(for:)` or `hasAssetData(for:)`
-    /// to avoid precondition failures for paths that escape the bundle root (e.g., plugin assets
-    /// referenced in CSS that weren't downloaded into the bundle).
+    /// This is the one place that's decided. What writes an asset and what reads it both ask here, so they
+    /// can't disagree.
     ///
-    /// - Parameter url: The asset URL to validate.
-    /// - Returns: `true` if the URL resolves to a path within the bundle root, `false` otherwise.
-    public func isValidAssetPath(for url: URL) -> Bool {
-        let path = url.path(percentEncoded: false)
-        let bundlePath = self.bundleRoot.appending(rawPath: path).standardizedFileURL
-        let bundleRootPath = self.bundleRoot.standardizedFileURL.path
-        return bundlePath.path.hasPrefix(bundleRootPath + "/") || bundlePath.path == bundleRootPath
+    /// Every asset is a file of its own, directly inside the bundle's `assets` directory. Nothing in that
+    /// directory is a directory, so nothing there can be taken for an asset that isn't one, and no name a site
+    /// sends is used as a path, so none can name a place outside the bundle.
+    func assetLocation(for url: URL) -> URL {
+        self.bundleRoot
+            .appending(path: "assets", directoryHint: .isDirectory)
+            .appending(path: Self.assetFileName(for: url), directoryHint: .notDirectory)
     }
+
+    /// The name of the file an asset is stored in: its URL, spelled so that it can be a file's name, then a
+    /// digest of the URL, then the extension the URL has.
+    ///
+    /// The spelling is for whoever reads a bundle on disk. It can't tell every asset from every other — two
+    /// URLs can be spelled the same, and a long one is cut short — so the digest does.
+    static func assetFileName(for url: URL) -> String {
+        let key = self.assetKey(for: url)
+
+        let spelling = String(
+            String.UnicodeScalarView(key.unicodeScalars.map { Self.fileNameCharacters.contains($0) ? $0 : "_" })
+                .prefix(Self.fileNameSpellingLength)
+        )
+        let digest = SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+
+        // From the key, as the rest of the name is: a URL written another way may not show the same one
+        let pathExtension = Self.pathExtension(ofAssetKey: key)
+        let isPlainExtension =
+            (1...8).contains(pathExtension.count)
+            && pathExtension.unicodeScalars.allSatisfy { Self.fileNameCharacters.contains($0) }
+
+        return isPlainExtension ? "\(spelling).\(digest).\(pathExtension)" : "\(spelling).\(digest)"
+    }
+
+    /// The extension of the file that `key`, an asset's ``assetKey(for:)``, leads to: what follows the last
+    /// `.` in the last part of its path. Empty if it has none.
+    private static func pathExtension(ofAssetKey key: String) -> String {
+        let path = key.prefix { $0 != "?" }.drop { $0 != "/" }
+
+        guard
+            let name = path.split(separator: "/").last,
+            let dot = name.lastIndex(of: "."),
+            dot != name.startIndex
+        else {
+            return ""
+        }
+
+        return String(name[name.index(after: dot)...])
+    }
+
+    /// The characters of an asset's URL that are kept in its file's name. All of them are one byte long.
+    private static let fileNameCharacters = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-=,@+"
+    )
+
+    /// How much of an asset's URL its file's name spells out. With the digest and the extension, it leaves the
+    /// name well under the 255 bytes a file's name can be.
+    private static let fileNameSpellingLength = 180
+
+    /// What tells one asset from another: its URL from the host on.
+    ///
+    /// The editor asks for an asset under a scheme of its own, so the scheme is no part of it. Neither is how
+    /// the URL happens to be written — its host in capitals, `..` in its path, a character percent-encoded or
+    /// not — since a web view may write it another way when it asks.
+    ///
+    /// The exception is a character that would mean something else if it weren't encoded: `a%2Fb.js` is a
+    /// file in no directory, and `a/b.js` isn't the same asset. Nothing writes those another way.
+    static func assetKey(for url: URL) -> String {
+        let url = Self.resolvingDotSegments(of: url)
+        let host = url.host(percentEncoded: false)?.lowercased() ?? ""
+        let port = url.port.map { ":\($0)" } ?? ""
+        var path = Self.decoded(url.path(percentEncoded: true))
+        let query = url.query(percentEncoded: true).map { "?" + Self.decoded($0) } ?? ""
+
+        // A `..` with nothing above it to go back to goes nowhere, which a web view knows and a `URL`
+        // leaves written down
+        while path.hasPrefix("/../") {
+            path.removeFirst(3)
+        }
+
+        if path == "/.." {
+            path = "/"
+        }
+
+        return host + port + path + query
+    }
+
+    /// `url` with the `.` and `..` in its path resolved, however they're written. A web view takes an
+    /// encoded dot for a dot there, and asks for the path they lead to.
+    private static func resolvingDotSegments(of url: URL) -> URL {
+        let written = url.absoluteString
+
+        guard written.range(of: "%2E", options: .caseInsensitive) != nil else {
+            return url.standardized
+        }
+
+        let decodingDots = written.replacingOccurrences(of: "%2E", with: ".", options: .caseInsensitive)
+        return (URL(string: decodingDots) ?? url).standardized
+    }
+
+    /// `component` with its percent-encoding removed, apart from the characters that divide a URL up, which
+    /// stay encoded: decoded, they'd read as dividing it somewhere else.
+    ///
+    /// What's encoded may not be text at all, as with a name written in an encoding other than UTF-8. That
+    /// decodes to nothing, which would leave every such URL on a site with one key, so it's kept as it's
+    /// written, but for the capitals in what's encoded, which mean nothing.
+    private static func decoded(_ component: String) -> String {
+        guard component.contains("%") else {
+            return component
+        }
+
+        // Encoding the `%` of each one a second time leaves it encoded once after decoding
+        let escapingDelimiters = Self.encodedDelimiters.reduce(component) { component, delimiter in
+            component.replacingOccurrences(of: delimiter, with: "%25" + delimiter.dropFirst(), options: .caseInsensitive)
+        }
+
+        return escapingDelimiters.removingPercentEncoding ?? Self.withEncodingInCapitals(component)
+    }
+
+    /// `component` with the two characters after each `%` in capitals: `%e9` and `%E9` are one byte.
+    private static func withEncodingInCapitals(_ component: String) -> String {
+        var result = ""
+        var encodedCharactersLeft = 0
+
+        for character in component {
+            if character == "%" {
+                encodedCharactersLeft = 2
+                result.append(character)
+            } else if encodedCharactersLeft > 0 {
+                encodedCharactersLeft -= 1
+                result += character.uppercased()
+            } else {
+                result.append(character)
+            }
+        }
+
+        return result
+    }
+
+    /// The characters that divide a URL's path and query up, as each is written when it's encoded: `%`
+    /// itself first, so that encoding the others again doesn't encode it twice.
+    private static let encodedDelimiters = ["%25", "%2F", "%3F", "%23", "%26", "%3D", "%2B"]
 
     /// Checks whether this bundle contains cached data for the given asset URL.
     ///
-    /// - Parameter url: The original remote URL of the asset.
+    /// - Parameter url: The original remote URL of the asset, or the editor's request for it.
     /// - Returns: `true` if the asset is cached in this bundle, `false` otherwise.
-    /// - Precondition: The URL path must not escape the bundle root directory.
-    ///   Use `isValidAssetPath(for:)` to check validity before calling this method.
     public func hasAssetData(for url: URL) -> Bool {
-        FileManager.default.fileExists(at: self.assetDataPath(for: url))
+        FileManager.default.fileExists(at: self.assetLocation(for: url))
     }
 
     /// Returns the local file path for a cached asset.
     ///
-    /// - Parameter url: The original remote URL of the asset.
+    /// - Parameter url: The original remote URL of the asset, or the editor's request for it.
     /// - Returns: The local file URL where the asset is stored.
-    /// - Precondition: The URL path must not escape the bundle root directory.
     public func assetDataPath(for url: URL) -> URL {
-        let path = url.path(percentEncoded: false)
-        let bundlePath = self.bundleRoot.appending(rawPath: path).standardizedFileURL
-        let bundleRootPath = self.bundleRoot.standardizedFileURL.path
+        self.assetLocation(for: url)
+    }
 
-        precondition(
-            bundlePath.path.hasPrefix(bundleRootPath + "/") || bundlePath.path == bundleRootPath,
-            "Asset path escapes bundle root: \(path)"
-        )
-
-        return bundlePath
+    @available(*, deprecated, message: "No asset's place is outside its bundle now, so this is always `true`. Drop the check.")
+    public func isValidAssetPath(for url: URL) -> Bool {
+        true
     }
 
     /// Reads and returns the cached data for an asset.
