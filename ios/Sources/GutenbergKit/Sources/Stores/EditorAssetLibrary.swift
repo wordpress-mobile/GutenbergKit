@@ -23,7 +23,7 @@ public actor EditorAssetLibrary {
     /// Storage changes in three ways and no others, each one step taken with this lock held:
     ///
     /// - ``publish(_:matchedAt:keptFrom:)`` moves a finished bundle in, already dated and handed out.
-    /// - ``markLatest(_:matchedAt:)`` rewrites the manifest of a bundle it has found still there.
+    /// - ``markLatest(_:matchedAt:recording:)`` rewrites the manifest of a bundle it has found still there.
     /// - ``cleanup()`` and ``purge()`` remove whole bundles.
     ///
     /// So a bundle in storage is always complete and never gains or loses a file, and one that a
@@ -367,7 +367,8 @@ public actor EditorAssetLibrary {
         private(set) var bundle: EditorAssetBundle
 
         /// The keys of the assets the draft took as they were from the bundle on disk for its manifest,
-        /// because the manifest hasn't changed: each is a copy of that bundle's file.
+        /// because the manifest hasn't changed. The build learned nothing about these: each is a copy of
+        /// that bundle's file, and that bundle is what knows about it.
         var assetsKeptFromExistingBundle: Set<String> = []
 
         /// Starts a draft of the bundle for `manifest`, in a temporary directory of its own.
@@ -378,10 +379,13 @@ public actor EditorAssetLibrary {
             )
         }
 
-        /// Writes the draft's manifest again, for a draft about to be published: with when the site's
-        /// manifest last matched it.
-        mutating func record(lastCheckedDate: Date) throws {
-            self.bundle = self.bundle.recording(lastCheckedDate: lastCheckedDate)
+        /// Writes the draft's manifest again, with what's been learned since it was started: its assets'
+        /// headers, and, for a draft about to be published, when the site's manifest last matched it.
+        mutating func record(
+            assetHeaders: [String: EditorAssetBundle.AssetHeaders],
+            lastCheckedDate: Date? = nil
+        ) throws {
+            self.bundle = self.bundle.recording(lastCheckedDate: lastCheckedDate, assetHeaders: assetHeaders)
             try self.bundle.writeManifest()
         }
 
@@ -395,7 +399,8 @@ public actor EditorAssetLibrary {
     /// on disk for the same manifest, already holds the same assets.
     ///
     /// Then that bundle is still right, so it's kept as the latest and the draft is discarded: a build
-    /// that changed nothing costs no disk space.
+    /// that changed nothing costs no disk space. What the build learned is still recorded in the bundle
+    /// it keeps: the headers its assets come with now.
     ///
     /// `existingBundle` must be the bundle the draft kept assets from, if it kept any. Returns `nil`, with
     /// the draft left as it is, if `existingBundle` is no longer the manifest's latest bundle on disk.
@@ -406,7 +411,7 @@ public actor EditorAssetLibrary {
     ) throws -> EditorAssetBundle? {
         if let existingBundle,
             self.hasSameAssets(draft, as: existingBundle),
-            let latestBundle = self.markLatest(existingBundle, matchedAt: matchDate) {
+            let latestBundle = self.markLatest(existingBundle, matchedAt: matchDate, recording: draft) {
             draft.discard()
             return latestBundle
         }
@@ -447,7 +452,10 @@ public actor EditorAssetLibrary {
                 let matchDate = recorded.map { max(matchDate, $0.lastMatchedDate.addingTimeInterval(0.001)) } ?? matchDate
 
                 // Marked before it's moved, while nothing else can see it
-                try draft.record(lastCheckedDate: matchDate)
+                try draft.record(
+                    assetHeaders: self.assetHeaders(from: draft, keptFrom: recorded),
+                    lastCheckedDate: matchDate
+                )
 
                 let bundle = try self.place(draft)
                 Self.handedOut.insert(bundle.bundleRoot.standardizedFileURL)
@@ -458,6 +466,26 @@ public actor EditorAssetLibrary {
             draft.discard()
             throw error
         }
+    }
+
+    /// The headers `draft` gives a bundle to record for its assets.
+    ///
+    /// The build found them out for every asset but the ones it kept from the bundle on disk for its
+    /// manifest, without asking for them. For those it's what that bundle records now, which is `recorded`
+    /// — not what it recorded when the build read it, which another library may have changed since.
+    private func assetHeaders(
+        from draft: Draft,
+        keptFrom recorded: EditorAssetBundle?
+    ) -> [String: EditorAssetBundle.AssetHeaders] {
+        var assetHeaders = draft.bundle.assetHeaders
+
+        if let recorded {
+            for key in draft.assetsKeptFromExistingBundle {
+                assetHeaders[key] = recorded.assetHeaders[key]
+            }
+        }
+
+        return assetHeaders
     }
 
     /// Moves `draft` into the library's storage as it stands. Call it with `storageLock` held.
@@ -497,18 +525,20 @@ public actor EditorAssetLibrary {
     }
 
     /// Downloads whichever of `draft`'s assets aren't in it yet: every asset that wasn't carried forward.
+    ///
+    /// Returns the headers each downloaded asset's server sent with it, by the asset's key.
     private func downloadMissingAssets(
         of draft: Draft,
         reportingTo progress: EditorProgressCallback
-    ) async throws {
+    ) async throws -> [String: EditorAssetBundle.AssetHeaders] {
         let missingAssets = self.missingAssets(of: draft.bundle)
 
         guard !missingAssets.isEmpty else {
             await progress(EditorProgress(completed: 1, total: 1))
-            return
+            return [:]
         }
 
-        try await self.downloadAssets(missingAssets, into: draft, reportingTo: progress)
+        return try await self.downloadAssets(missingAssets, into: draft, reportingTo: progress)
     }
 
     /// The assets `bundle` should have that aren't on disk: the ones that failed to download, with no copy on
@@ -524,7 +554,15 @@ public actor EditorAssetLibrary {
     ///
     /// Returns `nil` if the bundle is no longer on disk, or is no longer its manifest's latest bundle there:
     /// another library has published one since, and marking this one would put it back in front.
-    private func markLatest(_ bundle: EditorAssetBundle, matchedAt matchDate: Date) -> EditorAssetBundle? {
+    ///
+    /// `draft`, if there is one, is a build of the same manifest that came out with the same assets. The
+    /// headers it found them with are recorded too. Otherwise the bundle keeps what it records on disk at
+    /// this moment — not what `bundle` had when it was read, which another library may have changed since.
+    private func markLatest(
+        _ bundle: EditorAssetBundle,
+        matchedAt matchDate: Date,
+        recording draft: Draft? = nil
+    ) -> EditorAssetBundle? {
         Self.storageLock.withLock { () -> EditorAssetBundle? in
             // The manifest's latest bundle on disk, as it's recorded at this moment. If that isn't
             // `bundle`, it has been removed, or another library has published one since.
@@ -537,9 +575,14 @@ public actor EditorAssetLibrary {
 
             Self.handedOut.insert(bundle.bundleRoot.standardizedFileURL)
 
+            let assetHeaders = draft.map { self.assetHeaders(from: $0, keptFrom: recorded) } ?? recorded.assetHeaders
+
             // Another library may have found the manifest to match more recently than this one did,
             // and recorded it first
-            let latestBundle = bundle.recording(lastCheckedDate: max(recorded.lastMatchedDate, matchDate))
+            let latestBundle = bundle.recording(
+                lastCheckedDate: max(recorded.lastMatchedDate, matchDate),
+                assetHeaders: assetHeaders
+            )
 
             do {
                 try self.rewriteManifest(of: latestBundle)
@@ -580,6 +623,7 @@ public actor EditorAssetLibrary {
             try draft.bundle.writeManifest(editorRepresentation: editorRepresentation)
 
             let sources = self.assetSources()
+            var assetHeaders: [String: EditorAssetBundle.AssetHeaders] = [:]
 
             switch self.cachePolicy {
             case .always, .maxAge:
@@ -592,20 +636,28 @@ public actor EditorAssetLibrary {
                 let assets = self.downloadableAssets(in: manifest)
 
                 if let existingBundle {
-                    draft.assetsKeptFromExistingBundle = self.carryForward(assets, from: [existingBundle], into: draft)
+                    let unchanged = self.carryForward(assets, from: [existingBundle], into: draft)
+                    assetHeaders.merge(unchanged.headers) { $1 }
+                    draft.assetsKeptFromExistingBundle = unchanged.keys
                 }
 
-                self.carryForward(assets.filter { self.isVersioned($0) }, from: sources, into: draft)
-                try await self.downloadMissingAssets(of: draft, reportingTo: progress)
+                let versioned = self.carryForward(assets.filter { self.isVersioned($0) }, from: sources, into: draft)
+                assetHeaders.merge(versioned.headers) { $1 }
+
+                let downloaded = try await self.downloadMissingAssets(of: draft, reportingTo: progress)
+                assetHeaders.merge(downloaded) { $1 }
             case .ignore:
                 // Takes nothing on disk as valid, so every asset is downloaded in full.
-                try await self.downloadMissingAssets(of: draft, reportingTo: progress)
+                assetHeaders = try await self.downloadMissingAssets(of: draft, reportingTo: progress)
             }
 
             // An asset that fails to download has no better copy than one already on disk, which
             // beats a gap.
-            self.carryForward(self.missingAssets(of: draft.bundle), from: sources, into: draft)
+            let failed = self.missingAssets(of: draft.bundle)
+            let kept = self.carryForward(failed, from: sources, into: draft)
+            assetHeaders.merge(kept.headers) { $1 }
 
+            try draft.record(assetHeaders: assetHeaders)
             return draft
         } catch {
             draft.discard()
@@ -627,14 +679,13 @@ public actor EditorAssetLibrary {
         sources.first { $0.hasAssetData(for: asset) && $0.manifest.assetUrls.contains(asset) }
     }
 
-    /// Copies into `draft` each of `assets` that one of `sources` has, and returns the keys of those it copied.
-    @discardableResult
+    /// Copies into `draft` each of `assets` that one of `sources` has, and returns which it copied.
     private func carryForward(
         _ assets: [URL],
         from sources: [EditorAssetBundle],
         into draft: Draft
-    ) -> Set<String> {
-        var carried: Set<String> = []
+    ) -> CarriedAssets {
+        var carried = CarriedAssets()
 
         for asset in assets {
             let destination = self.assetPath(for: asset, in: draft.bundle)
@@ -653,7 +704,9 @@ public actor EditorAssetLibrary {
                     to: self.destination(for: asset, in: draft)
                 )
 
-                carried.insert(EditorAssetBundle.assetKey(for: asset))
+                let key = EditorAssetBundle.assetKey(for: asset)
+                carried.keys.insert(key)
+                carried.headers[key] = source.headers(for: asset)
             } catch {
                 // The bundle has been removed since. Leave nothing behind, so that it reads as missing.
                 try? FileManager.default.removeItem(at: destination)
@@ -661,6 +714,13 @@ public actor EditorAssetLibrary {
         }
 
         return carried
+    }
+
+    /// The assets a carry copied into a draft: their keys, and the headers that came with the ones that
+    /// have any.
+    private struct CarriedAssets {
+        var keys: Set<String> = []
+        var headers: [String: EditorAssetBundle.AssetHeaders] = [:]
     }
 
     /// Whether `url` carries a version the way WordPress adds one: a `ver` in its query.
@@ -701,28 +761,34 @@ public actor EditorAssetLibrary {
         return assets
     }
 
-    /// Downloads `assets` into `draft` concurrently, tolerating any that fail.
+    /// Downloads `assets` into `draft` concurrently, tolerating any that fail. Returns the headers each
+    /// one's server sent with it, by the asset's key.
     private func downloadAssets(
         _ assets: [URL],
         into draft: Draft,
         reportingTo progress: EditorProgressCallback
-    ) async throws {
+    ) async throws -> [String: EditorAssetBundle.AssetHeaders] {
         var complete = 0
+        var assetHeaders: [String: EditorAssetBundle.AssetHeaders] = [:]
 
-        await withTaskGroup { group in
+        await withTaskGroup(of: (URL, EditorAssetBundle.AssetHeaders?).self) { group in
             for asset in assets {
                 group.addTask {
                     do {
-                        try await self.fetchAsset(url: asset, into: draft)
+                        return (asset, try await self.fetchAsset(url: asset, into: draft))
                     } catch {
                         // Log and continue - individual asset failures shouldn't block the editor
                         // This handles cases like content blockers blocking analytics scripts
                         log(.warn, "Failed to download asset \(asset.lastPathComponent): \(error.localizedDescription)")
+                        return (asset, nil)
                     }
                 }
             }
 
-            for await _ in group {
+            for await (asset, headers) in group {
+                if let headers {
+                    assetHeaders[EditorAssetBundle.assetKey(for: asset)] = headers
+                }
                 complete += 1
                 await progress(EditorProgress(completed: complete, total: assets.count))
             }
@@ -734,21 +800,26 @@ public actor EditorAssetLibrary {
         // the bundle, or recording it as the latest, would serve the gap on every later
         // launch.
         try Task.checkCancellation()
+
+        return assetHeaders
     }
 
-    /// Downloads a single asset into `draft`.
-    private func fetchAsset(url: URL, into draft: Draft) async throws {
+    /// Downloads a single asset into `draft`, and returns the headers its server sent with it.
+    private func fetchAsset(url: URL, into draft: Draft) async throws -> EditorAssetBundle.AssetHeaders? {
         let request = self.assetRequest(for: url)
 
-        let tempUrl = try await logExecutionTime("Downloading \(url.lastPathComponent)") {
-            try await httpClient.download(request).0
+        let (tempUrl, response) = try await logExecutionTime("Downloading \(url.lastPathComponent)") {
+            try await httpClient.download(request)
         }
 
         // The download's file is this method's to deal with. It's moved into the draft below; when it
         // isn't, because something fails first, it's removed.
         defer { try? FileManager.default.removeItem(at: tempUrl) }
 
-        try FileManager.default.moveItem(at: tempUrl, to: try self.destination(for: url, in: draft))
+        let destinationPath = try self.destination(for: url, in: draft)
+        try FileManager.default.moveItem(at: tempUrl, to: destinationPath)
+
+        return EditorAssetBundle.AssetHeaders(response: response)
     }
 
     /// The request for the asset at `url`. Under `.ignore`, it asks for a stored response not to be used.

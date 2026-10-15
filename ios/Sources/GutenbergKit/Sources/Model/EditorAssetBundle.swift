@@ -37,6 +37,27 @@ public struct EditorAssetBundle: Sendable {
         let downloadDate: Date
         /// Absent from a bundle stored before this was recorded.
         var lastCheckedDate: Date?
+        /// Absent from a bundle stored before these were recorded.
+        var assetHeaders: [String: AssetHeaders]?
+    }
+
+    /// What a server sent with an asset that's worth keeping with it: what kind of file it is.
+    struct AssetHeaders: Codable, Hashable, Sendable {
+        /// The response's `Content-Type`, as the server sent it. The editor is served the asset with it.
+        let contentType: String?
+
+        init(contentType: String? = nil) {
+            self.contentType = contentType
+        }
+
+        /// The headers of `response` that are worth keeping, or `nil` if it carries none of them.
+        init?(response: HTTPURLResponse) {
+            guard let contentType = response.value(forHTTPHeaderField: "Content-Type") else {
+                return nil
+            }
+
+            self.init(contentType: contentType)
+        }
     }
 
     /// The checksum of the bundle's manifest, which identifies the manifest rather than the bundle.
@@ -72,6 +93,21 @@ public struct EditorAssetBundle: Sendable {
         lastCheckedDate ?? downloadDate
     }
 
+    /// The headers kept from each asset's download, by the asset's ``assetKey(for:)``. An asset whose server
+    /// sent none worth keeping has no entry.
+    let assetHeaders: [String: AssetHeaders]
+
+    /// The `Content-Type` each asset is served to an editor with, by the asset's ``assetKey(for:)``.
+    ///
+    /// It's part of what a bundle gives an editor, so two copies of a bundle that differ in it aren't
+    /// equal.
+    ///
+    /// Each is as its server wrote it, but for capitals and spaces, which a server can write differently
+    /// from one answer to the next without meaning anything by it.
+    private var assetContentTypes: [String: String] {
+        assetHeaders.compactMapValues { $0.contentType?.lowercased().filter { !$0.isWhitespace } }
+    }
+
     /// The number of assets stored in this bundle.
     public var assetCount: Int {
         manifest.assetUrls.count
@@ -83,6 +119,7 @@ public struct EditorAssetBundle: Sendable {
         self.manifest = raw.manifest
         self.downloadDate = raw.downloadDate
         self.lastCheckedDate = raw.lastCheckedDate
+        self.assetHeaders = raw.assetHeaders ?? [:]
         self.bundleRoot = bundleRoot
     }
 
@@ -90,21 +127,24 @@ public struct EditorAssetBundle: Sendable {
         manifest: LocalEditorAssetManifest,
         downloadDate: Date = Date(),
         lastCheckedDate: Date? = nil,
+        assetHeaders: [String: AssetHeaders] = [:],
         bundleRoot: URL
     ) throws {
         self.manifest = manifest
         self.downloadDate = downloadDate
         self.lastCheckedDate = lastCheckedDate
+        self.assetHeaders = assetHeaders
         self.bundleRoot = bundleRoot
     }
 
-    /// The same bundle, recording another date for its last check.
-    func recording(lastCheckedDate: Date?) -> EditorAssetBundle {
+    /// The same bundle, recording another date for its last check and other headers for its assets.
+    func recording(lastCheckedDate: Date?, assetHeaders: [String: AssetHeaders]) -> EditorAssetBundle {
         EditorAssetBundle(
             raw: RawAssetBundle(
                 manifest: self.manifest,
                 downloadDate: self.downloadDate,
-                lastCheckedDate: lastCheckedDate
+                lastCheckedDate: lastCheckedDate,
+                assetHeaders: assetHeaders
             ),
             bundleRoot: self.bundleRoot
         )
@@ -301,6 +341,19 @@ public struct EditorAssetBundle: Sendable {
         true
     }
 
+    /// The headers kept from when the asset at `url` was downloaded, if its server sent any worth keeping.
+    func headers(for url: URL) -> AssetHeaders? {
+        assetHeaders[Self.assetKey(for: url)]
+    }
+
+    /// The `Content-Type` the server sent with an asset, for serving it to the editor the way the server did.
+    ///
+    /// `url` can be the asset's own, or the editor's request for it. `nil` if the server sent none, or the
+    /// bundle was stored before this was recorded.
+    public func contentType(forAssetAt url: URL) -> String? {
+        self.headers(for: url)?.contentType
+    }
+
     /// Reads and returns the cached data for an asset.
     ///
     /// - Parameter url: The original remote URL of the asset.
@@ -349,7 +402,8 @@ public struct EditorAssetBundle: Sendable {
         try JSONEncoder().encode(RawAssetBundle(
             manifest: self.manifest,
             downloadDate: self.downloadDate,
-            lastCheckedDate: self.lastCheckedDate
+            lastCheckedDate: self.lastCheckedDate,
+            assetHeaders: self.assetHeaders.isEmpty ? nil : self.assetHeaders
         ))
     }
 
@@ -380,12 +434,14 @@ extension EditorAssetBundle: Equatable, Hashable {
     public static func == (lhs: EditorAssetBundle, rhs: EditorAssetBundle) -> Bool {
         lhs.manifest == rhs.manifest
             && lhs.downloadDate == rhs.downloadDate
+            && (lhs.assetHeaders == rhs.assetHeaders || lhs.assetContentTypes == rhs.assetContentTypes)
             && lhs.bundleRoot == rhs.bundleRoot
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(manifest)
         hasher.combine(downloadDate)
+        hasher.combine(assetContentTypes)
         hasher.combine(bundleRoot)
     }
 }

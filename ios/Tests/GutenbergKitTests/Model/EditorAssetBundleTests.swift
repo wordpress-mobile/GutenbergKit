@@ -174,6 +174,77 @@ struct EditorAssetBundleTests {
         #expect(decoded.manifest.rawStyles == originalBundle.manifest.rawStyles)
     }
 
+    @Test("Bundle keeps its assets' headers through writing and reading")
+    func bundleKeepsAssetHeadersThroughWritingAndReading() throws {
+        let asset = URL(string: "https://example.com/app.js")!
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let headers = EditorAssetBundle.AssetHeaders(contentType: "application/javascript; charset=utf-8")
+        let bundle = try EditorAssetBundle(
+            manifest: manifest,
+            assetHeaders: [EditorAssetBundle.assetKey(for: asset): headers],
+            bundleRoot: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        )
+        try bundle.writeManifest(editorRepresentation: .empty)
+
+        let loaded = try EditorAssetBundle(url: bundle.bundleRoot.appending(path: "manifest.json"))
+
+        #expect(loaded.headers(for: asset) == headers)
+    }
+
+    /// The editor asks for an asset under a scheme of its own, and is served it as the site's server would.
+    @Test(
+        "contentType(forAssetAt:) gives the type the server sent, for the asset's URL or the editor's request for it",
+        arguments: [
+            "https://example.com/wp-content/app.js?ver=1",
+            "gbk-cache-https://example.com/wp-content/app.js?ver=1",
+        ]
+    )
+    func contentTypeIsGivenForAssetOrRequest(url: String) throws {
+        let manifest = try createManifest(
+            scripts: "<script src=\"https://example.com/wp-content/app.js?ver=1\"></script>"
+        )
+        let bundle = try EditorAssetBundle(
+            manifest: manifest,
+            assetHeaders: [
+                "example.com/wp-content/app.js?ver=1": .init(contentType: "application/javascript; charset=utf-8"),
+                "example.com/wp-content/other.js?ver=1": .init(contentType: "text/plain"),
+            ],
+            bundleRoot: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        )
+
+        #expect(bundle.contentType(forAssetAt: try #require(URL(string: url))) == "application/javascript; charset=utf-8")
+    }
+
+    @Test("contentType(forAssetAt:) gives none for an asset whose server sent none, or one the bundle doesn't have")
+    func contentTypeIsNilWhenNotRecorded() throws {
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let bundle = try EditorAssetBundle(
+            manifest: manifest,
+            assetHeaders: ["example.com/app.js": .init()],
+            bundleRoot: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        )
+
+        #expect(bundle.contentType(forAssetAt: try #require(URL(string: "gbk-cache-https://example.com/app.js"))) == nil)
+        #expect(bundle.contentType(forAssetAt: try #require(URL(string: "gbk-cache-https://example.com/other.js"))) == nil)
+        // The same path on another host is another asset
+        #expect(bundle.contentType(forAssetAt: try #require(URL(string: "gbk-cache-https://cdn.example.com/app.js"))) == nil)
+    }
+
+    @Test("Bundle stored before its assets' headers were recorded has none")
+    func bundleStoredWithoutAssetHeadersHasNone() throws {
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let stored = try JSONEncoder().encode(["manifest": manifest])
+        var object = try #require(try JSONSerialization.jsonObject(with: stored) as? [String: Any])
+        object["downloadDate"] = 0
+
+        let bundle = try EditorAssetBundle(
+            data: try JSONSerialization.data(withJSONObject: object),
+            bundleRoot: FileManager.default.temporaryDirectory
+        )
+
+        #expect(bundle.headers(for: URL(string: "https://example.com/app.js")!) == nil)
+    }
+
     // MARK: - URL Initialization Tests
 
     @Test("Bundle can be initialized from URL")
@@ -495,6 +566,56 @@ struct EditorAssetBundleTests {
         let bundle2 = makeBundle(manifest: manifest2)
 
         #expect(bundle1 != bundle2)
+    }
+
+    /// An editor is served each asset with the headers its bundle holds for it.
+    @Test("Bundles that hold different headers for their assets are not equal")
+    func bundlesWithDifferentAssetHeadersNotEqual() throws {
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let key = EditorAssetBundle.assetKey(for: URL(string: "https://example.com/app.js")!)
+        let date = Date()
+        let root = URL.randomTemporaryDirectory
+
+        let plain = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "text/plain")],
+            bundleRoot: root
+        )
+        let script = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "application/javascript")],
+            bundleRoot: root
+        )
+
+        #expect(plain != script)
+        #expect(plain.hashValue != script.hashValue)
+    }
+
+    /// A server can write the same type differently from one answer to the next.
+    @Test("Bundles that differ only in how their assets' types are written are equal")
+    func bundlesWithDifferentlyWrittenContentTypesAreEqual() throws {
+        let manifest = try createManifest(scripts: "<script src=\"https://example.com/app.js\"></script>")
+        let key = EditorAssetBundle.assetKey(for: URL(string: "https://example.com/app.js")!)
+        let date = Date()
+        let root = URL.randomTemporaryDirectory
+
+        let first = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "text/css; charset=UTF-8")],
+            bundleRoot: root
+        )
+        let second = try EditorAssetBundle(
+            manifest: manifest,
+            downloadDate: date,
+            assetHeaders: [key: .init(contentType: "text/css;charset=utf-8")],
+            bundleRoot: root
+        )
+
+        #expect(first == second)
+        #expect(first.hashValue == second.hashValue)
     }
 
     @Test("Bundles with different downloadDates are not equal")
