@@ -660,9 +660,10 @@ struct EditorAssetLibraryTests {
         let storageRoot = URL.randomTemporaryDirectory
         let script = URL(string: "https://example.com/wp-content/plugins/a-plugin/build/index.js?ver=1.2")!
         let style = URL(string: "https://example.com/wp-content/plugins/a-plugin/build/style.css?ver=1.2")!
+        let concatenated = URL(string: "https://s0.example.com/_static/??/a.js,/b.js")!
         let manifestJSON = """
             {
-                "scripts": "<script src=\\"\(script.absoluteString)\\"></script>",
+                "scripts": "<script src=\\"\(script.absoluteString)\\"></script><script src=\\"\(concatenated.absoluteString)\\"></script>",
                 "styles": "<link rel=\\"stylesheet\\" href=\\"\(style.absoluteString)\\">",
                 "allowed_block_types": ["a-plugin/block"]
             }
@@ -696,7 +697,7 @@ struct EditorAssetLibraryTests {
         #expect(onDisk.id == manifest.checksum)
         #expect(onDisk.downloadDate == downloadDate)
         #expect(onDisk.lastCheckedDate == nil)
-        #expect(await library.missingAssets(of: onDisk) == [script, style])
+        #expect(await library.missingAssets(of: onDisk) == [script, concatenated, style])
         // It's missing assets, so it isn't one to settle for
         #expect(try await library.readLatestAssetBundle() == nil)
 
@@ -704,7 +705,7 @@ struct EditorAssetLibraryTests {
         mockClient.urlResponseHandler = Self.responses(forManifest: manifestJSON, assetContent: "new content")
         let repaired = try await library.downloadAssetBundle()
 
-        #expect(Set(mockClient.downloadedURLs) == [script, style])
+        #expect(Set(mockClient.downloadedURLs) == [script, style, concatenated])
         #expect(repaired.id == onDisk.id)
         #expect(repaired.bundleRoot != onDisk.bundleRoot)
         #expect(try repaired.assetData(for: script) == Data("new content".utf8))
@@ -712,7 +713,7 @@ struct EditorAssetLibraryTests {
 
         // And once is enough
         #expect(try await library.readLatestAssetBundle() == repaired)
-        #expect(mockClient.downloadCallCount == 2)
+        #expect(mockClient.downloadCallCount == 3)
     }
 
     /// A refresh that changes a bundle's assets publishes a bundle of its own, which a check of the same
@@ -1687,7 +1688,7 @@ struct EditorAssetLibraryTests {
         #expect(try await library.readAssetBundles().isEmpty)
     }
 
-    @Test("a manifest's links that aren't HTTP, or that don't end .js, .css or .js.map, are the ones a bundle doesn't hold")
+    @Test("a manifest's links that aren't HTTP are the only ones a bundle doesn't hold")
     func linksLeftOutAreTheOnesThatAreNotHTTP() async throws {
         let manifestJSON = """
             {
@@ -1702,14 +1703,7 @@ struct EditorAssetLibraryTests {
 
         let leftOut = await makeLibrary().linksLeftOut(of: manifest)
 
-        #expect(
-            leftOut.map(\.absoluteString) == [
-                "ftp://example.com/old.js",
-                "http://example.com/gtag/js?id=1",
-                "https://example.com/css2?family=Inter",
-                "data:text/css,a%7Bcolor:red%7D",
-            ]
-        )
+        #expect(leftOut.map(\.absoluteString) == ["ftp://example.com/old.js", "data:text/css,a%7Bcolor:red%7D"])
     }
 
     /// A manifest is whatever the site sends. An asset is stored under a name made from its URL, never at
@@ -1749,6 +1743,43 @@ struct EditorAssetLibraryTests {
                 == assets.standardizedFileURL.path
         )
         #expect(try FileManager.default.contentsOfDirectory(atPath: assets.path).count == 2)
+    }
+
+    // MARK: - Which links are assets
+
+    /// What makes a link an asset is the tag it's on, not how its URL ends.
+    @Test("every script and stylesheet link in a manifest is stored, however its URL ends")
+    func everyScriptAndStylesheetLinkIsStored() async throws {
+        let scripts = [
+            "https://s0.wp.com/_static/??/wp-includes/js/dist/hooks.min.js,/wp-includes/js/dist/i18n.min.js",
+            "https://www.googletagmanager.com/gtag/js?id=G-TEST",
+        ]
+        let styles = [
+            "https://fonts-api.wp.com/css2?family=Inter:wght@400",
+            "https://s0.wp.com/?custom-css=1&csblog=1",
+        ]
+        let scriptTags = scripts.map { "<script src='\($0.replacing("&", with: "&amp;"))'></script>" }.joined()
+        let styleTags = styles.map { "<link rel='stylesheet' href='\($0.replacing("&", with: "&amp;"))'>" }.joined()
+        let manifest = """
+            {
+                "scripts": "\(scriptTags)",
+                "styles": "\(styleTags)",
+                "allowed_block_types": ["every-link-is-stored"]
+            }
+            """
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { url in
+            url.path.contains("editor-assets") ? Data(manifest.utf8) : Data("content of \(url.absoluteString)".utf8)
+        }
+        let library = makeLibrary(httpClient: mockClient)
+
+        let bundle = try await library.downloadAssetBundle()
+
+        for asset in scripts + styles {
+            let url = try #require(URL(string: asset))
+            #expect(try bundle.assetData(for: url) == Data("content of \(asset)".utf8))
+        }
+        #expect(await library.missingAssets(of: bundle).isEmpty)
     }
 
     /// WordPress tells one version of a file from another by its query, and one host's file from another's

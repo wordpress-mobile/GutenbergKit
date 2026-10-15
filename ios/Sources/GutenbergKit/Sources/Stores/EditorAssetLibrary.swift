@@ -670,8 +670,8 @@ public actor EditorAssetLibrary {
             .contains { $0.name == "ver" && $0.value?.isEmpty == false } ?? false
     }
 
-    /// The assets in `manifest` that belong in its bundle: the links its script and stylesheet tags load over
-    /// HTTP, to files ending `.js`, `.css` or `.js.map`.
+    /// The assets in `manifest` that belong in its bundle: every link that one of its script or stylesheet
+    /// tags loads over HTTP. The tag is what makes a link an asset, however its URL ends.
     ///
     /// Each is listed once. A manifest can link one asset twice, or under two URLs that a bundle keeps as
     /// one — over `http` and over `https` — and it's one file to download either way. The `https` link is
@@ -776,23 +776,15 @@ public actor EditorAssetLibrary {
         return destination
     }
 
-    /// The links in `manifest` that a bundle doesn't hold: the ones that aren't HTTP or HTTPS URLs to files
-    /// ending `.js`, `.css` or `.js.map`.
+    /// The links in `manifest` that a bundle doesn't hold: the ones that aren't HTTP or HTTPS URLs.
     func linksLeftOut(of manifest: LocalEditorAssetManifest) -> [URL] {
         (manifest.scripts + manifest.styles).filter { !self.isDownloadable($0) }
     }
 
     /// Checks if the given `url` is one the library can download into a bundle. It says nothing about one
     /// that isn't: ``fetchManifest()`` does, once.
-    ///
-    /// Only HTTP/HTTPS URLs with `.js`, `.css`, or `.js.map` extensions are supported.
     private func isDownloadable(_ url: URL) -> Bool {
-        guard url.scheme == "http" || url.scheme == "https" else {
-            return false
-        }
-
-        let supportedResourceSuffixes = [".js", ".css", ".js.map"]
-        return supportedResourceSuffixes.contains { url.lastPathComponent.hasSuffix($0) }
+        url.scheme == "http" || url.scheme == "https"
     }
 
     // MARK: - Helpers
