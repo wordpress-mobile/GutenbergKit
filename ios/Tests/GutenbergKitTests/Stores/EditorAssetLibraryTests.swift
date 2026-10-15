@@ -505,6 +505,89 @@ struct EditorAssetLibraryTests {
     }
 
     @Test(
+        "a changed manifest's bundle takes the assets whose URL hasn't changed from the latest bundle",
+        arguments: [EditorCachePolicy.always, .maxAge(60)]
+    )
+    func changedBundleCarriesUnchangedAssetsForward(cachePolicy: EditorCachePolicy) async throws {
+        let style = "https://example.com/plugin.css?ver=1"
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1", style: style))
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: cachePolicy)
+        _ = try await library.downloadAssetBundle()
+
+        mockClient.urlResponseHandler = Self.responses(
+            forManifest: Self.manifestJSON(scriptVersion: "2", style: style),
+            assetContent: "new content"
+        )
+        let changed = try await library.downloadAssetBundle()
+
+        let changedScript = URL(string: "https://example.com/plugin.js?ver=2")!
+        #expect(mockClient.downloadedURLs.filter { $0.path == "/plugin.css" }.count == 1)
+        #expect(mockClient.downloadedURLs.contains(changedScript))
+        #expect(try changed.assetData(for: URL(string: style)!) == Data("mock content".utf8))
+        #expect(try changed.assetData(for: changedScript) == Data("new content".utf8))
+    }
+
+    @Test(
+        "a changed manifest's bundle downloads again an asset whose URL carries no version",
+        arguments: [
+            "https://example.com/plugin.css",
+            "https://example.com/plugin.css?ver=",
+            "https://example.com/plugin.css?minify=false",
+        ]
+    )
+    func changedBundleDownloadsUnversionedAssetsAgain(style: String) async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1", style: style))
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(60))
+        _ = try await library.downloadAssetBundle()
+
+        mockClient.urlResponseHandler = Self.responses(
+            forManifest: Self.manifestJSON(scriptVersion: "2", style: style),
+            assetContent: "new content"
+        )
+        let changed = try await library.downloadAssetBundle()
+
+        #expect(mockClient.downloadedURLs.filter { $0.path == "/plugin.css" }.count == 2)
+        #expect(try changed.assetData(for: URL(string: style)!) == Data("new content".utf8))
+    }
+
+    @Test("a changed manifest's bundle downloads an unchanged asset that the latest bundle is missing")
+    func changedBundleDownloadsAssetMissingFromLatestBundle() async throws {
+        let style = "https://example.com/plugin.css?ver=1"
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { url in
+            if url.path.contains("editor-assets") {
+                return Data(Self.manifestJSON(scriptVersion: "1", style: style).utf8)
+            }
+            guard url.path != "/plugin.css" else { throw URLError(.timedOut) }
+            return Data("mock content".utf8)
+        }
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .maxAge(60))
+        let gapped = try await library.downloadAssetBundle()
+        #expect(!gapped.hasAssetData(for: URL(string: style)!))
+
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "2", style: style))
+        let changed = try await library.downloadAssetBundle()
+
+        #expect(changed.hasAssetData(for: URL(string: style)!))
+    }
+
+    @Test("a changed manifest's bundle whose assets are all carried forward still reports that it's complete")
+    func changedBundleReportsProgressWhenNothingIsDownloaded() async throws {
+        let (library, mockClient) = try await makeLibraryWithBundle(cachePolicy: .maxAge(60))
+        let changedManifest = Self.manifestJSON(scriptVersion: "1").replacing("core/paragraph", with: "core/heading")
+        mockClient.urlResponseHandler = Self.responses(forManifest: changedManifest)
+        let progressTracker = ProgressTracker()
+
+        let changed = try await library.downloadAssetBundle { progressTracker.append($0) }
+
+        #expect(mockClient.downloadCallCount == 1)
+        #expect(changed.hasAssetData(for: Self.scriptURL))
+        #expect(progressTracker.count == 1)
+    }
+
+    @Test(
         "a manifest check asks the site afresh, rather than taking a stored response or a request in flight",
         arguments: [EditorCachePolicy.ignore, .maxAge(3600)]
     )
@@ -1150,6 +1233,31 @@ struct EditorAssetLibraryTests {
         // build itself: checked any sooner, a build about to publish hasn't yet.
         await abandoned.value
         #expect(try await library.readAssetBundles().isEmpty)
+    }
+
+    @Test("a manifest's links that aren't HTTP, or that don't end .js, .css or .js.map, are the ones a bundle doesn't hold")
+    func linksLeftOutAreTheOnesThatAreNotHTTP() async throws {
+        let manifestJSON = """
+            {
+                "scripts": "<script src=\\"https://example.com/plugin.js?ver=1\\"></script><script src=\\"ftp://example.com/old.js\\"></script><script src=\\"http://example.com/gtag/js?id=1\\"></script>",
+                "styles": "<link rel=\\"stylesheet\\" href=\\"https://example.com/css2?family=Inter\\"><link rel=\\"stylesheet\\" href=\\"data:text/css,a%7Bcolor:red%7D\\">",
+                "allowed_block_types": ["core/paragraph"]
+            }
+            """
+        let manifest = try LocalEditorAssetManifest(
+            remoteManifest: RemoteEditorAssetManifest(data: Data(manifestJSON.utf8))
+        )
+
+        let leftOut = await makeLibrary().linksLeftOut(of: manifest)
+
+        #expect(
+            leftOut.map(\.absoluteString) == [
+                "ftp://example.com/old.js",
+                "http://example.com/gtag/js?id=1",
+                "https://example.com/css2?family=Inter",
+                "data:text/css,a%7Bcolor:red%7D",
+            ]
+        )
     }
 
     @Test("a download's file is moved into the bundle, not left where the download put it")

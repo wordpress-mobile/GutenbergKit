@@ -261,7 +261,9 @@ An `EditorService`'s cache policy covers plugin and theme assets as well as API 
 | `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the last check is older than the age |
 | `.ignore`               | Always fetched                  | Manifest always checked                                    |
 
-If the manifest hasn't changed when it's checked, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete.
+A check downloads only what the manifest says has changed. If the manifest hasn't changed, the bundle on disk is kept rather than downloaded again — asset URLs carry their version (`?ver=`), so the same manifest means the same assets — and its age starts over. If the manifest has changed, the new bundle is built beside the old one, and every service for the site uses it once it's complete. An asset whose versioned URL a bundle on disk already has is copied from the latest bundle that has it. An asset whose URL has no `?ver=` is downloaded again, because its URL can't say whether it changed.
+
+That trusts the site's versions. WordPress gives an asset registered without a version its own version as `?ver=`, so such a file can change while its URL — and so the manifest — stays the same.
 
 The old bundle stays on disk for as long as the app is running, because an open editor — or dependencies the host prepared earlier and still holds — may be reading it. `cleanup()` removes it after the next launch.
 
