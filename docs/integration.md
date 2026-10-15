@@ -303,9 +303,9 @@ final class PostEditorCoordinator {
 ```
 
 If your design genuinely requires the retaining shape, call `stopMediaHandling()` when you
-are finished with the editor. It is terminal — the editor cannot upload or delete media
-afterwards — so call it when the editor is going away, not when it is merely covered or
-backgrounded.
+are finished with the editor. It is terminal — your handlers are released, and the page
+sends later uploads and deletes itself — so call it when the editor is going away, not when
+it is merely covered or backgrounded.
 
 ### How uploads reach native code
 

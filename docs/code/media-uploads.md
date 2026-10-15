@@ -99,8 +99,9 @@ the wrong offset. A 1.1 GB upload peaked at 44 MB of app memory.
 -   **Holding `finish`.** `finish` stays open while WordPress processes the upload. WebKit
     held one for 26 minutes in the foreground, and for hours across app suspension, and
     delivered the result.
--   **Disabled.** After `stopMediaHandling()` every request gets a `503`, which the page
-    takes as the cue to fall back.
+-   **Disabled.** After `stopMediaHandling()` every request gets a `503`. An upload that
+    hasn't reached `finish` falls back through the web view, and so does a delete, which
+    the REST relay then sends; a `finish` fails.
 
 ### Native inserter media
 

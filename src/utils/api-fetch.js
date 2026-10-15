@@ -242,7 +242,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 	// Each helper returns `null` when the request is not its concern, so an
 	// unhandled request falls through to the default path.
 	return (
-		nativeMediaDelete( options, transport ) ??
+		nativeMediaDelete( options, transport, next ) ??
 		nativeMediaUpload( options, transport, next ) ??
 		next( options )
 	);
@@ -654,11 +654,17 @@ function rejectUnreachableUpload( connectionError, options ) {
  * middleware adds it further down the chain, so the method here is still a
  * plain `DELETE`.
  *
- * @param {Object}                options   The api-fetch options.
- * @param {NativeUploadTransport} transport How to reach native code.
+ * Once `stopMediaHandling()` has run, the upload scheme refuses every request
+ * with a `503`. A deletion then goes down the chain instead, to the REST relay,
+ * which sends it natively too: retrying is safe, since deleting an attachment
+ * twice deletes it once.
+ *
+ * @param {Object}                                options   The api-fetch options.
+ * @param {NativeUploadTransport}                 transport How to reach native code.
+ * @param {(options: Object) => Promise<unknown>} next      The next middleware, for a refused deletion.
  * @return {?Promise} The relayed deletion, or `null` if not applicable.
  */
-function nativeMediaDelete( options, transport ) {
+function nativeMediaDelete( options, transport, next ) {
 	if ( options.method?.toUpperCase() !== 'DELETE' || ! options.path ) {
 		return null;
 	}
@@ -695,6 +701,10 @@ function nativeMediaDelete( options, transport ) {
 
 	return request.then(
 		( response ) => {
+			if ( transport.schemeBase && response.status === 503 ) {
+				return next( options );
+			}
+
 			if ( options.parse === false ) {
 				if ( ! response.ok ) {
 					return Promise.reject( response );

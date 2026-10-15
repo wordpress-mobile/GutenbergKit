@@ -71,8 +71,8 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     /// Stops accepting uploads, cancels the ones in flight, and deletes every staged
-    /// file. Requests after this get a `503`, which the page takes as the cue to upload
-    /// through the web view instead.
+    /// file. Requests after this get a `503`: an upload that hasn't reached `finish`, or
+    /// a delete, goes through the web view instead, and a `finish` fails.
     func disable() {
         isDisabled = true
         service = nil
@@ -122,7 +122,7 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
             return SchemeResponse(status: 204)
         }
         guard let service else {
-            return .error(503, code: "native_upload_unavailable", message: "Native media uploads are not available in this editor.")
+            return Self.unavailable
         }
         do {
             switch route {
@@ -130,6 +130,12 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
                 let body = try Self.decode(BeginRequest.self, from: request)
                 await store.sweep(idleFor: Self.sessionIdleTimeout)
                 let id = try await store.begin(filename: body.filename, mimeType: body.mimeType, expectedSize: body.size)
+                // `disable()` may have emptied the store while this waited on it, and
+                // nothing would discard a session made after that.
+                guard isEnabled else {
+                    await store.discard(id)
+                    return Self.unavailable
+                }
                 return .json(201, ["id": id])
 
             case let .appendChunk(id, offset):
@@ -192,6 +198,10 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
         "Access-Control-Expose-Headers": "x-wp-upload-attachment-id",
         "Cache-Control": "no-store",
     ]
+
+    private static var unavailable: SchemeResponse {
+        .error(503, code: "native_upload_unavailable", message: "Native media uploads are not available in this editor.")
+    }
 
     private static func response(for failure: MediaUploadSessionStore.Failure) -> SchemeResponse {
         switch failure {

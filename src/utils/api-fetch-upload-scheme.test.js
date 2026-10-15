@@ -358,6 +358,23 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 			} );
 		} );
 
+		it( 'sends a deletion the scheme refuses down the chain, to the REST relay', async () => {
+			installScheme( {
+				'/media/42/delete': () =>
+					json( 503, { code: 'native_upload_unavailable' } ),
+			} );
+			const next = makeNext();
+			const options = {
+				method: 'DELETE',
+				path: '/wp/v2/media/42?force=true',
+			};
+
+			const result = await nativeMediaUploadMiddleware( options, next );
+
+			expect( next ).toHaveBeenCalledWith( options );
+			expect( result ).toEqual( { passthrough: true } );
+		} );
+
 		it( 'passes through requests that are not media uploads', async () => {
 			installScheme();
 			const next = makeNext();
