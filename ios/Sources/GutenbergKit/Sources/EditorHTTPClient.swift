@@ -11,6 +11,7 @@ public protocol EditorHTTPClientProtocol: Sendable {
     /// errors) to the editor unchanged.
     func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse)
 
+    /// Downloads the response body to a temporary file. The caller owns the file, and must move or delete it.
     func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse)
 
     /// Returns a client tuned for large media uploads. The default returns the
@@ -102,6 +103,9 @@ final class NetworkTaskReporter: NSObject, URLSessionTaskDelegate, @unchecked Se
 
 public enum EditorResponseData {
     case bytes(Data)
+
+    /// The temporary file a response was downloaded to. It's only guaranteed to exist during the delegate
+    /// call: afterwards the caller of `download(_:)` moves or deletes it, or, for an error, the client does.
     case file(URL)
 }
 
@@ -307,6 +311,9 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
         guard 200...299 ~= httpResponse.statusCode else {
             let requestURL = configuredRequest.url!
             Logger.http.error("📡 HTTP error fetching \(requestURL.absoluteString): \(httpResponse.statusCode)")
+
+            // The file holds the error response's body. No caller receives it, so delete it here.
+            try? FileManager.default.removeItem(at: url)
 
             throw ClientError.downloadFailed(
                 statusCode: httpResponse.statusCode,

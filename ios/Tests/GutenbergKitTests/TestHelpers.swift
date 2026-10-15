@@ -33,6 +33,33 @@ func jsonResource(named name: String) throws -> String {
     String(data: try jsonResource(named: name), encoding: .utf8)!
 }
 
+/// Puts a bundle for each of `manifests` in `storageRoot`, as an earlier launch would have left them.
+/// Each bundle is complete, the last manifest's bundle is the latest, and none has been handed out by
+/// this process, so `cleanup()` is free to remove all but the latest.
+@discardableResult
+func plantBundles(
+    forManifests manifests: [String],
+    in storageRoot: URL,
+    configuration: EditorConfiguration = EditorAssetLibraryTests.testConfiguration
+) async throws -> [EditorAssetBundle] {
+    let scratchRoot = URL.randomTemporaryDirectory
+    let client = EditorAssetLibraryMockHTTPClient()
+    let library = EditorAssetLibrary(configuration: configuration, httpClient: client, storageRoot: scratchRoot)
+    try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
+
+    var planted: [EditorAssetBundle] = []
+    for manifest in manifests {
+        client.urlResponseHandler = { url in
+            url.path.contains("editor-assets") ? Data(manifest.utf8) : Data("mock content".utf8)
+        }
+        let bundle = try await library.downloadAssetBundle()
+        let destination = storageRoot.appending(path: bundle.id)
+        try FileManager.default.moveItem(at: scratchRoot.appending(path: bundle.id), to: destination)
+        planted.append(try EditorAssetBundle(url: destination.appending(path: "manifest.json")))
+    }
+    return planted
+}
+
 extension Data {
     /// Whether this holds the same bytes as `other`, for an `#expect`.
     ///
