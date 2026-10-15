@@ -338,7 +338,8 @@ public actor EditorAssetLibrary {
     ///
     /// If the assets all come back the same as the manifest's bundle on disk has them, that bundle is still
     /// right, so it's returned instead and the new one is discarded. That keeps a refresh that changed
-    /// nothing from costing disk space, or looking like a change to a host comparing dependencies.
+    /// nothing from costing disk space, or looking like a change to a host comparing dependencies. If only
+    /// some do, the new bundle shares their space on disk with the copies they match.
     private func buildFreshBundle(
         for manifest: LocalEditorAssetManifest,
         fetchedAt manifestFetchDate: Date,
@@ -649,6 +650,7 @@ public actor EditorAssetLibrary {
             case .ignore:
                 // Takes nothing on disk as valid, so every asset is downloaded in full.
                 assetHeaders = try await self.downloadMissingAssets(of: draft, reportingTo: progress)
+                self.shareUnchangedAssets(of: draft, with: sources)
             }
 
             // An asset that fails to download has no better copy than one already on disk, which
@@ -728,6 +730,37 @@ public actor EditorAssetLibrary {
         URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?
             .contains { $0.name == "ver" && $0.value?.isEmpty == false } ?? false
+    }
+
+    /// Swaps each asset `draft` downloaded that came back the same as the copy one of `sources` has under the
+    /// same URL for a clone of that copy.
+    ///
+    /// The bytes don't change, but a clone shares the copy's space on disk instead of taking its own. So a
+    /// download that changed some assets takes space for those alone, rather than for a whole bundle.
+    private func shareUnchangedAssets(of draft: Draft, with sources: [EditorAssetBundle]) {
+        for asset in self.downloadableAssets(in: draft.bundle.manifest) {
+            let downloaded = self.assetPath(for: asset, in: draft.bundle)
+
+            guard
+                let source = self.source(of: asset, in: sources),
+                FileManager.default.contentsEqual(
+                    atPath: downloaded.path,
+                    andPath: self.assetPath(for: asset, in: source).path
+                )
+            else {
+                continue
+            }
+
+            // Cloned beside the download, then swapped in: if the bundle on disk is removed in the
+            // meantime, the download stays as it is
+            let clone = downloaded.appendingPathExtension("clone")
+            do {
+                try FileManager.default.copyItem(at: self.assetPath(for: asset, in: source), to: clone)
+                _ = try FileManager.default.replaceItemAt(downloaded, withItemAt: clone)
+            } catch {
+                try? FileManager.default.removeItem(at: clone)
+            }
+        }
     }
 
     /// The assets in `manifest` that belong in its bundle: every link that one of its script or stylesheet

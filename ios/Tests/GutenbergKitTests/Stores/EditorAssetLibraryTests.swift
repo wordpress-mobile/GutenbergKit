@@ -452,6 +452,72 @@ struct EditorAssetLibraryTests {
         #expect(await library.existingBundle(forManifestChecksum: bundle.id)?.bundleRoot == refreshed.bundleRoot)
     }
 
+    @Test(
+        "under .ignore, an asset that comes back the same shares its space on disk with the copy it matches",
+        .enabled(if: EditorAssetLibraryTests.storageSupportsClones)
+    )
+    func unchangedAssetSharesSpaceWithCopyOnDiskUnderIgnore() async throws {
+        let style = URL(string: "https://example.com/plugin.css")!
+        let manifest = Self.manifestJSON(scriptVersion: "1", style: style.absoluteString)
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: manifest)
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
+        let bundle = try await library.downloadAssetBundle()
+
+        // A download shares its space with nothing
+        #expect(try Self.unsharedSize(of: bundle.assetDataPath(for: Self.scriptURL)) > 0)
+
+        // The stylesheet changes, and the script doesn't
+        mockClient.urlResponseHandler = { url in
+            if url.path.contains("editor-assets") {
+                return Data(manifest.utf8)
+            }
+            return Data(url.path == "/plugin.css" ? "new content".utf8 : "mock content".utf8)
+        }
+        let refreshed = try await library.downloadAssetBundle()
+
+        #expect(mockClient.downloadCallCount == 4)
+        #expect(refreshed != bundle)
+        #expect(try refreshed.assetData(for: Self.scriptURL) == Data("mock content".utf8))
+        #expect(try Self.unsharedSize(of: refreshed.assetDataPath(for: Self.scriptURL)) == 0)
+        #expect(try refreshed.assetData(for: style) == Data("new content".utf8))
+        #expect(try Self.unsharedSize(of: refreshed.assetDataPath(for: style)) > 0)
+        // The bundle an editor may be reading is left as it was
+        #expect(try bundle.assetData(for: style) == Data("mock content".utf8))
+        // Nothing is left over from swapping the download for the copy
+        let assets = refreshed.assetDataPath(for: style).deletingLastPathComponent()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: assets.path).count == 2)
+    }
+
+    @Test(
+        "under .ignore, an asset of a changed manifest that comes back the same shares its space with another bundle's copy",
+        .enabled(if: EditorAssetLibraryTests.storageSupportsClones)
+    )
+    func unchangedAssetOfChangedManifestSharesSpaceUnderIgnore() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = Self.responses(forManifest: Self.manifestJSON(scriptVersion: "1"))
+        let library = makeLibrary(httpClient: mockClient, cachePolicy: .ignore)
+        let bundle = try await library.downloadAssetBundle()
+
+        // The site adds a stylesheet, and the script is the same
+        let style = URL(string: "https://example.com/plugin.css")!
+        let manifest = Self.manifestJSON(scriptVersion: "1", style: style.absoluteString)
+        mockClient.urlResponseHandler = { url in
+            if url.path.contains("editor-assets") {
+                return Data(manifest.utf8)
+            }
+            return Data(url.path == "/plugin.css" ? "new content".utf8 : "mock content".utf8)
+        }
+        let changed = try await library.downloadAssetBundle()
+
+        // Downloaded again all the same: that's how it's known to be the same
+        #expect(mockClient.downloadCallCount == 3)
+        #expect(changed.id != bundle.id)
+        #expect(try changed.assetData(for: Self.scriptURL) == Data("mock content".utf8))
+        #expect(try Self.unsharedSize(of: changed.assetDataPath(for: Self.scriptURL)) == 0)
+        #expect(try Self.unsharedSize(of: changed.assetDataPath(for: style)) > 0)
+    }
+
     @Test("under .ignore, a new bundle takes the latest bundle's copy of an asset that fails to download again")
     func newBundleUnderIgnoreKeepsAssetThatFailsToDownloadAgain() async throws {
         let style = "https://example.com/plugin.css"
@@ -1403,6 +1469,39 @@ struct EditorAssetLibraryTests {
 
     /// The script in ``manifestJSON(scriptVersion:)`` with version `1`.
     private static let scriptURL = URL(string: "https://example.com/plugin.js?ver=1")!
+
+    /// Whether the volume tests keep their bundles on can clone a file. APFS, which every Apple platform
+    /// uses, can.
+    static var storageSupportsClones: Bool {
+        let values = try? URL.temporaryDirectory.resourceValues(forKeys: [.volumeSupportsFileCloningKey])
+        return values?.volumeSupportsFileCloning == true
+    }
+
+    /// How much of its space on disk the file at `url` shares with no other file. A clone shares all of it
+    /// with the file it was cloned from, until either changes, so this is zero for both.
+    private static func unsharedSize(of url: URL) throws -> Int64 {
+        var request = attrlist()
+        request.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
+        request.forkattr = attrgroup_t(ATTR_CMNEXT_PRIVATESIZE)
+
+        // The length of what's returned, then the size
+        var buffer = [UInt8](repeating: 0, count: MemoryLayout<UInt32>.size + MemoryLayout<off_t>.size)
+        let result = buffer.withUnsafeMutableBytes { buffer in
+            getattrlist(
+                url.path,
+                &request,
+                buffer.baseAddress,
+                buffer.count,
+                UInt32(FSOPT_ATTR_CMN_EXTENDED | FSOPT_NOFOLLOW)
+            )
+        }
+
+        guard result == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        return buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: MemoryLayout<UInt32>.size, as: off_t.self) }
+    }
 
     /// Makes it `interval` seconds since the site's manifest was last found to match `bundle`.
     private func backdate(_ bundle: EditorAssetBundle, by interval: TimeInterval) throws {
