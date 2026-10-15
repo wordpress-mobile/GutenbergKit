@@ -220,10 +220,12 @@ public actor EditorService {
         async let assetBundle = try self.prepareAssetBundle()
         async let preloadList = try preparePreloadList()
 
-        // Automatically clean up old asset bundles
-        try await onceEvery(.seconds(86_400)) {
-            try await self.cleanup()
-        }
+        // Automatically clean up old asset bundles, once a day for each site
+        try await onceEvery(
+            .seconds(86_400),
+            { try await self.cleanup() },
+            handle: "asset-bundle-cleanup-\(self.configuration.siteId)"
+        )
 
         return try await EditorDependencies(
             editorSettings: settings,

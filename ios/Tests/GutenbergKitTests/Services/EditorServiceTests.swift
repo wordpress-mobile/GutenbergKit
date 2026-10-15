@@ -140,6 +140,27 @@ struct EditorServiceTests: MakesTestFixtures {
     _ = try await second.value
   }
 
+  // MARK: - Automatic Cleanup
+
+  @Test("a site's old bundles are cleaned up, whichever site was prepared first that day")
+  func automaticCleanupRunsPerSite() async throws {
+    let first = TestSite(
+      configuration: makeConfiguration(siteURL: Self.uniqueSiteURL()), manifest: Self.pluginManifest(version: "1"))
+    let second = TestSite(
+      configuration: makeConfiguration(siteURL: Self.uniqueSiteURL()), manifest: Self.pluginManifest(version: "2"))
+    defer { Self.forgetAutomaticCleanups(of: [first, second]) }
+    try await plantBundles(
+      forManifests: [Self.pluginManifest(version: "1"), Self.pluginManifest(version: "2")],
+      in: second.storageRoot
+    )
+    #expect(try await second.service(cachePolicy: .always).fetchAssetBundleCount() == 2)
+
+    _ = try await first.service(cachePolicy: .always).prepare()
+    _ = try await second.service(cachePolicy: .always).prepare()
+
+    #expect(try await second.service(cachePolicy: .always).fetchAssetBundleCount() == 1)
+  }
+
   // MARK: - Progress Totals
 
   @Test("prepare() progress never passes its total, and ends on it")
@@ -188,6 +209,12 @@ struct EditorServiceTests: MakesTestFixtures {
     }
   }
 
+  /// A manifest with one plugin script, whose URL carries `version` the way WordPress versions its
+  /// assets.
+  private static func pluginManifest(version: String) -> String {
+    #"{"scripts":"<script src=\"https://example.com/plugin.js?ver=\#(version)\"></script>","styles":"","allowed_block_types":[]}"#
+  }
+
   /// One site's server and storage, shared by every service a test makes for it — as a host's
   /// services for one site share them.
   private final class TestSite {
@@ -222,6 +249,21 @@ struct EditorServiceTests: MakesTestFixtures {
         url.absoluteString.contains("editor-assets")
           ? Data(manifest.utf8) : EditorServiceTests.editorServiceResponseHandler(url)
       }
+    }
+  }
+
+  /// A site no other test, and no earlier run, has prepared.
+  private static func uniqueSiteURL() -> URL {
+    URL(string: "https://\(UUID().uuidString.lowercased()).example")!
+  }
+
+  /// Removes the record of when each site's bundles were last cleaned up automatically, which
+  /// would otherwise outlive the test in the user defaults.
+  private static func forgetAutomaticCleanups(of sites: [TestSite]) {
+    let hosts = sites.compactMap { $0.configuration.siteURL.host() }
+    for key in UserDefaults.standard.dictionaryRepresentation().keys
+    where key.hasPrefix("once-every-") && hosts.contains(where: key.contains) {
+      UserDefaults.standard.removeObject(forKey: key)
     }
   }
 }

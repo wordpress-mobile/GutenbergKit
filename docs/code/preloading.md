@@ -211,14 +211,16 @@ This filtering is performed by `EditorURLResponse.asPreloadResponse()`.
 
 ### Automatic Cleanup
 
-`EditorService` automatically cleans up old asset bundles once per day:
+`EditorService` automatically cleans up each site's old asset bundles once per day:
 
 **Swift**
 
 ```swift
-try await onceEvery(.seconds(86_400)) {
-    try await self.cleanup()
-}
+try await onceEvery(
+    .seconds(86_400),
+    { try await self.cleanup() },
+    handle: "asset-bundle-cleanup-\(self.configuration.siteId)"
+)
 ```
 
 A cleanup keeps the site's latest bundle, and any bundle the app has been handed since it launched — an open editor, or dependencies the host still holds, may be reading it.
