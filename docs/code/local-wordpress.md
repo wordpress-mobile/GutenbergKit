@@ -140,9 +140,9 @@ The mode is stored server-side, so it persists across uploads and retries until 
 
 Then upload an image from a demo app and watch the network requests. In `recover` mode the upload 500s and the following `post-process` call succeeds, leaving a complete attachment; in `always` mode you should see five `post-process` attempts followed by a `DELETE`.
 
-**Only native uploads recover locally.** Reading `X-WP-Upload-Attachment-ID` cross-origin requires the site to list it in `Access-Control-Expose-Headers`, and WordPress core's `rest_send_cors_headers()` does not. Native uploads recover on both platforms, since native code relays the header and exposes it itself — the `gbk-upload:` scheme on iOS, the loopback server on Android.
+**Uploads recover locally on iOS, and on Android only when they are native.** Reading `X-WP-Upload-Attachment-ID` cross-origin requires the site to list it in `Access-Control-Expose-Headers`, and WordPress core's `rest_send_cors_headers()` does not. Native uploads recover on both platforms, since native code relays the header and exposes it itself — the `gbk-upload:` scheme on iOS, the loopback server on Android. On iOS every upload with site credentials goes through the scheme, so there is no other path to test.
 
-A **direct** upload (native media upload disabled) never recovers on iOS, which loads the editor from `file://`. It does not recover against wp-env on Android either: `GutenbergView` derives the asset domain from the site's _host_, which drops the port, so the editor at `http://10.0.2.2` is cross-origin with the site at `http://10.0.2.2:8888`. Direct uploads are only same-origin — and therefore only recover — when the site runs on the scheme's default port, as production sites do.
+A **direct** upload on Android (native media upload disabled) does not recover against wp-env: `GutenbergView` derives the asset domain from the site's _host_, which drops the port, so the editor at `http://10.0.2.2` is cross-origin with the site at `http://10.0.2.2:8888`. Direct uploads are only same-origin — and therefore only recover — when the site runs on the scheme's default port, as production sites do.
 
 ## WordPress Admin
 
