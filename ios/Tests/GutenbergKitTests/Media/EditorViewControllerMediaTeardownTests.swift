@@ -161,6 +161,39 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(editor.restRelaySchemeHandler.relay.upstreamURL(for: relayURL)?.host() == "updated.example.com")
     }
 
+    // MARK: - Network reporting
+
+    @MainActor
+    @Test("the host's HTTP delegate is told about a request the page sends through the relay")
+    func relayedRequestsAreReported() async throws {
+        // Nothing listens on port 1, so the relayed request fails at once, and a
+        // failed request is reported like any other.
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "http://127.0.0.1:1")!,
+            siteApiRoot: URL(string: "http://127.0.0.1:1/wp-json/")!
+        )
+        .setAuthHeader("Bearer test-token")
+        .build()
+        let recorder = TaskEventRecorder()
+        let editor = EditorViewController(
+            configuration: configuration,
+            httpClient: EditorHTTPClient(urlSession: URLSession.shared, authHeader: "Bearer test-token", delegate: recorder)
+        )
+        defer { editor.stopMediaHandling() }
+        try await loadBlankPage(in: editor)
+
+        _ = try await editor.webView.callAsyncJavaScript(
+            "try { await fetch('gbk-rest://relay/proxy/wp/v2/posts'); } catch {} return true;",
+            arguments: [:],
+            in: nil,
+            contentWorld: .page
+        )
+
+        #expect(recorder.events.first == "created")
+        #expect(recorder.events.last == "failed")
+    }
+
     // MARK: - Uploads from the editor's own web view
 
     @MainActor

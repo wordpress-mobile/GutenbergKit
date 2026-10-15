@@ -94,6 +94,11 @@ public struct GBKitGlobal: Sendable, Codable {
         /// The URL a path below the site's REST API root is appended to,
         /// slash-terminated.
         let baseURL: String
+
+        /// Whether native code reports each relayed request to the host itself. The
+        /// page then leaves those requests out of its own network log, which would
+        /// otherwise record each of them twice.
+        let reportsRequests: Bool
     }
 
     let editorSettings: JSON?
@@ -112,11 +117,14 @@ public struct GBKitGlobal: Sendable, Codable {
     ///     editor can't upload natively.
     ///   - restRelayBaseURL: The URL the page relays the site's REST API requests
     ///     through, or nil when it sends them itself.
+    ///   - restRelayReportsRequests: Whether native code reports each relayed
+    ///     request to the host's ``EditorHTTPClientDelegate``.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
         nativeUploadScheme: String? = nil,
-        restRelayBaseURL: String? = nil
+        restRelayBaseURL: String? = nil,
+        restRelayReportsRequests: Bool = false
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -140,7 +148,9 @@ public struct GBKitGlobal: Sendable, Codable {
         self.logLevel = configuration.logLevel.rawValue
         self.enableNetworkLogging = configuration.enableNetworkLogging
         self.nativeUploadScheme = nativeUploadScheme
-        self.restRelay = restRelayBaseURL.map(RestRelayLocation.init(baseURL:))
+        self.restRelay = restRelayBaseURL.map {
+            RestRelayLocation(baseURL: $0, reportsRequests: restRelayReportsRequests)
+        }
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)

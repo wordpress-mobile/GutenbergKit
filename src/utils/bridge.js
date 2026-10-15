@@ -253,7 +253,8 @@ export function onNetworkRequest( requestData ) {
  * Where the native REST relay is.
  *
  * @typedef {Object} RestRelay
- * @property {string} baseURL The URL a path below the site's REST API root is appended to, slash-terminated.
+ * @property {string}  baseURL           The URL a path below the site's REST API root is appended to, slash-terminated.
+ * @property {boolean} [reportsRequests] Whether native code reports each relayed request to the host itself, so the page leaves it out of its network log.
  */
 
 /**

@@ -61,6 +61,11 @@ struct RestRelay: Sendable {
     /// The session upstream requests are sent on.
     private let session: URLSession
 
+    /// Told about each upstream request's task: the host's
+    /// ``EditorHTTPClientDelegate``, so relayed requests are observed with the
+    /// editor's own.
+    private let observer: (any EditorHTTPClientDelegate)?
+
     /// The session every relay shares.
     ///
     /// A `URLSession` holds its resources until it is invalidated, and a relay
@@ -89,13 +94,20 @@ struct RestRelay: Sendable {
         return URLSession(configuration: configuration)
     }()
 
-    /// - Parameter session: The session to send upstream requests on. Defaults
-    ///   to the shared one; tests substitute a stubbed session to exercise
-    ///   ``handle(_:)`` without a site.
-    init(configuration: EditorConfiguration, session: URLSession? = nil) {
+    /// - Parameters:
+    ///   - session: The session to send upstream requests on. Defaults to the
+    ///     shared one; tests substitute a stubbed session to exercise
+    ///     ``handle(_:)`` without a site.
+    ///   - observer: Told about each upstream request's task, or `nil`.
+    init(
+        configuration: EditorConfiguration,
+        session: URLSession? = nil,
+        observer: (any EditorHTTPClientDelegate)? = nil
+    ) {
         self.apiRoot = Self.normalizedRoot(configuration.siteApiRoot.absoluteString)
         self.authHeader = configuration.authHeader
         self.session = session ?? Self.sharedSession
+        self.observer = observer
     }
 
     /// The configured root, slash-terminated, with the route value of a
@@ -154,13 +166,15 @@ struct RestRelay: Sendable {
         }
         upstreamRequest.httpBody = request.httpBody
 
+        let reporter = observer.map(NetworkTaskReporter.init(reportingTo:))
         do {
             // The redirect guard is a per-task delegate: `URLSession` follows
             // 3xx responses on its own, which would carry the site credential
             // to whatever host the `Location` header names and relay that
             // response back. See ``RedirectGuard``.
-            let redirectGuard = RedirectGuard(allowedPrefix: apiRoot)
+            let redirectGuard = RedirectGuard(allowedPrefix: apiRoot, reporter: reporter)
             let (body, response) = try await session.data(for: upstreamRequest, delegate: redirectGuard)
+            reporter?.complete(with: .bytes(body), error: nil)
 
             // A refused redirect leaves `URLSession` holding the 3xx itself.
             // Relaying that would undo the refusal: the response carries the
@@ -178,6 +192,7 @@ struct RestRelay: Sendable {
             guard let response = response as? HTTPURLResponse else {
                 return Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The site did not answer over HTTP.")
             }
+            observer?.didPerformRequest(upstreamRequest, response: response, data: .bytes(body))
 
             return SchemeResponse(
                 status: response.statusCode,
@@ -185,6 +200,7 @@ struct RestRelay: Sendable {
                 body: body
             )
         } catch {
+            reporter?.complete(with: nil, error: error)
             Logger.restRelay.error("Upstream request failed: \(error.localizedDescription)")
             throw error
         }
@@ -288,6 +304,9 @@ struct RestRelay: Sendable {
         /// `allowedPrefix` under `https`, when the configured root is `http`.
         private let upgradedPrefix: String?
 
+        /// Reports the task, which this delegate sees as the task's only one.
+        private let reporter: NetworkTaskReporter?
+
         private let lock = NSLock()
         private var _refusedTarget: String?
 
@@ -296,7 +315,8 @@ struct RestRelay: Sendable {
             lock.withLock { _refusedTarget }
         }
 
-        init(allowedPrefix: String) {
+        init(allowedPrefix: String, reporter: NetworkTaskReporter? = nil) {
+            self.reporter = reporter
             let root = Self.normalized(allowedPrefix) ?? allowedPrefix
             self.allowedPrefix = root
             let insecureScheme = "http://"
@@ -318,6 +338,14 @@ struct RestRelay: Sendable {
                 return
             }
             completionHandler(request)
+        }
+
+        func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+            reporter?.urlSession(session, didCreateTask: task)
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+            reporter?.urlSession(session, task: task, didFinishCollecting: metrics)
         }
 
         /// Whether `target` is inside the API root, allowing only the host

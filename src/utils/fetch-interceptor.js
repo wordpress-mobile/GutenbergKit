@@ -27,10 +27,11 @@ export function initializeFetchInterceptor() {
 	window.fetch = async function ( input, init ) {
 		const requestDetails = extractRequestDetails( input, init );
 
-		// The editor's own URL schemes (`gbk-upload:`, `gbk-media-file:`) are
-		// served by native code, not the network. Logging them would report every
-		// chunk of a native upload — hundreds for a large video — while the real
-		// request to WordPress is logged natively.
+		// The editor's own URL schemes (`gbk-upload:`, `gbk-media-file:`,
+		// `gbk-rest:`) are served by native code, not the network. Logging them
+		// would report every chunk of a native upload — hundreds for a large
+		// video. The requests native code sends on to WordPress reach the host
+		// natively instead, through `EditorHTTPClientDelegate`, when it sets one.
 		if ( ! isNetworkURL( requestDetails.url ) ) {
 			return originalFetch( input, init );
 		}

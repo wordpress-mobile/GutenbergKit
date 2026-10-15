@@ -35,11 +35,69 @@ public extension EditorHTTPClientProtocol {
 /// A delegate for observing HTTP requests made by the editor.
 ///
 /// Implement this protocol to inspect or log all network requests — including the
-/// media uploads and passthroughs routed through
-/// ``EditorHTTPClientProtocol/uploadClient()``. Conformers are invoked from an
-/// actor, so the protocol requires `Sendable` (implementations must be thread-safe).
+/// media uploads routed through ``EditorHTTPClientProtocol/uploadClient()``, and
+/// the editor page's REST API requests, which native code relays to the site.
+/// Conformers are invoked from an actor and from `URLSession`'s delegate queue, so
+/// the protocol requires `Sendable` (implementations must be thread-safe).
+///
+/// ``didPerformRequest(_:response:data:)`` reports a request that got a response.
+/// The task callbacks report every request, whatever became of it: one that is
+/// still waiting has had ``didCreateTask(_:)`` and nothing after it. They take
+/// `URLSession`'s own types, so a network logger that records `URLSessionTask`s
+/// can take each call as it comes.
+///
+/// Each request carries the site's `Authorization` header, as sent. Redact it before
+/// storing requests anywhere it shouldn't be kept.
 public protocol EditorHTTPClientDelegate: Sendable {
     func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData)
+
+    /// A request is about to go out as `task`.
+    func didCreateTask(_ task: URLSessionTask)
+
+    /// `URLSession` measured `task`: its timing, its connection, and the bytes sent
+    /// and received.
+    func task(_ task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics)
+
+    /// `task` ended: with the response's body, or with the error that ended it — the
+    /// request was cancelled, timed out, or couldn't reach the server.
+    func task(_ task: URLSessionTask, didCompleteWith data: EditorResponseData?, error: (any Error)?)
+}
+
+public extension EditorHTTPClientDelegate {
+    func didCreateTask(_ task: URLSessionTask) {}
+    func task(_ task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {}
+    func task(_ task: URLSessionTask, didCompleteWith data: EditorResponseData?, error: (any Error)?) {}
+}
+
+/// Reports one request's task to an ``EditorHTTPClientDelegate``.
+///
+/// Passed to `URLSession` as the delegate of that one task, which is how it sees the
+/// task an async `URLSession` call never hands back.
+final class NetworkTaskReporter: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    /// The host's delegate, held strongly: this object lives only as long as one
+    /// request, and the delegate needn't be a class.
+    private let observer: any EditorHTTPClientDelegate
+    private let lock = NSLock()
+    private var _task: URLSessionTask?
+
+    init(reportingTo observer: any EditorHTTPClientDelegate) {
+        self.observer = observer
+    }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        lock.withLock { _task = task }
+        observer.didCreateTask(task)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        observer.task(task, didFinishCollecting: metrics)
+    }
+
+    /// Reports how the request ended, once the call that sent it returns or throws.
+    func complete(with data: EditorResponseData?, error: (any Error)?) {
+        guard let task = lock.withLock({ _task }) else { return }
+        observer.task(task, didCompleteWith: data, error: error)
+    }
 }
 
 public enum EditorResponseData {
@@ -102,7 +160,9 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
     private let urlSession: URLSessionProtocol
     private let authHeader: String
-    private let delegate: EditorHTTPClientDelegate?
+    /// Readable outside the actor so the editor can hand it to the REST relay, whose
+    /// requests it observes too.
+    nonisolated let delegate: EditorHTTPClientDelegate?
     private let requestTimeout: TimeInterval?
     private let minimumTimeout: TimeInterval?
 
@@ -206,7 +266,7 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     ]
 
     private func send(_ configuredRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await self.urlSession.data(for: configuredRequest)
+        let (data, response) = try await self.data(for: configuredRequest)
         self.delegate?.didPerformRequest(configuredRequest, response: response, data: .bytes(data))
 
         let httpResponse = response as! HTTPURLResponse
@@ -231,7 +291,7 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
 
     public func performRaw(_ urlRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let configuredRequest = self.configureRequest(urlRequest)
-        let (data, response) = try await self.urlSession.data(for: configuredRequest)
+        let (data, response) = try await self.data(for: configuredRequest)
         self.delegate?.didPerformRequest(configuredRequest, response: response, data: .bytes(data))
         return (data, response as! HTTPURLResponse)
     }
@@ -239,7 +299,7 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
     public func download(_ urlRequest: URLRequest) async throws -> (URL, HTTPURLResponse) {
 
         let configuredRequest = self.configureRequest(urlRequest)
-        let (url, response) = try await self.urlSession.download(for: configuredRequest, delegate: nil)
+        let (url, response) = try await self.download(for: configuredRequest)
         self.delegate?.didPerformRequest(configuredRequest, response: response, data: .file(url))
 
         let httpResponse = response as! HTTPURLResponse
@@ -280,6 +340,32 @@ public actor EditorHTTPClient: EditorHTTPClientProtocol {
             requestTimeout: nil,
             minimumTimeout: Self.uploadInactivityTimeout
         )
+    }
+
+    /// Sends `request` on the session, reporting its task to the delegate, if any.
+    private func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let reporter = delegate.map(NetworkTaskReporter.init(reportingTo:))
+        do {
+            let (data, response) = try await urlSession.data(for: request, delegate: reporter)
+            reporter?.complete(with: .bytes(data), error: nil)
+            return (data, response)
+        } catch {
+            reporter?.complete(with: nil, error: error)
+            throw error
+        }
+    }
+
+    /// Downloads `request` on the session, reporting its task to the delegate, if any.
+    private func download(for request: URLRequest) async throws -> (URL, URLResponse) {
+        let reporter = delegate.map(NetworkTaskReporter.init(reportingTo:))
+        do {
+            let (url, response) = try await urlSession.download(for: request, delegate: reporter)
+            reporter?.complete(with: .file(url), error: nil)
+            return (url, response)
+        } catch {
+            reporter?.complete(with: nil, error: error)
+            throw error
+        }
     }
 
     private func configureRequest(_ request: URLRequest) -> URLRequest {

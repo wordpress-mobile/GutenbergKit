@@ -22,9 +22,10 @@ const WRAPPED = Symbol.for( 'gutenbergkit.fetchWrappers' );
  *
  * `[ a, b ]` produces `a( b( fetch ) )`, so `a` sees the request first and the
  * response last. Order is behavior, not preference: a wrapper that rewrites the
- * request changes what every wrapper inside it observes, so the network log has
- * to sit outside the relay to record the request the editor made rather than
- * the loopback rewrite of it.
+ * request changes what every wrapper inside it observes. The network log sits
+ * outside the relay to record the request the editor made rather than the
+ * relay's rewrite of it, unless native code reports relayed requests itself
+ * (`installFetchLayers` in `editor-environment.js`).
  *
  * Entries that are `null` are skipped, so a wrapper module can report "not
  * applicable" — network logging switched off, no relay configured — by

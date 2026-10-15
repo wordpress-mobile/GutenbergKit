@@ -182,6 +182,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     // MARK: - Private Properties (Services)
     private let editorService: EditorService
     private let httpClient: any EditorHTTPClientProtocol
+    /// The host's ``EditorHTTPClientDelegate``, which the REST relay reports its
+    /// requests to. With one set, the page leaves those requests out of its own log.
+    private let relayObserver: (any EditorHTTPClientDelegate)?
     private let mediaPicker: MediaPickerController?
     let nativeFileInput = NativeFileInput()
     private let controller: GutenbergEditorController
@@ -287,6 +290,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.configuration = configuration
         self.dependencies = dependencies
         self.httpClient = httpClient
+        self.relayObserver = httpClient.delegate
         self.editorService = EditorService(
             configuration: configuration,
             httpClient: httpClient
@@ -317,7 +321,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
 
         // The page sends the site's REST API requests here for native code to relay.
-        let relayHandler = RestRelaySchemeHandler(relay: RestRelay(configuration: configuration))
+        let relayHandler = RestRelaySchemeHandler(relay: RestRelay(configuration: configuration, observer: httpClient.delegate))
         self.restRelaySchemeHandler = relayHandler
         config.setURLSchemeHandler(relayHandler, forURLScheme: RestRelaySchemeHandler.scheme)
 
@@ -522,7 +526,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// credential, that the page is given. ``updateConfiguration(_:)`` can change both
     /// after `init`, which is where the handlers were made.
     func prepareNativeHandlers() {
-        restRelaySchemeHandler.relay = RestRelay(configuration: configuration)
+        restRelaySchemeHandler.relay = RestRelay(configuration: configuration, observer: relayObserver)
         mediaUploadSchemeHandler.reconfigure(service: Self.makeMediaUploadService(
             configuration: configuration,
             httpClient: httpClient,
@@ -554,7 +558,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             configuration: self.configuration,
             dependencies: dependencies,
             nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
-            restRelayBaseURL: RestRelaySchemeHandler.baseURL
+            restRelayBaseURL: RestRelaySchemeHandler.baseURL,
+            restRelayReportsRequests: relayObserver != nil
         )
         return WKUserScript(
             source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),

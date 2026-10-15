@@ -164,6 +164,26 @@ struct RestRelayHandleTests {
         }
     }
 
+    @Test("reports the upstream request's task to the observer")
+    func reportsUpstreamTask() async throws {
+        let recorder = TaskEventRecorder()
+
+        _ = try await relay(responseBody: Data("[]".utf8), observer: recorder)
+
+        #expect(recorder.events == ["created", "metrics", "completed", "performed"])
+        #expect(Set(recorder.tasks).count == 1)
+    }
+
+    @Test("reports the task of a request that never reaches the site")
+    func reportsUnreachableTask() async throws {
+        let recorder = TaskEventRecorder()
+
+        _ = try? await relay(failure: URLError(.notConnectedToInternet), observer: recorder)
+
+        #expect(recorder.events.first == "created")
+        #expect(recorder.events.last == "failed")
+    }
+
     @Test("refuses a path outside the API root before sending anything")
     func refusesForbiddenPath() async throws {
         let exchange = try await relay(target: "/proxy/../wp-admin/")
@@ -199,7 +219,8 @@ struct RestRelayHandleTests {
         status: Int = 200,
         responseHeaders: [String: String] = [:],
         responseBody: Data = Data(),
-        failure: (any Error)? = nil
+        failure: (any Error)? = nil,
+        observer: (any EditorHTTPClientDelegate)? = nil
     ) async throws -> Exchange {
         let stub = StubURLProtocol.Stub(
             status: status,
@@ -217,7 +238,8 @@ struct RestRelayHandleTests {
                 siteApiRoot: URL(string: "https://example.com/wp-json/")!,
                 authHeader: "Bearer test-token"
             ).build(),
-            session: stubbed.session
+            session: stubbed.session,
+            observer: observer
         )
 
         var request = URLRequest(url: try #require(URL(string: "gbk-rest://relay\(target)")))

@@ -126,6 +126,60 @@ let editorViewController = EditorViewController(
 )
 ```
 
+### Network Logging
+
+The editor reports its network requests in two places:
+
+-   **Requests the editor's page sends with `fetch`**: set `enableNetworkLogging` in the
+    configuration and implement `editor(_:didLogNetworkRequest:)`. Each record arrives when
+    the request ends.
+-   **Requests native code sends**: give the editor an `EditorHTTPClient` with an
+    `EditorHTTPClientDelegate`. That covers loading the editor and its assets, media
+    uploads and deletes, and the page's REST API requests, which native code relays to the
+    site.
+
+The delegate's task callbacks take `URLSession`'s own types, and arrive for every request,
+whatever becomes of it: `didCreateTask(_:)` when it starts, `task(_:didFinishCollecting:)`
+with its `URLSessionTaskMetrics`, and `task(_:didCompleteWith:error:)` with the response's
+body or the error that ended it. A request that is still waiting, or never finishes, has
+had `didCreateTask(_:)` and nothing after it. All three have default implementations, so
+implement only the ones you need.
+
+```swift
+final class NetworkObserver: EditorHTTPClientDelegate {
+    func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData) {}
+
+    func didCreateTask(_ task: URLSessionTask) {
+        // Record the request as started
+    }
+
+    func task(_ task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        // Record timing, connection, and bytes sent and received
+    }
+
+    func task(_ task: URLSessionTask, didCompleteWith data: EditorResponseData?, error: Error?) {
+        // Record the outcome
+    }
+}
+
+let editorViewController = EditorViewController(
+    configuration: configuration,
+    httpClient: EditorHTTPClient(
+        urlSession: URLSession.shared,
+        authHeader: configuration.authHeader,
+        delegate: NetworkObserver()
+    )
+)
+```
+
+With a delegate set, the page leaves the requests it relays through native code out of
+`editor(_:didLogNetworkRequest:)`, so you aren't told about each of them twice. The
+delegate is called from `URLSession`'s delegate queue and from the client's actor, so it
+must be thread-safe.
+
+Each request the delegate sees carries the site's `Authorization` header, as sent. Redact
+it before storing requests anywhere it shouldn't be kept.
+
 ## Android Integration
 
 ### Adding the Library
