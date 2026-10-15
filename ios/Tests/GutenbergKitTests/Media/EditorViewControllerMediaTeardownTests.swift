@@ -197,6 +197,98 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(result["beginStatus"] as? Int == 503)
     }
 
+    // MARK: - Media from the block inserter
+
+    @MainActor
+    @Test("an imported file is offered to the page as a file, and its item says so", .enabled(if: NativeFileInput.isSupported))
+    func importedFilesAreOffered() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+        let (media, fileURL) = try await importTestVideo()
+        defer { removeImport(fileURL) }
+
+        let (item, file) = try editor.javaScriptMediaItem(for: media)
+        let dictionary = try #require(item as? [String: Any])
+
+        #expect(file == fileURL)
+        #expect(dictionary["nativeFile"] as? Bool == true)
+        #expect(dictionary["type"] as? String == "video/quicktime")
+        #expect(dictionary["url"] as? String == media.url)
+    }
+
+    @MainActor
+    @Test("media the editor did not import goes to the page as it is")
+    func otherMediaIsNotOffered() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+
+        let library = try editor.javaScriptMediaItem(
+            for: MediaInfo(id: 42, url: "https://example.com/a.jpg", type: "image/jpeg")
+        )
+        let remote = try editor.javaScriptMediaItem(
+            for: MediaInfo(url: "https://example.com/a.jpg", type: "image/jpeg")
+        )
+        let missing = try editor.javaScriptMediaItem(
+            for: MediaInfo(url: "gbk-media-file:///Uploads/gone/IMG_0001.MOV", type: "video/quicktime")
+        )
+
+        for (item, file) in [library, remote, missing] {
+            #expect(file == nil)
+            #expect((item as? [String: Any])?["nativeFile"] == nil)
+        }
+    }
+
+    @MainActor
+    @Test("the page's file input gets the offered file, read from disk", .enabled(if: NativeFileInput.isSupported))
+    func pageReceivesOfferedFiles() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+        try await loadBlankPage(in: editor)
+        let (_, fileURL) = try await importTestVideo()
+        defer { removeImport(fileURL) }
+
+        let result = try await editor.nativeFileInput.offer([fileURL], to: editor.webView) {
+            try await editor.webView.callAsyncJavaScript(
+                """
+                const files = await new Promise((resolve, reject) => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.addEventListener('change', () => resolve(Array.from(input.files)));
+                    input.addEventListener('cancel', () => reject(new Error('cancelled')));
+                    document.body.appendChild(input);
+                    input.click();
+                });
+                const bytes = new Uint8Array(await files[0].slice(0, 4).arrayBuffer());
+                return { count: files.length, name: files[0].name, size: files[0].size, type: files[0].type, first: Array.from(bytes) };
+                """,
+                arguments: [:],
+                in: nil,
+                contentWorld: .page
+            )
+        }
+        let file = try #require(result as? [String: Any])
+
+        #expect(file["count"] as? Int == 1)
+        #expect(file["name"] as? String == fileURL.lastPathComponent)
+        #expect(file["size"] as? Int == 32)
+        #expect(file["type"] as? String == "video/quicktime")
+        #expect(file["first"] as? [Int] == [1, 1, 1, 1])
+        #expect(editor.webView.uiDelegate == nil, "the offer outlived the insertion")
+    }
+
+    /// Imports a small file the way the camera path does. It lands in the uploads directory
+    /// the app itself uses, so the caller removes it: `defer { removeImport(fileURL) }`.
+    private func importTestVideo() async throws -> (MediaInfo, URL) {
+        let source = try makeTemporaryFile(Data(repeating: 1, count: 32), named: "clip-\(UUID().uuidString).MOV")
+        defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
+        let media = try await MediaFileManager.shared.importFile(at: source)
+        let url = try #require(media.url.flatMap(URL.init(string:)))
+        return (media, try #require(MediaFileManager.fileURL(for: url)))
+    }
+
+    /// Deletes a file ``importTestVideo()`` imported, and the directory made for it.
+    private func removeImport(_ fileURL: URL) {
+        try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent())
+    }
+
     /// Loads an empty `file://` page — the editor's own origin — into the editor's web view.
     @MainActor
     private func loadBlankPage(in editor: EditorViewController) async throws {

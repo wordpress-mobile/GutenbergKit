@@ -183,6 +183,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     private let editorService: EditorService
     private let httpClient: any EditorHTTPClientProtocol
     private let mediaPicker: MediaPickerController?
+    let nativeFileInput = NativeFileInput()
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
     private let lockdownModeMonitor: LockdownModeMonitor
@@ -826,16 +827,50 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             return
         }
         do {
-            let object = try makeJavaScriptCompatibleDictionary(with: selection)
-            _ = try await webView.callAsyncJavaScript(
-                "window.blockInserter?.insertMedia(selection)",
-                arguments: ["selection": object],
-                in: nil,
-                contentWorld: .page
-            )
+            var items: [Any] = []
+            var files: [URL] = []
+            for media in selection {
+                let (item, file) = try javaScriptMediaItem(for: media)
+                items.append(item)
+                if let file {
+                    files.append(file)
+                }
+            }
+            try await nativeFileInput.offer(files, to: webView) {
+                _ = try await webView.callAsyncJavaScript(
+                    "return await window.blockInserter?.insertMedia(selection)",
+                    arguments: ["selection": items],
+                    in: nil,
+                    contentWorld: .page
+                )
+            }
         } catch {
             assertionFailure("Failed to serialize or insert media: \(error)")
         }
+    }
+
+    /// The media item as the page's `insertMedia` takes it, and the file to offer the
+    /// page for it.
+    ///
+    /// A file the editor imported is offered through ``NativeFileInput``, and its item
+    /// is marked `nativeFile` so the page asks for it. Anything else — a media library
+    /// item, a remote URL, any file on an OS that can't offer one — goes as it is, and
+    /// the page fetches it.
+    func javaScriptMediaItem(for media: MediaInfo) throws -> (item: Any, file: URL?) {
+        let item = try makeJavaScriptCompatibleDictionary(with: media)
+        guard NativeFileInput.isSupported,
+              media.id == nil,
+              var dictionary = item as? [String: Any],
+              let url = media.url.flatMap(URL.init(string:)),
+              url.scheme == MediaFileSchemeHandler.scheme,
+              let fileURL = MediaFileManager.fileURL(for: url),
+              FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else {
+            return (item, nil)
+        }
+
+        dictionary["type"] = media.type ?? MediaFileManager.mimeType(forExtension: fileURL.pathExtension)
+        dictionary["nativeFile"] = true
+        return (dictionary, fileURL)
     }
 
     private func insertPatternFromInserter(_ patternName: String) {
