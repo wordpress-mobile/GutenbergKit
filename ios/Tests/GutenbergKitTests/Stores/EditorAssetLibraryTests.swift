@@ -1311,9 +1311,14 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.requests.last?.cachePolicy == .reloadIgnoringLocalCacheData)
     }
 
-    @Test("under .ignore, an asset is asked for afresh rather than taken from a stored response")
-    func assetDownloadAsksAfreshUnderIgnore() async throws {
-        let (_, mockClient) = try await makeLibraryWithBundle(cachePolicy: .ignore)
+    /// A download task reads `URLCache` even though it never writes to it, and the editor's live requests for
+    /// assets a bundle doesn't have do write to it.
+    @Test(
+        "an asset is downloaded afresh rather than taken from a stored response, under every policy",
+        arguments: [EditorCachePolicy.always, .maxAge(3600), .ignore]
+    )
+    func assetDownloadAsksAfresh(cachePolicy: EditorCachePolicy) async throws {
+        let (_, mockClient) = try await makeLibraryWithBundle(cachePolicy: cachePolicy)
 
         #expect(mockClient.downloadRequests.map(\.cachePolicy) == [.reloadIgnoringLocalCacheData])
     }

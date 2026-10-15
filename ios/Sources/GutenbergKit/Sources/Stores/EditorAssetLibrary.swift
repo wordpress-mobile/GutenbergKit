@@ -882,12 +882,11 @@ public actor EditorAssetLibrary {
         }
     }
 
-    /// The request for the asset at `url`. Under `.ignore`, it asks for a stored response not to be used.
+    /// The request for the asset at `url`. A stored response isn't used: the bundle is the cache, and an asset
+    /// is only downloaded when the bundle needs it fresh.
     private func assetRequest(for url: URL) -> URLRequest {
         var request = URLRequest(method: .GET, url: url)
-        if case .ignore = self.cachePolicy {
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-        }
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         return request
     }
 
