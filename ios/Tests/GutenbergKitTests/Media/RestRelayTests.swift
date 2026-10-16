@@ -260,6 +260,23 @@ struct RestRelayTests {
         #expect(followed?.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
+    @Test("keeps the site credential on a redirect to the same origin only")
+    func keepsSiteCredentialWithinOrigin() {
+        // The rule for another host applies here too. The `www.` alias and the
+        // `https` upgrade are still followed, but they are other origins, so
+        // they arrive without it, as they would from `fetch`.
+        for (root, target, expected) in [
+            ("https://example.com/wp-json/", "https://example.com/wp-json/wp/v2/posts/", "Bearer site"),
+            ("https://example.com/wp-json/", "https://www.example.com/wp-json/wp/v2/posts", nil),
+            ("http://example.com/wp-json/", "https://example.com/wp-json/wp/v2/posts", nil),
+        ] as [(String, String, String?)] {
+            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: root, authorization: "Bearer site")
+            let followed = decide(redirectGuard, from: root + "wp/v2/posts", target: target)
+            #expect(followed?.url?.absoluteString == target, "should follow \(target)")
+            #expect(followed?.value(forHTTPHeaderField: "Authorization") == expected, "for \(target)")
+        }
+    }
+
     @Test("follows a redirect that stays under the API root")
     func followsContainedRedirect() {
         let followed = redirectDecision(to: "https://example.com/wp-json/wp/v2/posts/1")
