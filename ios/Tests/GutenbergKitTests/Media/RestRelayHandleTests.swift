@@ -21,13 +21,89 @@ struct RestRelayHandleTests {
 
     // MARK: - Request rewriting
 
-    @Test("injects the site credential and discards the caller's")
-    func injectsSiteCredential() async throws {
-        let exchange = try await relay(
-            headers: ["Authorization": "Bearer caller-token"]
-        )
+    @Test("adds the site credential to a site API request that has none")
+    func addsSiteCredential() async throws {
+        let exchange = try await relay()
 
         #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
+    }
+
+    @Test("sends a caller's own credential to the site API as it is")
+    func keepsCallerCredentialForSiteAPI() async throws {
+        // Jetpack AI on a WordPress.com site: the API root is
+        // `public-api.wordpress.com`, and the request carries a token of its own.
+        let exchange = try await relay(headers: ["Authorization": "Bearer caller-token"])
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer caller-token")
+    }
+
+    // MARK: - Other hosts
+
+    @Test("forwards a request for another host to the URL it names")
+    func forwardsToAnotherHost() async throws {
+        let exchange = try await relay(
+            target: Self.forwardTarget("https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query?stream=true"),
+            method: "POST",
+            headers: ["Content-Type": "application/json"],
+            body: Data(#"{"question":"Hi"}"#.utf8),
+            responseBody: Data("answer".utf8)
+        )
+
+        #expect(exchange.upstream.url?.absoluteString == "https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query?stream=true")
+        #expect(exchange.upstream.httpMethod == "POST")
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(exchange.sentBody == Data(#"{"question":"Hi"}"#.utf8))
+        #expect(exchange.response.status == 200)
+        #expect(exchange.response.body == Data("answer".utf8))
+        #expect(exchange.response.header("Access-Control-Allow-Origin") == "*")
+    }
+
+    @Test("sends a caller's own credential to another host as it is")
+    func keepsCallerCredentialForAnotherHost() async throws {
+        let exchange = try await relay(
+            target: Self.forwardTarget("https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query"),
+            headers: ["Authorization": "Bearer jwt"]
+        )
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer jwt")
+    }
+
+    @Test("never adds the site credential to a request for another host")
+    func addsNoSiteCredentialForAnotherHost() async throws {
+        let exchange = try await relay(target: Self.forwardTarget("https://example.org/api"))
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @Test("removes the site credential from a request for another host")
+    func removesSiteCredentialForAnotherHost() async throws {
+        // api-fetch's token middleware puts the site credential on every
+        // request it makes, whatever the host.
+        for target in ["https://example.org/api", "https://example.com/b/wp-json/wp/v2/posts"] {
+            let exchange = try await relay(
+                target: Self.forwardTarget(target),
+                headers: ["Authorization": "Bearer test-token"]
+            )
+
+            #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil, "\(target)")
+        }
+    }
+
+    @Test("refuses a forward to anything but an http or https URL before sending anything")
+    func refusesForwardToOtherSchemes() async throws {
+        for target in [
+            Self.forwardTarget("file:///etc/hosts"),
+            Self.forwardTarget("gbk-rest://relay/proxy/wp/v2/posts"),
+            Self.forwardTarget("https:no-host"),
+            Self.forwardTarget("not a url"),
+            "/forward",
+            "/forward/https://example.org/",
+        ] {
+            let exchange = try await relay(target: target)
+
+            #expect(exchange.response.status == 403, "\(target)")
+            #expect(exchange.sentRequest == nil, "nothing should have been sent for \(target)")
+        }
     }
 
     @Test("strips the headers that describe the web view's own hop")
@@ -193,6 +269,14 @@ struct RestRelayHandleTests {
     }
 
     // MARK: - Helpers
+
+    /// The relay target for a request to `url` on another host, encoded as the page
+    /// encodes it (`encodeURIComponent`).
+    private static func forwardTarget(_ url: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-_.!~*'()")
+        return "/forward?url=" + url.addingPercentEncoding(withAllowedCharacters: allowed)!
+    }
 
     /// One relayed exchange: what reached the stub, and what the relay returned.
     private struct Exchange {
