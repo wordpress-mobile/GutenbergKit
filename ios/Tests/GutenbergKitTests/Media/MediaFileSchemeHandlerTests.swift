@@ -90,6 +90,25 @@ struct MediaFileSchemeHandlerTests {
     #expect(handler.activeRequestCount == 0)
   }
 
+  /// WebKit can create a new request at the address of one it just stopped. Starting the
+  /// same object again stands in for that.
+  @Test("doesn't send a stopped request's file to a new request at its address")
+  func staleServeMissesANewRequest() async throws {
+    let contents = Data((0..<(MediaFileSchemeHandler.chunkSize * 4 + 17)).map { UInt8($0 % 251) })
+    try writeUpload(contents, named: "clip.mp4")
+    let handler = MediaFileSchemeHandler(rootURL: root)
+    let task = request("/Uploads/clip.mp4")
+
+    handler.start(task)
+    handler.stop(task)
+    handler.start(task)
+    await task.waitUntilAnswered()
+
+    #expect(task.body.count == contents.count, "the stopped request's work sent its file too")
+    #expect(task.body.hasSameBytes(as: contents))
+    #expect(handler.activeRequestCount == 0)
+  }
+
   @Test("resolves only paths inside the root")
   func resolvesPaths() {
     #expect(MediaFileManager.fileURL(for: URL(string: "gbk-media-file:///Uploads/a.jpg")!, root: root)?.lastPathComponent == "a.jpg")

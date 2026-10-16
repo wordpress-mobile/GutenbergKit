@@ -294,6 +294,24 @@ struct RestRelaySchemeHandlerTests {
         #expect(task.failure == nil)
     }
 
+    /// WebKit can create a new request at the address of one it just stopped. Starting the
+    /// same object again stands in for that.
+    @Test("doesn't give a new request at a stopped one's address the stopped one's outcome")
+    func staleWorkMissesANewRequest() async throws {
+        let stubbed = StubURLProtocol.makeSession(stub: .init(body: Data("[]".utf8)))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))))
+
+        handler.start(task)
+        handler.stop(task)
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect(task.failure == nil, "the stopped request's cancellation reached the new request")
+        #expect(task.status == 200)
+    }
+
     private func makeHandler(session: URLSession) -> RestRelaySchemeHandler {
         RestRelaySchemeHandler(relay: RestRelay(
             configuration: EditorConfigurationBuilder(
