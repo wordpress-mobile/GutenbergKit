@@ -4,19 +4,15 @@ import WebKit
 /// Serves ``RestRelay`` to the editor's page over a `gbk-rest:` URL scheme.
 ///
 /// The page's `fetch` wrapper (`src/utils/fetch-relay.js`) rewrites a request for
-/// the site's REST API to `gbk-rest://relay/proxy/<path>`, and a request for any
-/// other host to `gbk-rest://relay/forward?url=<url>`. This hands it to the relay
-/// and answers with what the server said.
+/// another origin to `gbk-rest://relay/fetch?url=<url>`. This hands it to the
+/// relay and answers with what the server said.
 @MainActor
 final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
     nonisolated static let scheme = "gbk-rest"
 
-    /// The URL the page appends an upstream path to, slash-terminated.
-    nonisolated static let baseURL = "\(scheme)://relay\(RestRelay.route)/"
-
-    /// The URL the page sends a request for another host to, with that request's URL
-    /// in the `url` query parameter.
-    nonisolated static let forwardURL = "\(scheme)://relay\(RestRelay.forwardRoute)"
+    /// The URL the page sends each request to, with that request's URL in the `url`
+    /// query parameter.
+    nonisolated static let endpoint = "\(scheme)://relay\(RestRelay.route)"
 
     /// The relay requests go through. The editor replaces it when its page loads, so it
     /// relays for the configuration the page was given.

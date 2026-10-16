@@ -2,12 +2,12 @@ import Foundation
 import Testing
 @testable import GutenbergKit
 
-/// Covers how a relayed request becomes an upstream URL. On the site API route
-/// this is the relay's containment boundary: the web view supplies a path, never
-/// a URL, and nothing it can put in that path may address anything outside the
-/// site API root. The forward route takes a URL, and never carries the site
-/// credential.
-@Suite("RestRelay upstream URL")
+/// Covers where the relay sends a request. A URL below the site API root goes to a
+/// URL the relay builds from the configured root, which is the relay's containment
+/// boundary: nothing the web view puts in the URL may make a request that carries
+/// the site credential address anything outside the root. Any other URL goes where
+/// it was going, and never carries the site credential.
+@Suite("RestRelay destination")
 struct RestRelayTests {
 
     /// A site on pretty permalinks.
@@ -17,131 +17,170 @@ struct RestRelayTests {
     /// path has to merge into it rather than start a second one.
     private static let plainRoot = URL(string: "https://example.com/?rest_route=/")!
 
-    // MARK: - Path resolution
+    /// A plain-permalink root as WordPress advertises it, through `add_query_arg`,
+    /// which percent-encodes the route.
+    private static let advertisedPlainRoot = URL(string: "https://example.com/index.php?rest_route=%2F")!
 
-    @Test("appends the path and query to the API root")
-    func appendsPathAndQuery() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
+    // MARK: - Site API requests
+
+    @Test("sends a site API request to the API root, path and query included")
+    func sendsSiteAPIRequestToRoot() {
         #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/posts?_locale=user"))?.absoluteString
+            siteAPIURL("https://example.com/wp-json/wp/v2/posts?_locale=user")
                 == "https://example.com/wp-json/wp/v2/posts?_locale=user"
         )
-    }
-
-    @Test("resolves the API root itself for a bare route")
-    func bareRouteResolvesToAPIRoot() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
-        #expect(relay.upstreamURL(for: request("/proxy"))?.absoluteString == "https://example.com/wp-json/")
-        #expect(relay.upstreamURL(for: request("/proxy/"))?.absoluteString == "https://example.com/wp-json/")
+        #expect(siteAPIURL("https://example.com/wp-json/") == "https://example.com/wp-json/")
     }
 
     @Test("adds a trailing slash to an API root configured without one")
     func normalizesAPIRootWithoutTrailingSlash() {
-        let relay = makeRelay(apiRoot: URL(string: "https://example.com/wp-json")!)
         #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/posts"))?.absoluteString
+            siteAPIURL("https://example.com/wp-json/wp/v2/posts", root: URL(string: "https://example.com/wp-json")!)
                 == "https://example.com/wp-json/wp/v2/posts"
-        )
-    }
-
-    @Test("continues the query of an API root that already carries one")
-    func mergesIntoAQueryCarryingAPIRoot() {
-        // Plain permalinks: `https://example.com/?rest_route=/` + `wp/v2/posts`
-        // has to produce one query string, not two — mirroring what
-        // `createRootURLMiddleware` does on the JavaScript side.
-        let relay = makeRelay(apiRoot: Self.plainRoot)
-        #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/posts?_locale=user"))?.absoluteString
-                == "https://example.com/?rest_route=/wp/v2/posts&_locale=user"
-        )
-        #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/posts?a=1&b=2"))?.absoluteString
-                == "https://example.com/?rest_route=/wp/v2/posts&a=1&b=2"
-        )
-    }
-
-    @Test("decodes the route of a root advertised with it encoded")
-    func decodesAdvertisedPlainPermalinkRoot() {
-        // WordPress advertises a plain-permalink root through `add_query_arg`,
-        // which percent-encodes the route: `index.php?rest_route=%2F`. The
-        // slash termination has to land inside that value, since WordPress
-        // reads `rest_route=%2F/wp/v2/posts` as the route `//wp/v2/posts`.
-        let relay = makeRelay(apiRoot: URL(string: "https://example.com/index.php?rest_route=%2F")!)
-        #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/posts?_locale=user"))?.absoluteString
-                == "https://example.com/index.php?rest_route=/wp/v2/posts&_locale=user"
-        )
-        #expect(
-            relay.upstreamURL(for: request("/proxy"))?.absoluteString
-                == "https://example.com/index.php?rest_route=/"
         )
     }
 
     @Test("preserves percent-encoding in the query")
     func preservesPercentEncoding() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
         #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/search?search=caf%C3%A9&per_page=100"))?.absoluteString
+            siteAPIURL("https://example.com/wp-json/wp/v2/search?search=caf%C3%A9&per_page=100")
                 == "https://example.com/wp-json/wp/v2/search?search=caf%C3%A9&per_page=100"
         )
+    }
+
+    @Test("sends a host alias to the configured host")
+    func toleratesHostAlias() {
+        // WordPress builds `Link` headers from `home_url()`, which can spell the
+        // host differently: `www.` versus bare, or wp-env writing `127.0.0.1`
+        // for a site configured as `localhost`.
+        #expect(
+            siteAPIURL("https://www.example.com/wp-json/wp/v2/posts?page=2")
+                == "https://example.com/wp-json/wp/v2/posts?page=2"
+        )
+        #expect(
+            siteAPIURL("http://127.0.0.1:8888/wp-json/wp/v2/posts", root: URL(string: "http://localhost:8888/wp-json/")!)
+                == "http://localhost:8888/wp-json/wp/v2/posts"
+        )
+    }
+
+    @Test("sends a request with another scheme or a default port to the configured root")
+    func toleratesSchemeAndDefaultPort() {
+        // An `http` `siteurl` behind a TLS-terminating proxy.
+        #expect(siteAPIURL("http://example.com:80/wp-json/wp/v2/posts") == "https://example.com/wp-json/wp/v2/posts")
+        #expect(siteAPIURL("https://example.com:443/wp-json/wp/v2/posts") == "https://example.com/wp-json/wp/v2/posts")
+    }
+
+    // MARK: - A root that carries its route in the query
+
+    @Test("continues the query of an API root that already carries one")
+    func mergesIntoAQueryCarryingAPIRoot() {
+        // Plain permalinks: the route and the other parameters have to make one
+        // query string, not two — mirroring `createRootURLMiddleware`.
+        #expect(
+            siteAPIURL("https://example.com/?rest_route=/wp/v2/posts&_locale=user", root: Self.plainRoot)
+                == "https://example.com/?rest_route=/wp/v2/posts&_locale=user"
+        )
+        #expect(
+            siteAPIURL("https://example.com/?rest_route=/wp/v2/posts&a=1&b=2", root: Self.plainRoot)
+                == "https://example.com/?rest_route=/wp/v2/posts&a=1&b=2"
+        )
+    }
+
+    @Test("reads the route with its separators encoded")
+    func readsEncodedRoute() {
+        // The spelling every request arrives in: api-fetch's locale middleware
+        // rebuilds the query through `addQueryArgs`, and WordPress builds `Link`
+        // through `add_query_arg`. Both percent-encode the value.
+        #expect(
+            siteAPIURL("https://example.com/?rest_route=%2Fwp%2Fv2%2Fposts&page=2&_locale=user", root: Self.plainRoot)
+                == "https://example.com/?rest_route=/wp/v2/posts&page=2&_locale=user"
+        )
+    }
+
+    @Test("decodes the route of a root advertised with it encoded")
+    func decodesAdvertisedPlainPermalinkRoot() {
+        // The slash termination has to land inside the route value, since
+        // WordPress reads `rest_route=%2F/wp/v2/posts` as the route `//wp/v2/posts`.
+        #expect(
+            siteAPIURL("https://example.com/index.php?rest_route=%2Fwp%2Fv2%2Fposts&_locale=user", root: Self.advertisedPlainRoot)
+                == "https://example.com/index.php?rest_route=/wp/v2/posts&_locale=user"
+        )
+        #expect(
+            siteAPIURL("https://example.com/index.php?rest_route=%2F", root: Self.advertisedPlainRoot)
+                == "https://example.com/index.php?rest_route=/"
+        )
+    }
+
+    @Test("continues a route that names a site")
+    func continuesNamespacedRoute() {
+        // A namespaced site's root carries more than `/` in the route, and every
+        // request continues it.
+        #expect(
+            siteAPIURL(
+                "https://public-api.example/wp-json/?rest_route=%2Fsites%2F1%2Fwp%2Fv2%2Fposts&_locale=user",
+                root: URL(string: "https://public-api.example/wp-json/?rest_route=/sites/1/")!
+            ) == "https://public-api.example/wp-json/?rest_route=/sites/1/wp/v2/posts&_locale=user"
+        )
+    }
+
+    @Test("sends the same page without the route, or a route outside the root, where it was going")
+    func queryRoutedRootContainsOnlyItsRoutes() {
+        #expect(isOtherHost("https://example.com/index.php?p=1", root: Self.advertisedPlainRoot))
+        #expect(isOtherHost(
+            "https://public-api.example/wp-json/?rest_route=%2Fsites%2F2%2Fwp%2Fv2%2Fposts",
+            root: URL(string: "https://public-api.example/wp-json/?rest_route=/sites/1/")!
+        ))
     }
 
     // MARK: - Containment
 
     @Test("refuses a path that walks out of the API root")
     func refusesDotSegments() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
-        #expect(relay.upstreamURL(for: request("/proxy/../wp-admin/admin-ajax.php")) == nil)
-        #expect(relay.upstreamURL(for: request("/proxy/wp/v2/../../../wp-admin/")) == nil)
-        #expect(relay.upstreamURL(for: request("/proxy/wp/v2/./posts")) == nil)
+        #expect(isRefused("https://example.com/wp-json/../wp-admin/admin-ajax.php"))
+        #expect(isRefused("https://example.com/wp-json/wp/v2/../../../wp-admin/"))
+        #expect(isRefused("https://example.com/wp-json/wp/v2/./posts"))
+        #expect(isRefused("https://example.com/?rest_route=%2F..%2Fwp-admin%2F", root: Self.plainRoot))
     }
 
     @Test("refuses percent-encoded dot segments")
     func refusesEncodedDotSegments() {
         // `URLSession` leaves these encoded, but the receiving server may decode
-        // before resolving, so they are refused here rather than forwarded.
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
-        #expect(relay.upstreamURL(for: request("/proxy/%2e%2e/wp-admin/")) == nil)
-        #expect(relay.upstreamURL(for: request("/proxy/wp/%2E%2E/%2e%2e/")) == nil)
+        // before resolving, so they are refused here rather than sent on.
+        #expect(isRefused("https://example.com/wp-json/%2e%2e/wp-admin/"))
+        #expect(isRefused("https://example.com/wp-json/wp/%2E%2E/%2e%2e/"))
     }
 
     @Test("refuses dot segments whose separators are encoded too")
     func refusesDotSegmentsWithEncodedSeparators() {
         // The whole traversal is one literal segment, so it is only a dot
         // segment to a server that decodes the separator before normalizing.
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
-        #expect(relay.upstreamURL(for: request("/proxy/%2e%2e%2f%2e%2e%2fwp-admin/admin-ajax.php")) == nil)
-        #expect(relay.upstreamURL(for: request("/proxy/wp%5C..%5Cwp-admin/")) == nil)
-        #expect(relay.upstreamURL(for: request("/proxy/wp\\..\\wp-admin/")) == nil)
+        #expect(isRefused("https://example.com/wp-json/%2e%2e%2f%2e%2e%2fwp-admin/admin-ajax.php"))
+        #expect(isRefused("https://example.com/wp-json/wp%5C..%5Cwp-admin/"))
     }
 
     @Test("an encoded slash within a segment is not a dot segment")
     func allowsEncodedSlashesWithinSegments() {
         // A template ID is `theme//slug`, encoded into a single path segment.
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
         #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/templates/twentytwentyfour%2F%2Fsingle"))?.absoluteString
+            siteAPIURL("https://example.com/wp-json/wp/v2/templates/twentytwentyfour%2F%2Fsingle")
                 == "https://example.com/wp-json/wp/v2/templates/twentytwentyfour%2F%2Fsingle"
         )
     }
 
     @Test("a dot inside a path segment is not a dot segment")
     func allowsDotsWithinSegments() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
         #expect(
-            relay.upstreamURL(for: request("/proxy/oembed/1.0/embed?url=https%3A%2F%2Fexample.com"))?.absoluteString
+            siteAPIURL("https://example.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fexample.com")
                 == "https://example.com/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fexample.com"
         )
     }
 
     @Test("an absolute URL in the path stays under the API root")
     func absoluteURLInPathStaysContained() {
-        // There is no URL to resolve, so a smuggled one becomes an ordinary
-        // (404ing) path segment rather than another host.
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
-        let resolved = relay.upstreamURL(for: request("/proxy/https://elsewhere.example/x"))
-        #expect(resolved?.absoluteString.hasPrefix("https://example.com/wp-json/") == true)
-        #expect(relay.upstreamURL(for: request("/proxy//elsewhere.example/x"))?.host() == "example.com")
+        // The path is appended to the root, not resolved, so a smuggled URL
+        // becomes an ordinary (404ing) path segment rather than another host.
+        #expect(siteAPIURL("https://example.com/wp-json/https://elsewhere.example/x")?.hasPrefix("https://example.com/wp-json/") == true)
+        #expect(siteAPIURL("https://example.com/wp-json//elsewhere.example/x") == "https://example.com/wp-json/elsewhere.example/x")
     }
 
     @Test("forwards the query verbatim, rest_route included")
@@ -149,56 +188,78 @@ struct RestRelayTests {
         // WordPress prefers `$_GET['rest_route']` over the route the path
         // names, so the caller picks the route whichever way it spells the
         // parameter. Deliberately not filtered: see the type's Security notes.
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
         #expect(
-            relay.upstreamURL(for: request("/proxy/wp/v2/posts?rest_route=/wp/v2/users&_locale=user"))?.absoluteString
+            siteAPIURL("https://example.com/wp-json/wp/v2/posts?rest_route=/wp/v2/users&_locale=user")
                 == "https://example.com/wp-json/wp/v2/posts?rest_route=/wp/v2/users&_locale=user"
         )
     }
 
-    @Test("refuses a request outside the relay route")
-    func refusesForeignRoute() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
-        #expect(relay.upstreamURL(for: request("/sessions")) == nil)
-        #expect(relay.upstreamURL(for: request("/proxying/wp/v2/posts")) == nil)
-    }
-
     // MARK: - Other hosts
 
-    @Test("reads the URL a forwarded request is for")
-    func readsForwardedURL() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
+    @Test("sends a request for another host where it was going")
+    func sendsOtherHostsWhereTheyWereGoing() {
+        for url in [
+            // Jetpack AI, on a site that isn't on WordPress.com.
+            "https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query?stream=true",
+            // Another server on the site's host: another port is another server,
+            // however its paths are shaped.
+            "https://example.com:8443/wp-json/wp/v2/posts",
+            // Another WordPress site whose path matches the root.
+            "https://other-wp.example/wp-json/wp/v2/posts",
+            // A sibling of the root: `/wp-json` must not match `/wp-jsonx/`.
+            "https://example.com/wp-jsonx/secrets",
+            // The same host outside the root.
+            "https://example.com/wp-admin/admin-ajax.php",
+        ] {
+            #expect(isOtherHost(url), "\(url)")
+        }
+    }
+
+    @Test("a different site in a subdirectory multisite is another host")
+    func subdirectoryMultisiteIsAnotherHost() {
+        // A path difference is a different site, not an alias.
+        #expect(isOtherHost("https://example.com/b/wp-json/wp/v2/posts", root: URL(string: "https://example.com/a/wp-json/")!))
+    }
+
+    @Test("a host alias the canonical form doesn't cover is another host")
+    func uncoveredAliasIsAnotherHost() {
+        // A documented limitation, not a decision: a site reached by LAN IP
+        // emits `localhost` URLs, which aren't recognized as the same host, so
+        // paginated `Link` targets go out without the site credential.
+        #expect(isOtherHost(
+            "http://localhost:8888/wp-json/wp/v2/posts?page=2",
+            root: URL(string: "http://192.168.1.50:8888/wp-json/")!
+        ))
+    }
+
+    // MARK: - The relay's URL
+
+    @Test("reads the URL a request is for out of the relay's URL, decoded once")
+    func readsRequestedURL() {
         #expect(
-            relay.forwardedURL(for: request("/forward?url=https%3A%2F%2Fexample.org%2Fapi%3Fq%3Da%2520b%26x%3D1"))?.absoluteString
+            RestRelay.requestedURL(in: request("/fetch?url=https%3A%2F%2Fexample.org%2Fapi%3Fq%3Da%2520b%26x%3D1"))?.absoluteString
                 == "https://example.org/api?q=a%20b&x=1"
         )
         #expect(
-            relay.forwardedURL(for: request("/forward?url=http%3A%2F%2F127.0.0.1%3A8888%2Fwp-json%2F"))?.absoluteString
+            RestRelay.requestedURL(in: request("/fetch?url=http%3A%2F%2F127.0.0.1%3A8888%2Fwp-json%2F"))?.absoluteString
                 == "http://127.0.0.1:8888/wp-json/"
         )
     }
 
-    @Test("forwards only to http and https URLs")
-    func forwardsOnlyToWebURLs() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
+    @Test("relays only http and https URLs, on its own route")
+    func relaysOnlyWebURLs() {
         for target in [
-            "/forward?url=file%3A%2F%2F%2Fetc%2Fhosts",
-            "/forward?url=gbk-upload%3A%2F%2Fupload%2Fsessions",
-            "/forward?url=https%3Ano-host",
-            "/forward?url=%2Frelative%2Fpath",
-            "/forward",
-            "/forward?other=https%3A%2F%2Fexample.org%2F",
+            "/fetch?url=file%3A%2F%2F%2Fetc%2Fhosts",
+            "/fetch?url=gbk-upload%3A%2F%2Fupload%2Fsessions",
+            "/fetch?url=https%3Ano-host",
+            "/fetch?url=%2Frelative%2Fpath",
+            "/fetch",
+            "/fetch?other=https%3A%2F%2Fexample.org%2F",
+            "/fetching?url=https%3A%2F%2Fexample.org%2F",
+            "/proxy/wp/v2/posts",
         ] {
-            #expect(relay.forwardedURL(for: request(target)) == nil, "should refuse \(target)")
+            #expect(RestRelay.requestedURL(in: request(target)) == nil, "should refuse \(target)")
         }
-    }
-
-    @Test("a forwarded request is not a site API request, and the reverse")
-    func routesDoNotOverlap() {
-        let relay = makeRelay(apiRoot: Self.prettyRoot)
-        #expect(relay.upstreamURL(for: request("/forward?url=https%3A%2F%2Fexample.org%2F")) == nil)
-        #expect(relay.forwardedURL(for: request("/proxy/wp/v2/posts?url=https%3A%2F%2Fexample.org%2F")) == nil)
-        #expect(relay.forwardedURL(for: request("/forwarding?url=https%3A%2F%2Fexample.org%2F")) == nil)
     }
 
     // MARK: - Redirects
@@ -300,9 +361,9 @@ struct RestRelayTests {
 
     @Test("follows a redirect that only upgrades the scheme")
     func followsSchemeUpgrade() {
-        // A site whose `siteurl` is `http` but which answers on `https` is the
-        // deployment `relayUpstreamPath` already relays; refusing its redirect
-        // here would fail every request the layer above deliberately sent.
+        // A site whose `siteurl` is `http` but which answers on `https` is one
+        // `destination(of:)` already sends to the site; refusing its redirect
+        // here would fail every one of those requests.
         let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "http://example.com/wp-json/")
         let followed = decide(redirectGuard, target: "https://example.com/wp-json/wp/v2/posts")
 
@@ -325,8 +386,8 @@ struct RestRelayTests {
 
     @Test("follows a redirect to an alias of the configured host")
     func followsHostAlias() {
-        // The spellings `relayUpstreamPath` tolerates, so the two layers
-        // agree: a site whose canonical redirect names its `www.` alias, or
+        // The spellings `destination(of:)` tolerates, so the two agree: a site
+        // whose canonical redirect names its `www.` alias, or
         // wp-env answering on `127.0.0.1` for a root configured as
         // `localhost`, would otherwise have every relayed request refused.
         for (root, target) in [
@@ -384,9 +445,29 @@ struct RestRelayTests {
     }
 
     /// The URL the page's `fetch` addresses for a relay target such as
-    /// `/proxy/wp/v2/posts?x=1`.
+    /// `/fetch?url=…`.
     private func request(_ target: String) -> URL {
         URL(string: "gbk-rest://relay\(target)")!
+    }
+
+    /// The site API URL the relay sends a request for `url` to, or `nil` if it
+    /// sends it elsewhere or refuses it.
+    private func siteAPIURL(_ url: String, root: URL = RestRelayTests.prettyRoot) -> String? {
+        guard case .siteAPI(let upstream) = makeRelay(apiRoot: root).destination(of: URL(string: url)!) else {
+            return nil
+        }
+        return upstream.absoluteString
+    }
+
+    /// Whether the relay sends a request for `url` where it was going, as a
+    /// request for another host.
+    private func isOtherHost(_ url: String, root: URL = RestRelayTests.prettyRoot) -> Bool {
+        makeRelay(apiRoot: root).destination(of: URL(string: url)!) == .otherHost(URL(string: url)!)
+    }
+
+    /// Whether the relay refuses a request for `url`.
+    private func isRefused(_ url: String, root: URL = RestRelayTests.prettyRoot) -> Bool {
+        makeRelay(apiRoot: root).destination(of: URL(string: url)!) == nil
     }
 
     /// The request a fresh guard would follow for a redirect to `target`, or

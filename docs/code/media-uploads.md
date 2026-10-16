@@ -74,8 +74,7 @@ the same results every way. No `OPTIONS` preflight reached the handler on any of
 An object made in another window is not an `instanceof` this window's `Blob` or
 `FormData`, so code that picks out the bodies to convert that way lets it through to be
 dropped. The REST relay (`gbk-rest:`, `src/utils/fetch-relay.js`) meets the same rule for
-every request the page sends the site, and reads every body that is not a string into an
-`ArrayBuffer`.
+every request it relays, and reads every body that is not a string into an `ArrayBuffer`.
 
 The streamed case depends on where the file came from, and every failure is silent, so
 the page always sends the file as 4 MB `ArrayBuffer` chunks:
@@ -171,12 +170,14 @@ the same reach in wp-admin.
 Neither check is in place. It was left out of the scheme transports because it would close
 the second group only, while the first stays as it was before the schemes.
 
-The relay also forwards requests for other hosts (`gbk-rest://relay/forward?url=…`), so a
-plugin's call to its own service works under Lockdown Mode. That gives every frame a
-response from any `http` or `https` URL without CORS, a local network address included.
-The site credential never goes with it: native code removes it if the page sent it, and
-sends a caller's own `Authorization` as it is. Without Lockdown Mode the editor page can
-already read those responses; the second group couldn't.
+The relay also sends requests for other hosts, so a plugin's call to its own service works
+under Lockdown Mode. The page sends every request for another origin to one URL,
+`gbk-rest://relay/fetch?url=…`, and native code decides how to send it. That gives every
+frame a response from any `http` or `https` URL without CORS, a local network address
+included. The site credential goes only with a request for the site's REST API, to a URL
+native code builds from the configured root. Native code removes it from any other request
+the page sent it with, and sends a caller's own `Authorization` as it is. Without Lockdown
+Mode the editor page can already read those responses; the second group couldn't.
 
 ## Background and timeouts
 

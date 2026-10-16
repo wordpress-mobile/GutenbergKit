@@ -194,7 +194,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// whenever the site credentials are usable, with or without a processor or
     /// uploader; ``stopMediaHandling()`` disables it.
     let mediaUploadSchemeHandler: MediaUploadSchemeHandler
-    /// Relays the page's REST API requests over `gbk-rest:`.
+    /// Relays the page's requests to other origins over `gbk-rest:`.
     let restRelaySchemeHandler: RestRelaySchemeHandler
 
     // MARK: - Private Properties (UI)
@@ -558,8 +558,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             configuration: self.configuration,
             dependencies: dependencies,
             nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
-            restRelayBaseURL: RestRelaySchemeHandler.baseURL,
-            restRelayForwardURL: RestRelaySchemeHandler.forwardURL,
+            restRelayEndpoint: RestRelaySchemeHandler.endpoint,
             restRelayReportsRequests: relayObserver != nil
         )
         return WKUserScript(

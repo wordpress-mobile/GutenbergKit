@@ -17,52 +17,57 @@ import OSLog
 /// responding with CORS headers we control. Every request takes this path,
 /// Lockdown Mode or not, so there is one path to keep working.
 ///
-/// There are two routes:
+/// The page sends every request to one route, ``route``, with the URL it was
+/// going to fetch. Native code decides how to send it (``destination(of:)``):
 ///
-/// - ``route`` (`/proxy/<path>`) is for the site's REST API. The path is
-///   resolved against the configured API root, and the site credential is
-///   added when the caller sent no `Authorization` of its own.
-/// - ``forwardRoute`` (`/forward?url=<url>`) is for every other host — a
-///   plugin calling its own service, for example. It never carries the site
-///   credential.
+/// - A URL below the site's REST API root goes to the site, and gets the site
+///   credential when the caller sent no `Authorization` of its own.
+/// - Any other URL — a plugin calling its own service, for example — goes
+///   where it was going, and never carries the site credential.
 ///
 /// ## Security
 ///
 /// - The scheme doesn't check who is calling. Every frame in the editor's web
 ///   view can load it, including sandboxed frames that can't reach the page,
-///   and the relay attaches the site credential to whatever they send. Why
-///   that is left as it is: "Who can use the schemes" in
+///   and the relay attaches the site credential to what they send to the
+///   site's REST API. Why that is left as it is: "Who can use the schemes" in
 ///   `docs/code/media-uploads.md`.
-/// - On ``route`` the caller supplies a **path**, not a URL: everything after
-///   `/proxy/` is resolved natively against the configured site API root, so
-///   a request that may carry the site credential cannot be pointed at another
-///   host by construction rather than by string matching. The resolved URL is
-///   re-checked against the root, and redirects away from it are refused.
+/// - The site credential only goes to a URL the relay builds itself, from the
+///   configured API root and the path below it. The page's URL is matched
+///   against the root but never sent with the credential, so a mistake in the
+///   matching can send a request to the user's own site, but can't send the
+///   credential to another host. The built URL is re-checked against the
+///   root, and redirects away from it are refused.
 /// - Which route *within* the site is reached is the caller's to choose. The
 ///   query is forwarded as-is, and WordPress registers `rest_route` as a public
 ///   query variable that `WP::parse_request()` prefers over the route the path
 ///   names, so a caller-supplied one wins. There is no boundary here to
 ///   defend: every route reachable that way is one the editor may request
 ///   through the relay directly.
-/// - A caller's own `Authorization` is sent as it is, on either route. It is
-///   the caller's credential, to send where it likes — Jetpack AI signs its
-///   requests to WordPress.com with a token of its own. The site credential is
-///   the relay's to guard: see ``authorization(sentByCaller:toSiteAPI:)``.
-/// - ``forwardRoute`` reaches any `http` or `https` URL, so any frame in the
-///   web view can read another host's response without CORS, a local network
-///   address included. Without Lockdown Mode the editor page can do that
-///   anyway; a sandboxed frame couldn't before.
+/// - A caller's own `Authorization` is sent as it is, wherever the request
+///   goes. It is the caller's credential, to send where it likes — Jetpack AI
+///   signs its requests to WordPress.com with a token of its own. The site
+///   credential is the relay's to guard: see
+///   ``authorization(sentByCaller:toSiteAPI:)``.
+/// - The relay reaches any `http` or `https` URL, so any frame in the web view
+///   can read another host's response without CORS, a local network address
+///   included. Without Lockdown Mode the editor page can do that anyway; a
+///   sandboxed frame couldn't before.
 struct RestRelay: Sendable {
 
-    /// The route for the site's REST API. Everything after it is the upstream
-    /// path, relative to the site API root — `/proxy/wp/v2/posts?…` relays to
-    /// `<site API root>wp/v2/posts?…`.
-    static let route = "/proxy"
+    /// The relay's route. Its `url` query parameter is the URL the page was
+    /// going to fetch: `/fetch?url=https%3A%2F%2Fexample.org%2Fapi` is a
+    /// request for `https://example.org/api`.
+    static let route = "/fetch"
 
-    /// The route for any other host. The `url` query parameter is the URL to
-    /// send the request to — `/forward?url=https%3A%2F%2Fexample.org%2Fapi`
-    /// relays to `https://example.org/api`.
-    static let forwardRoute = "/forward"
+    /// Where a relayed request goes.
+    enum Destination: Equatable {
+        /// The site's REST API, at a URL built from the configured root.
+        case siteAPI(URL)
+
+        /// Any other host, at the URL the page asked for.
+        case otherHost(URL)
+    }
 
     /// The site's API root, slash-terminated. Upstream paths are appended to
     /// it, and every resulting URL — including redirect targets — must still
@@ -74,7 +79,8 @@ struct RestRelay: Sendable {
     /// discard the query.
     private let apiRoot: String
 
-    /// The authorization header injected into upstream requests.
+    /// The site credential: added to a site API request that has no
+    /// `Authorization` of its own, and never sent to another host.
     private let authHeader: String
 
     /// The session upstream requests are sent on.
@@ -137,15 +143,22 @@ struct RestRelay: Sendable {
     /// are decoded before the slash is added so it lands inside the route
     /// value. Appended after `%2F`, it would make a root no path can extend:
     /// WordPress reads `rest_route=%2F/wp/v2/posts` as the route
-    /// `//wp/v2/posts` and answers `rest_no_route`. `createRelayFetch`
-    /// normalizes the same way, so both sides agree on what the root is.
+    /// `//wp/v2/posts` and answers `rest_no_route`.
     private static func normalizedRoot(_ configured: String) -> String {
         var root = configured
         if let query = root.firstIndex(of: "?") {
-            let decoded = root[query...].replacingOccurrences(of: "%2f", with: "/", options: .caseInsensitive)
-            root = String(root[..<query]) + decoded
+            root = String(root[..<query]) + decodingSlashes(root[query...])
         }
         return root.hasSuffix("/") ? root : root + "/"
+    }
+
+    /// `component` with its percent-encoded slashes decoded, and nothing else.
+    ///
+    /// Only the separators are decoded, so any other encoded byte reaches the
+    /// site exactly as it was sent, rather than decoded once here and once more
+    /// by PHP.
+    private static func decodingSlashes(_ component: some StringProtocol) -> String {
+        component.replacingOccurrences(of: "%2f", with: "/", options: .caseInsensitive)
     }
 
     /// Sends a relayed request on and returns the upstream response with
@@ -156,9 +169,9 @@ struct RestRelay: Sendable {
     /// does without the relay. api-fetch turns that into `offline_error` or
     /// `fetch_error`, which Gutenberg's notices key off: a save while offline
     /// says so. Answered with a `502` instead, the failure would read as the
-    /// site's error. The relay's own refusals — a path outside the API root, a
-    /// redirect away from it — are still answered, with a message the editor
-    /// shows.
+    /// site's error. The relay's own refusals — a URL it can't send, a path
+    /// outside the API root, a redirect away from it — are still answered, with
+    /// a message the editor shows.
     ///
     /// - Parameter request: The page's request to the relay scheme. WebKit
     ///   delivers a string or `ArrayBuffer` body as `httpBody` and drops some
@@ -166,16 +179,26 @@ struct RestRelay: Sendable {
     ///   string into an `ArrayBuffer` first (`bufferedBody` in `fetch-relay.js`).
     ///   The table of what was measured is in `docs/code/media-uploads.md`.
     func handle(_ request: URLRequest) async throws -> SchemeResponse {
-        let siteAPIURL = request.url.flatMap(upstreamURL(for:))
-        guard let upstreamURL = siteAPIURL ?? request.url.flatMap(forwardedURL(for:)) else {
-            Logger.restRelay.error("Refusing to relay a request for neither the site API root nor an http(s) URL")
+        guard let requestedURL = request.url.flatMap(Self.requestedURL(in:)) else {
+            Logger.restRelay.error("Refusing to relay a request without an http or https URL")
+            return Self.errorResponse(
+                status: 400,
+                code: "relay_invalid_url",
+                message: "The relay can only send a request to an http or https URL."
+            )
+        }
+        guard let destination = destination(of: requestedURL) else {
+            Logger.restRelay.error("Refusing to relay a request outside the site API root")
             return Self.errorResponse(
                 status: 403,
                 code: "relay_forbidden_path",
-                message: "The request names neither a path below the site API root nor an http or https URL."
+                message: "The requested path is outside the site API root."
             )
         }
-        let isSiteAPI = siteAPIURL != nil
+        let (upstreamURL, isSiteAPI) = switch destination {
+        case .siteAPI(let url): (url, true)
+        case .otherHost(let url): (url, false)
+        }
 
         var upstreamRequest = URLRequest(url: upstreamURL)
         upstreamRequest.httpMethod = request.httpMethod
@@ -234,15 +257,126 @@ struct RestRelay: Sendable {
         }
     }
 
-    // MARK: - Upstream URL
+    // MARK: - Destination
 
-    /// Builds the upstream URL for a request to the relay scheme, or `nil` if
-    /// the result would address anything outside the site API root.
+    /// The URL a request to the relay is for: its `url` query parameter, if
+    /// that is an `http` or `https` URL with a host. `nil` otherwise.
+    static func requestedURL(in relayURL: URL) -> URL? {
+        guard let components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false),
+              components.percentEncodedPath == route,
+              let value = components.queryItems?.first(where: { $0.name == "url" })?.value,
+              let url = URL(string: value),
+              ["http", "https"].contains(url.scheme?.lowercased()),
+              url.host() != nil else {
+            return nil
+        }
+        return url
+    }
+
+    /// Where a request for `url` goes: the site's REST API when `url` is below
+    /// the API root, another host otherwise. `nil` when `url` is below the root
+    /// but its path walks out of it.
     ///
-    /// Everything after the ``route`` prefix is treated as a path relative to
-    /// the API root and appended to it. Appending rather than resolving is what
-    /// `createRootURLMiddleware` does on the JavaScript side, and it is the only
-    /// approach that works for both root shapes WordPress produces: pretty
+    /// **Host aliases are tolerated; other hosts and path differences are
+    /// not.** WordPress builds `Link` headers and `_links` hrefs from
+    /// `home_url()`, which need not spell the host the app was configured with
+    /// — `www.` versus bare, or wp-env's `localhost` versus the `127.0.0.1` its
+    /// runtime writes into `WP_SITEURL`. The scheme may differ too — an `http`
+    /// `siteurl` behind a TLS-terminating proxy — since the request is sent to
+    /// the configured root whichever it names. The port has to match: another
+    /// port on the same host is another server, and answering its request with
+    /// the site's response is a different bug from the one this tolerance
+    /// exists to fix. A *path* difference is likewise a different resource: in
+    /// a subdirectory multisite `https://site/a/wp-json/` and
+    /// `https://site/b/wp-json/` are separate sites.
+    ///
+    /// Anything else goes where it was going, without the site credential. The
+    /// cost is an alias this can't recognize — a site reached by LAN IP whose
+    /// `home_url()` says `localhost`, a mapped domain, a migration — where a
+    /// paginated `Link` target reaches the site without the credential.
+    func destination(of url: URL) -> Destination? {
+        guard let path = pathBelowRoot(of: url) else {
+            return .otherHost(url)
+        }
+        return upstreamURL(forPath: path).map(Destination.siteAPI)
+    }
+
+    /// The part of `url` below the site API root — its path and query, without
+    /// a leading slash — or `nil` when `url` isn't below the root.
+    private func pathBelowRoot(of url: URL) -> String? {
+        guard let target = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let root = URLComponents(string: apiRoot),
+              let targetHost = target.host, let rootHost = root.host,
+              Self.canonicalHost(targetHost) == Self.canonicalHost(rootHost),
+              Self.explicitPort(of: target) == Self.explicitPort(of: root) else {
+            return nil
+        }
+
+        if root.percentEncodedQuery != nil {
+            return Self.queryRoutedPath(of: target, below: root)
+        }
+
+        let rootPath = Self.path(of: root)
+        let targetPath = Self.path(of: target)
+        guard targetPath.hasPrefix(rootPath) else { return nil }
+        return String(targetPath.dropFirst(rootPath.count)) + (target.percentEncodedQuery.map { "?\($0)" } ?? "")
+    }
+
+    /// The port `components` names, or `nil` when it names none or its scheme's
+    /// default — so `https://example.com:443` and `http://example.com` agree.
+    private static func explicitPort(of components: URLComponents) -> Int? {
+        guard let port = components.port, port != defaultPort(for: components.scheme) else { return nil }
+        return port
+    }
+
+    /// The path below a root that carries its route in the query — plain
+    /// permalinks, `https://site/index.php?rest_route=/` — or `nil` when
+    /// `target` isn't below it.
+    ///
+    /// A prefix match can't decide this shape: the root spells the route `/`,
+    /// and every request spells it `%2F`. api-fetch's locale middleware
+    /// rebuilds the query through `addQueryArgs`, and WordPress builds
+    /// pagination `Link` URLs through `add_query_arg`; both percent-encode every
+    /// value. So the route is read out of the query by name, its separators
+    /// decoded, and the other parameters are carried verbatim after a `?`.
+    /// ``upstreamURL(forPath:)`` merges them into the root's query.
+    private static func queryRoutedPath(of target: URLComponents, below root: URLComponents) -> String? {
+        guard path(of: target) == path(of: root), let rootQuery = root.percentEncodedQuery else { return nil }
+
+        // The root's query is the single `rest_route=/` pair `get_rest_url()`
+        // emits; on a namespaced site the value is longer (`/sites/1/`), but it
+        // is still the one parameter every request continues.
+        let rootRoute = queryPair(rootQuery)
+        var pairs = (target.percentEncodedQuery ?? "")
+            .split(separator: "&", omittingEmptySubsequences: false)
+            .map(String.init)
+        guard let index = pairs.firstIndex(where: { queryPair($0).name == rootRoute.name }) else { return nil }
+
+        let route = decodingSlashes(queryPair(pairs.remove(at: index)).value)
+        guard route.hasPrefix(rootRoute.value) else { return nil }
+
+        let path = route.dropFirst(rootRoute.value.count)
+        let query = pairs.joined(separator: "&")
+        return query.isEmpty ? String(path) : "\(path)?\(query)"
+    }
+
+    /// `components`' path, `/` when it has none.
+    private static func path(of components: URLComponents) -> String {
+        components.percentEncodedPath.isEmpty ? "/" : components.percentEncodedPath
+    }
+
+    /// A `name=value` query pair split at its first `=`, verbatim.
+    private static func queryPair(_ pair: String) -> (name: String, value: String) {
+        guard let separator = pair.firstIndex(of: "=") else { return (pair, "") }
+        return (String(pair[..<separator]), String(pair[pair.index(after: separator)...]))
+    }
+
+    /// The site API URL for `path` — a path and query below the API root — or
+    /// `nil` if the result would address anything outside the root.
+    ///
+    /// The path is appended to the API root. Appending rather than resolving is
+    /// what `createRootURLMiddleware` does on the JavaScript side, and it is the
+    /// only approach that works for both root shapes WordPress produces: pretty
     /// permalinks give `https://example.com/wp-json/`, plain permalinks give
     /// `https://example.com/?rest_route=/`, where the path has to merge into an
     /// existing query string.
@@ -252,17 +386,14 @@ struct RestRelay: Sendable {
     /// before sending, and a normalized `..` is the one thing that could walk
     /// out of the API root and reach the rest of the site with the credential
     /// attached.
-    func upstreamURL(for relayURL: URL) -> URL? {
-        guard let components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false) else { return nil }
-        let path = components.percentEncodedPath
-        guard path == Self.route || path.hasPrefix("\(Self.route)/") else { return nil }
-
-        // Strip the route and any leading slashes, so the remainder appends to
-        // the API root rather than resolving against the site root.
-        let relativePath = path.dropFirst(Self.route.count).drop(while: { $0 == "/" })
+    private func upstreamURL(forPath path: String) -> URL? {
+        let separator = path.firstIndex(of: "?")
+        // Leading slashes are dropped, so the path appends to the API root
+        // rather than resolving against the site root.
+        let relativePath = path[..<(separator ?? path.endIndex)].drop(while: { $0 == "/" })
         guard !Self.containsDotSegment(relativePath) else { return nil }
 
-        var suffix = String(relativePath) + (components.percentEncodedQuery.map { "?\($0)" } ?? "")
+        var suffix = String(relativePath) + (separator.map { String(path[$0...]) } ?? "")
         // A root that already carries a query (plain permalinks) continues it
         // rather than starting a second one — mirroring `createRootURLMiddleware`.
         if apiRoot.contains("?"), let separator = suffix.firstIndex(of: "?") {
@@ -296,18 +427,27 @@ struct RestRelay: Sendable {
         }
     }
 
-    /// The URL a request on ``forwardRoute`` is for, or `nil` if its `url`
-    /// parameter isn't an `http` or `https` URL.
-    func forwardedURL(for relayURL: URL) -> URL? {
-        guard let components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false),
-              components.percentEncodedPath == Self.forwardRoute,
-              let value = components.queryItems?.first(where: { $0.name == "url" })?.value,
-              let url = URL(string: value),
-              ["http", "https"].contains(url.scheme?.lowercased()),
-              url.host() != nil else {
-            return nil
+    /// A host reduced to the form its aliases share: every loopback spelling
+    /// collapses to one, and a `www.` prefix is dropped.
+    ///
+    /// ``destination(of:)`` and ``RedirectGuard`` both read hosts through this,
+    /// so a spelling one accepts as the site, the other does too. Otherwise a
+    /// site whose canonical redirect uses that spelling would have every
+    /// request refused.
+    private static func canonicalHost(_ host: String) -> String {
+        let lowercased = host.lowercased()
+        if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(lowercased) {
+            return "localhost"
         }
-        return url
+        return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
+    }
+
+    private static func defaultPort(for scheme: String?) -> Int? {
+        switch scheme?.lowercased() {
+        case "http": return 80
+        case "https": return 443
+        default: return nil
+        }
     }
 
     // MARK: - Authorization
@@ -336,7 +476,7 @@ struct RestRelay: Sendable {
     /// Refusing hands the 3xx itself back instead.
     ///
     /// The comparison is a prefix match on the whole URL, read through the
-    /// host spellings `relayUpstreamPath` tolerates — `www.` versus bare, the
+    /// host spellings ``destination(of:)`` tolerates — `www.` versus bare, the
     /// loopback names — and an `http`→`https` upgrade. So another path on the
     /// same site (`/wp-login.php`), another port, another host, and a scheme
     /// downgrade are refused: a site API request reaches only the API it was
@@ -344,12 +484,12 @@ struct RestRelay: Sendable {
     /// permalink-structure redirect is refused too, which the response says
     /// specifically enough to diagnose.
     ///
-    /// The tolerances are the layer above's so that the two agree. A `Link`
-    /// target on the `www.` alias is relayed by `createRelayFetch`, and a site
-    /// whose canonical redirect names that alias — or whose `siteurl` is `http`
-    /// behind a TLS-terminating proxy — would otherwise have every relayed
-    /// request refused here. Containment holds: the same site under another
-    /// of its own names, and a strictly stronger scheme.
+    /// The host spellings are the ones ``destination(of:)`` accepts, so that the
+    /// two agree. A `Link` target on the `www.` alias goes to the site, and a
+    /// site whose canonical redirect names that alias — or whose `siteurl` is
+    /// `http` behind a TLS-terminating proxy — would otherwise have every
+    /// relayed request refused here. Containment holds: the same site under
+    /// another of its own names, and a strictly stronger scheme.
     ///
     /// A `307` or `308` it follows has `URLSession` resend the body, which it can:
     /// a scheme request's body is `Data`, held in memory.
@@ -458,7 +598,7 @@ struct RestRelay: Sendable {
             guard let url,
                   let scheme = url.scheme?.lowercased(),
                   let host = url.host()?.lowercased(),
-                  let port = url.port ?? defaultPort(for: scheme) else {
+                  let port = url.port ?? RestRelay.defaultPort(for: scheme) else {
                 return nil
             }
             return "\(scheme)://\(host):\(port)"
@@ -466,38 +606,17 @@ struct RestRelay: Sendable {
 
         /// `url` with its host in the form its aliases share and a default
         /// port dropped, so that a prefix comparison reads through the
-        /// spellings the layer above tolerates. `nil` for a URL without a host.
+        /// spellings ``RestRelay/destination(of:)`` tolerates. `nil` for a URL
+        /// without a host.
         private static func normalized(_ url: String) -> String? {
             guard var components = URLComponents(string: url), let host = components.host else {
                 return nil
             }
-            components.host = canonicalHost(host)
-            if let port = components.port, port == defaultPort(for: components.scheme) {
+            components.host = RestRelay.canonicalHost(host)
+            if let port = components.port, port == RestRelay.defaultPort(for: components.scheme) {
                 components.port = nil
             }
             return components.string
-        }
-
-        private static func defaultPort(for scheme: String?) -> Int? {
-            switch scheme?.lowercased() {
-            case "http": return 80
-            case "https": return 443
-            default: return nil
-            }
-        }
-
-        /// A host reduced to the form its aliases share: every loopback
-        /// spelling collapses to one, and a `www.` prefix is dropped.
-        ///
-        /// Mirrors `canonicalHost` in `fetch-relay.js`, and the two must stay
-        /// the same: a spelling the web view relays and this refuses fails
-        /// every request on a site whose canonical redirect uses it.
-        private static func canonicalHost(_ host: String) -> String {
-            let lowercased = host.lowercased()
-            if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(lowercased) {
-                return "localhost"
-            }
-            return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
         }
     }
 

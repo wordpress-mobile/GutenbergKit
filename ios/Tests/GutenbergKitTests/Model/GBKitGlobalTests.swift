@@ -59,29 +59,34 @@ struct GBKitGlobalTests: MakesTestFixtures {
   func mapsRelayReporting() throws {
     let reporting = try GBKitGlobal(
       configuration: makeConfiguration(), dependencies: makeDependencies(),
-      restRelayBaseURL: "gbk-rest://relay/proxy/", restRelayReportsRequests: true
+      restRelayEndpoint: "gbk-rest://relay/fetch", restRelayReportsRequests: true
     )
     let silent = try GBKitGlobal(
       configuration: makeConfiguration(), dependencies: makeDependencies(),
-      restRelayBaseURL: "gbk-rest://relay/proxy/"
+      restRelayEndpoint: "gbk-rest://relay/fetch"
     )
     #expect(reporting.restRelay?.reportsRequests == true)
     #expect(silent.restRelay?.reportsRequests == false)
   }
 
-  @Test("tells the page where to relay requests for other hosts")
-  func mapsRelayForwardURL() throws {
-    let forwarding = try GBKitGlobal(
+  @Test("tells the page where the relay is")
+  func mapsRelayEndpoint() throws {
+    let global = try GBKitGlobal(
       configuration: makeConfiguration(), dependencies: makeDependencies(),
-      restRelayBaseURL: "gbk-rest://relay/proxy/", restRelayForwardURL: "gbk-rest://relay/forward"
+      restRelayEndpoint: "gbk-rest://relay/fetch"
     )
-    let siteOnly = try GBKitGlobal(
-      configuration: makeConfiguration(), dependencies: makeDependencies(),
-      restRelayBaseURL: "gbk-rest://relay/proxy/"
+    #expect(global.restRelay?.endpoint == "gbk-rest://relay/fetch")
+    #expect(try global.toString().contains(#""endpoint":"gbk-rest:\/\/relay\/fetch""#))
+  }
+
+  @Test("offers no relay in offline mode, where there is no site")
+  func omitsRelayOffline() throws {
+    let global = try GBKitGlobal(
+      configuration: makeConfigurationBuilder().setIsOfflineModeEnabled(true).build(),
+      dependencies: makeDependencies(),
+      restRelayEndpoint: "gbk-rest://relay/fetch"
     )
-    #expect(forwarding.restRelay?.forwardURL == "gbk-rest://relay/forward")
-    #expect(siteOnly.restRelay?.forwardURL == nil)
-    #expect(try forwarding.toString().contains(#""forwardURL":"gbk-rest:\/\/relay\/forward""#))
+    #expect(global.restRelay == nil)
   }
 
   @Test("maps themeStyles from configuration")
