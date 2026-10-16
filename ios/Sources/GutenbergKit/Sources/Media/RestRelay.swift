@@ -194,15 +194,13 @@ struct RestRelay: Sendable {
             // 3xx responses on its own, which would carry a site API request
             // to whatever host the `Location` header names and relay that
             // response back. See ``RedirectGuard``. A request for another host
-            // follows every redirect, and keeps its `Authorization` on them the
-            // way `fetch` would.
-            let redirectGuard = isSiteAPI
-                ? RedirectGuard(allowedPrefix: apiRoot, reporter: reporter)
-                : RedirectGuard(
-                    allowedPrefix: nil,
-                    authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization"),
-                    reporter: reporter
-                )
+            // follows every redirect. Either keeps its `Authorization` on a
+            // redirect the way `fetch` would.
+            let redirectGuard = RedirectGuard(
+                allowedPrefix: isSiteAPI ? apiRoot : nil,
+                authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization"),
+                reporter: reporter
+            )
             let (body, response) = try await session.data(for: upstreamRequest, delegate: redirectGuard)
             reporter?.complete(with: .bytes(body), error: nil)
 
@@ -360,13 +358,15 @@ struct RestRelay: Sendable {
     /// request to another host, which carries no site credential.
     ///
     /// `URLSession` drops `Authorization` on every redirect it follows, even one to
-    /// the same server. Given the caller's `Authorization`, the guard puts it back
-    /// the way WebKit's `fetch` does: on a redirect to the same scheme, host, and
-    /// port. Once a redirect goes anywhere else the header stays off, even if a
-    /// later redirect comes back.
+    /// the same server. Given the request's `Authorization` — the site credential
+    /// or the caller's own — the guard puts it back the way WebKit's `fetch` does:
+    /// on a redirect to the same scheme, host, and port. Once a redirect goes
+    /// anywhere else the header stays off, even if a later redirect comes back. So
+    /// the `www.` alias and the `https` upgrade it follows within the API root
+    /// arrive without it, as they would from `fetch`.
     ///
     /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal and
-    /// the caller's `Authorization` are kept under a lock.
+    /// the request's `Authorization` are kept under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         /// The API root, in the form ``normalized(_:)`` gives a target, or `nil`
         /// to follow every redirect.
@@ -381,7 +381,7 @@ struct RestRelay: Sendable {
         private let lock = NSLock()
         private var _refusedTarget: String?
 
-        /// The caller's `Authorization`, until a redirect leaves its origin.
+        /// The request's `Authorization`, until a redirect leaves its origin.
         private var _authorization: String?
 
         /// The redirect target that was refused, or `nil` if none was.
@@ -440,7 +440,7 @@ struct RestRelay: Sendable {
             return target.hasPrefix(upgradedPrefix)
         }
 
-        /// The caller's `Authorization` to send on a redirect from `source` to
+        /// The request's `Authorization` to send on a redirect from `source` to
         /// `target`, or `nil` once a redirect has left the original origin.
         private func authorization(redirectingFrom source: URL?, to target: URL) -> String? {
             lock.withLock {
