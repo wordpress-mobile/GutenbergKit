@@ -43,6 +43,15 @@ struct RestRelayTests {
         )
     }
 
+    @Test("collapses a doubled trailing slash on the API root")
+    func normalizesAPIRootWithDoubledTrailingSlash() {
+        let relay = makeRelay(apiRoot: URL(string: "https://example.com/wp-json//")!)
+        #expect(
+            relay.upstreamURL(for: request("/proxy/wp/v2/posts"))?.absoluteString
+                == "https://example.com/wp-json/wp/v2/posts"
+        )
+    }
+
     @Test("continues the query of an API root that already carries one")
     func mergesIntoAQueryCarryingAPIRoot() {
         // Plain permalinks: `https://example.com/?rest_route=/` + `wp/v2/posts`
