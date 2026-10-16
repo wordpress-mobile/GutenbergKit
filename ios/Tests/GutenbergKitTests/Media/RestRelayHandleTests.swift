@@ -1,0 +1,326 @@
+import Foundation
+import Testing
+@testable import GutenbergKit
+
+/// Covers what ``RestRelay/handle(_:)`` sends upstream and what it hands back,
+/// against a stubbed session rather than a site.
+///
+/// The header rewriting on both sides of the hop is the part of the relay that
+/// fails silently: an upstream `Access-Control-Allow-Origin` that survives is
+/// honored by WebKit over the policy's own, and a surviving `Content-Encoding`
+/// makes WebKit decode an already-decoded body.
+@Suite("RestRelay request handling")
+struct RestRelayHandleTests {
+
+    // MARK: - Session
+
+    @Test("waits as long as an upload for a slow site")
+    func sharedSessionWaitsAsLongAsAnUpload() {
+        #expect(RestRelay.sharedSession.configuration.timeoutIntervalForRequest == EditorHTTPClient.uploadInactivityTimeout)
+    }
+
+    // MARK: - Request rewriting
+
+    @Test("injects the site credential and discards the caller's")
+    func injectsSiteCredential() async throws {
+        let exchange = try await relay(
+            headers: ["Authorization": "Bearer caller-token"]
+        )
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
+    }
+
+    @Test("strips the headers that describe the web view's own hop")
+    func stripsHopHeaders() async throws {
+        // `origin`/`referer`/`sec-fetch-*` describe the `file://` page and are
+        // what WordPress rejects in the first place; the page's cookies are
+        // not how the relay authenticates; the rest belong to the hop.
+        let exchange = try await relay(headers: [
+            "Origin": "file://",
+            "Referer": "file:///editor.html",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "cors",
+            "Cookie": "wordpress_logged_in_abc=1",
+            "Connection": "keep-alive",
+            "Accept-Encoding": "gzip, deflate",
+        ])
+
+        for header in [
+            "Origin", "Referer", "Sec-Fetch-Site", "Sec-Fetch-Mode",
+            "Cookie", "Connection",
+        ] {
+            #expect(
+                exchange.upstream.value(forHTTPHeaderField: header) == nil,
+                "\(header) should not reach the site"
+            )
+        }
+    }
+
+    @Test("forwards the headers the site needs")
+    func forwardsContentHeaders() async throws {
+        let exchange = try await relay(
+            method: "POST",
+            headers: ["Content-Type": "application/json", "X-HTTP-Method-Override": "PUT"]
+        )
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(exchange.upstream.value(forHTTPHeaderField: "X-HTTP-Method-Override") == "PUT")
+        #expect(exchange.upstream.httpMethod == "POST")
+    }
+
+    // MARK: - Response rewriting
+
+    @Test("strips the upstream CORS headers that would override the policy's")
+    func stripsUpstreamCORSHeaders() async throws {
+        // WordPress answers an origin it rejects with an *empty*
+        // `Access-Control-Allow-Origin`. One that survived would replace the
+        // relay's own, and WebKit would reject the response the relay exists
+        // to deliver.
+        let exchange = try await relay(responseHeaders: [
+            "Access-Control-Allow-Origin": "",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Expose-Headers": "X-Upstream",
+            "Vary": "Origin",
+        ])
+
+        for header in ["Access-Control-Allow-Credentials", "Vary"] {
+            #expect(
+                exchange.response.header(header) == nil,
+                "\(header) should not reach the web view"
+            )
+        }
+        // The relay's own headers replace the upstream's, rather than both
+        // arriving and the browser reading whichever came first.
+        #expect(exchange.response.header("Access-Control-Allow-Origin") == "*")
+        let exposed = exchange.response.headers.filter { $0.key.lowercased() == "access-control-expose-headers" }
+        #expect(exposed.count == 1)
+        #expect(exposed.first?.value.hasPrefix("*, Allow") == true)
+    }
+
+    @Test("strips the site's cookies rather than rescoping them to the relay")
+    func stripsSetCookie() async throws {
+        // Passed on, these would be stored against the relay's scheme, a
+        // different origin from the site that set them.
+        let exchange = try await relay(responseHeaders: [
+            "Set-Cookie": "wordpress_logged_in_abc=user%7C123; Path=/; HttpOnly",
+        ])
+
+        #expect(exchange.response.header("Set-Cookie") == nil)
+    }
+
+    @Test("strips Content-Encoding and Content-Length, which URLSession already acted on")
+    func stripsContentEncoding() async throws {
+        // `URLSession` decompresses transparently, so advertising the upstream
+        // encoding makes WebKit decode plain bytes a second time, and the
+        // upstream length is the compressed one.
+        let exchange = try await relay(responseHeaders: ["Content-Encoding": "gzip", "Content-Length": "12"])
+
+        #expect(exchange.response.header("Content-Encoding") == nil)
+        #expect(exchange.response.header("Content-Length") == nil)
+    }
+
+    @Test("sends the page's body on, and exposes a block's own response headers")
+    func relaysBodiesAndPluginHeaders() async throws {
+        // A VideoPress chunk: the page read its `Blob` into an `ArrayBuffer`,
+        // which WebKit delivers as `httpBody`, and the block reads the video
+        // it made off the response headers.
+        let exchange = try await relay(
+            target: "/proxy/videopress/v1/upload-relay/abc",
+            method: "POST",
+            headers: ["Content-Type": "application/offset+octet-stream", "Upload-Offset": "0"],
+            body: Data("chunk bytes".utf8),
+            status: 204,
+            responseHeaders: ["x-videopress-upload-guid": "eDeLfBNN"]
+        )
+
+        #expect(exchange.upstream.url?.absoluteString == "https://example.com/wp-json/videopress/v1/upload-relay/abc")
+        #expect(exchange.sentBody == Data("chunk bytes".utf8))
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Upload-Offset") == "0")
+        #expect(exchange.response.status == 204)
+        #expect(exchange.response.header("x-videopress-upload-guid") == "eDeLfBNN")
+        #expect(exchange.response.header("Access-Control-Expose-Headers")?.hasPrefix("*") == true)
+    }
+
+    @Test("relays the status, body, and the headers the editor reads")
+    func relaysStatusBodyAndHeaders() async throws {
+        let exchange = try await relay(
+            status: 201,
+            responseHeaders: ["Allow": "GET, POST", "X-WP-Total": "42"],
+            responseBody: Data(#"{"id":1}"#.utf8)
+        )
+
+        #expect(exchange.response.status == 201)
+        #expect(exchange.response.body == Data(#"{"id":1}"#.utf8))
+        #expect(exchange.response.header("Allow") == "GET, POST")
+        #expect(exchange.response.header("X-WP-Total") == "42")
+    }
+
+    @Test("throws when the site can't be reached, rather than answering for it")
+    func throwsWhenSiteUnreachable() async throws {
+        await #expect {
+            try await relay(failure: URLError(.notConnectedToInternet))
+        } throws: { error in
+            (error as? URLError)?.code == .notConnectedToInternet
+        }
+    }
+
+    @Test("reports the upstream request's task to the observer")
+    func reportsUpstreamTask() async throws {
+        let recorder = TaskEventRecorder()
+
+        _ = try await relay(responseBody: Data("[]".utf8), observer: recorder)
+
+        #expect(recorder.events == ["created", "metrics", "completed", "performed"])
+        #expect(Set(recorder.tasks).count == 1)
+    }
+
+    @Test("reports the task of a request that never reaches the site")
+    func reportsUnreachableTask() async throws {
+        let recorder = TaskEventRecorder()
+
+        _ = try? await relay(failure: URLError(.notConnectedToInternet), observer: recorder)
+
+        #expect(recorder.events.first == "created")
+        #expect(recorder.events.last == "failed")
+    }
+
+    @Test("refuses a path outside the API root before sending anything")
+    func refusesForbiddenPath() async throws {
+        let exchange = try await relay(target: "/proxy/../wp-admin/")
+
+        #expect(exchange.response.status == 403)
+        #expect(exchange.sentRequest == nil, "nothing should have been sent upstream")
+    }
+
+    // MARK: - Helpers
+
+    /// One relayed exchange: what reached the stub, and what the relay returned.
+    private struct Exchange {
+        let sentRequest: URLRequest?
+        let sentBody: Data?
+        let response: SchemeResponse
+
+        /// The request that reached the stub. Fails the test if none did.
+        var upstream: URLRequest {
+            guard let sentRequest else {
+                Issue.record("No request reached the stubbed session")
+                return URLRequest(url: URL(string: "about:blank")!)
+            }
+            return sentRequest
+        }
+    }
+
+    /// Relays one request through a stubbed session and reports both sides.
+    private func relay(
+        target: String = "/proxy/wp/v2/posts?_locale=user",
+        method: String = "GET",
+        headers: [String: String] = [:],
+        body: Data? = nil,
+        status: Int = 200,
+        responseHeaders: [String: String] = [:],
+        responseBody: Data = Data(),
+        failure: (any Error)? = nil,
+        observer: (any EditorHTTPClientDelegate)? = nil
+    ) async throws -> Exchange {
+        let stub = StubURLProtocol.Stub(
+            status: status,
+            headers: responseHeaders,
+            body: responseBody,
+            failure: failure
+        )
+        let stubbed = StubURLProtocol.makeSession(stub: stub)
+        defer { stubbed.finish() }
+
+        let relay = RestRelay(
+            configuration: EditorConfigurationBuilder(
+                postType: .post,
+                siteURL: URL(string: "https://example.com")!,
+                siteApiRoot: URL(string: "https://example.com/wp-json/")!,
+                authHeader: "Bearer test-token"
+            ).build(),
+            session: stubbed.session,
+            observer: observer
+        )
+
+        var request = URLRequest(url: try #require(URL(string: "gbk-rest://relay\(target)")))
+        request.httpMethod = method
+        request.allHTTPHeaderFields = headers
+        request.httpBody = body
+        let response = try await relay.handle(request)
+
+        return Exchange(sentRequest: stubbed.recorder.request, sentBody: stubbed.recorder.request?.httpBody, response: response)
+    }
+}
+
+private extension SchemeResponse {
+    /// The value of the first header matching `name`, case-insensitively.
+    func header(_ name: String) -> String? {
+        headers.first { $0.key.lowercased() == name.lowercased() }?.value
+    }
+}
+
+/// Covers how ``RestRelaySchemeHandler`` answers the page. A failure to reach the
+/// site has to fail the page's `fetch`, as it would without the relay: api-fetch
+/// turns that into `offline_error`, and an HTTP response would hide it.
+@MainActor
+@Suite("RestRelaySchemeHandler")
+struct RestRelaySchemeHandlerTests {
+    @Test("fails the page's request when the site can't be reached")
+    func failsWhenSiteUnreachable() async throws {
+        let stubbed = StubURLProtocol.makeSession(stub: .init(failure: URLError(.notConnectedToInternet)))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))))
+
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect((task.failure as? URLError)?.code == .notConnectedToInternet)
+        #expect(task.response == nil, "a response would reach the page as the site's own error")
+        #expect(handler.activeRequestCount == 0)
+    }
+
+    @Test("answers a refused path, so the page can show why")
+    func answersRefusal() async throws {
+        let stubbed = StubURLProtocol.makeSession(stub: .init())
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: try #require(URL(string: "gbk-rest://relay/proxy/../wp-admin/"))))
+
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect(task.status == 403)
+        #expect(task.failure == nil)
+    }
+
+    /// WebKit can create a new request at the address of one it just stopped. Starting the
+    /// same object again stands in for that.
+    @Test("doesn't give a new request at a stopped one's address the stopped one's outcome")
+    func staleWorkMissesANewRequest() async throws {
+        let stubbed = StubURLProtocol.makeSession(stub: .init(body: Data("[]".utf8)))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))))
+
+        handler.start(task)
+        handler.stop(task)
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect(task.failure == nil, "the stopped request's cancellation reached the new request")
+        #expect(task.status == 200)
+    }
+
+    private func makeHandler(session: URLSession) -> RestRelaySchemeHandler {
+        RestRelaySchemeHandler(relay: RestRelay(
+            configuration: EditorConfigurationBuilder(
+                postType: .post,
+                siteURL: URL(string: "https://example.com")!,
+                siteApiRoot: URL(string: "https://example.com/wp-json/")!,
+                authHeader: "Bearer test-token"
+            ).build(),
+            session: session
+        ))
+    }
+}

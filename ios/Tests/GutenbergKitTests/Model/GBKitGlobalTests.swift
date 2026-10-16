@@ -55,6 +55,20 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(global.siteApiRoot == Self.testApiRoot)
   }
 
+  @Test("tells the page whether native code reports the relay's requests")
+  func mapsRelayReporting() throws {
+    let reporting = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayBaseURL: "gbk-rest://relay/proxy/", restRelayReportsRequests: true
+    )
+    let silent = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayBaseURL: "gbk-rest://relay/proxy/"
+    )
+    #expect(reporting.restRelay?.reportsRequests == true)
+    #expect(silent.restRelay?.reportsRequests == false)
+  }
+
   @Test("maps themeStyles from configuration")
   func mapsThemeStyles() throws {
     let withThemeStyles = makeConfiguration(shouldUseThemeStyles: true)

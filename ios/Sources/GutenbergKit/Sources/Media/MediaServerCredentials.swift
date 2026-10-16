@@ -43,20 +43,14 @@ enum MediaServerCredentials {
     /// What makes it a *trap* rather than a warning is that the configuration is
     /// incoherent, not merely unlucky: an uploader's media deletes still relay through
     /// the internal media client, so there is no site root and auth header under which
-    /// this host's uploader could have worked. Contrast the conditions the host's
-    /// environment imposes at server start — a network policy that blocks the loopback
-    /// endpoint, a port that won't bind — which log and degrade, because the very same
-    /// configuration works once the environment allows it. Dropping the uploader is the
-    /// symptom both share; only this one has a cause the host can fix in the
-    /// configuration it just handed over.
+    /// this host's uploader could have worked. Contrast a processor without
+    /// credentials, which logs and degrades: its uploads still reach WordPress, through
+    /// the web view. Dropping the handler is the symptom both share; only this one has a
+    /// cause the host can fix in the configuration it just handed over.
     ///
-    /// Called from `EditorViewController.init`, not from the server start. The uploader
-    /// is `private(set)` and assigned only there, so a non-nil uploader at load time was
-    /// necessarily passed at `init` — checking it then puts the host's own call site in
-    /// the stack trace, instead of surfacing the mistake later from inside a page-load
-    /// callback where the trace names only GutenbergKit. This mirrors what moving the
-    /// handlers into `init` already did for the set-before-load contract: enforce the
-    /// rule where the host states its intent.
+    /// Called from `EditorViewController.init`, where the host hands the uploader over,
+    /// so the host's own call site is in the stack trace instead of a page-load
+    /// callback that names only GutenbergKit.
     ///
     /// (Android enforces this in `GutenbergView.mediaUploader`'s setter — the earliest
     /// point available there, since it takes its handlers as mutable properties rather
