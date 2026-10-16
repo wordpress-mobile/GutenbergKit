@@ -37,7 +37,9 @@ public extension EditorHTTPClientProtocol {
 ///
 /// Implement this protocol to inspect or log all network requests — including the
 /// media uploads routed through ``EditorHTTPClientProtocol/uploadClient()``, and
-/// the editor page's REST API requests, which native code relays to the site.
+/// the editor page's `fetch` requests, which native code relays. Those go to the
+/// site's REST API and to any other host the page calls, such as a plugin's own
+/// service, so don't assume a request is for the site.
 /// Conformers are invoked from an actor and from `URLSession`'s delegate queue, so
 /// the protocol requires `Sendable` (implementations must be thread-safe).
 ///
@@ -47,8 +49,11 @@ public extension EditorHTTPClientProtocol {
 /// `URLSession`'s own types, so a network logger that records `URLSessionTask`s
 /// can take each call as it comes.
 ///
-/// Each request carries the site's `Authorization` header, as sent. Redact it before
-/// storing requests anywhere it shouldn't be kept.
+/// Each request carries its `Authorization` header, as sent. That is usually the
+/// site's credential, but a caller's own token is sent as it is — Jetpack AI sends
+/// one to WordPress.com — and a request to another host never carries the site's.
+/// Redact the header on every request before storing requests anywhere it shouldn't
+/// be kept, not only where it matches the site credential.
 public protocol EditorHTTPClientDelegate: Sendable {
     func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData)
 
