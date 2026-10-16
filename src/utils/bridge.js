@@ -253,8 +253,7 @@ export function onNetworkRequest( requestData ) {
  * Where the native REST relay is.
  *
  * @typedef {Object} RestRelay
- * @property {string}  baseURL           The URL a path below the site's REST API root is appended to, slash-terminated.
- * @property {string}  [forwardURL]      The URL a request for any other host is sent to, with that request's URL in the `url` query parameter. If absent, those requests go straight from the page.
+ * @property {string}  endpoint          The URL each request to another origin is sent to, with that request's URL in the `url` query parameter.
  * @property {boolean} [reportsRequests] Whether native code reports each relayed request to the host itself, so the page leaves it out of its network log.
  */
 

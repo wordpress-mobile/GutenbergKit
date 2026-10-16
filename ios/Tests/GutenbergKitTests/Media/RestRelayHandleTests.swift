@@ -42,7 +42,7 @@ struct RestRelayHandleTests {
     @Test("forwards a request for another host to the URL it names")
     func forwardsToAnotherHost() async throws {
         let exchange = try await relay(
-            target: Self.forwardTarget("https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query?stream=true"),
+            target: Self.relayTarget("https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query?stream=true"),
             method: "POST",
             headers: ["Content-Type": "application/json"],
             body: Data(#"{"question":"Hi"}"#.utf8),
@@ -61,7 +61,7 @@ struct RestRelayHandleTests {
     @Test("sends a caller's own credential to another host as it is")
     func keepsCallerCredentialForAnotherHost() async throws {
         let exchange = try await relay(
-            target: Self.forwardTarget("https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query"),
+            target: Self.relayTarget("https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query"),
             headers: ["Authorization": "Bearer jwt"]
         )
 
@@ -70,7 +70,7 @@ struct RestRelayHandleTests {
 
     @Test("never adds the site credential to a request for another host")
     func addsNoSiteCredentialForAnotherHost() async throws {
-        let exchange = try await relay(target: Self.forwardTarget("https://example.org/api"))
+        let exchange = try await relay(target: Self.relayTarget("https://example.org/api"))
 
         #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil)
     }
@@ -81,7 +81,7 @@ struct RestRelayHandleTests {
         // request it makes, whatever the host.
         for target in ["https://example.org/api", "https://example.com/b/wp-json/wp/v2/posts"] {
             let exchange = try await relay(
-                target: Self.forwardTarget(target),
+                target: Self.relayTarget(target),
                 headers: ["Authorization": "Bearer test-token"]
             )
 
@@ -89,19 +89,20 @@ struct RestRelayHandleTests {
         }
     }
 
-    @Test("refuses a forward to anything but an http or https URL before sending anything")
-    func refusesForwardToOtherSchemes() async throws {
+    @Test("refuses anything but an http or https URL before sending anything")
+    func refusesOtherSchemes() async throws {
         for target in [
-            Self.forwardTarget("file:///etc/hosts"),
-            Self.forwardTarget("gbk-rest://relay/proxy/wp/v2/posts"),
-            Self.forwardTarget("https:no-host"),
-            Self.forwardTarget("not a url"),
-            "/forward",
-            "/forward/https://example.org/",
+            Self.relayTarget("file:///etc/hosts"),
+            Self.relayTarget("gbk-rest://relay/fetch?url=https%3A%2F%2Fexample.org%2F"),
+            Self.relayTarget("https:no-host"),
+            Self.relayTarget("not a url"),
+            "/fetch",
+            "/fetch/https://example.org/",
+            "/proxy/wp/v2/posts",
         ] {
             let exchange = try await relay(target: target)
 
-            #expect(exchange.response.status == 403, "\(target)")
+            #expect(exchange.response.status == 400, "\(target)")
             #expect(exchange.sentRequest == nil, "nothing should have been sent for \(target)")
         }
     }
@@ -201,7 +202,7 @@ struct RestRelayHandleTests {
         // which WebKit delivers as `httpBody`, and the block reads the video
         // it made off the response headers.
         let exchange = try await relay(
-            target: "/proxy/videopress/v1/upload-relay/abc",
+            target: Self.relayTarget("https://example.com/wp-json/videopress/v1/upload-relay/abc"),
             method: "POST",
             headers: ["Content-Type": "application/offset+octet-stream", "Upload-Offset": "0"],
             body: Data("chunk bytes".utf8),
@@ -262,7 +263,7 @@ struct RestRelayHandleTests {
 
     @Test("refuses a path outside the API root before sending anything")
     func refusesForbiddenPath() async throws {
-        let exchange = try await relay(target: "/proxy/../wp-admin/")
+        let exchange = try await relay(target: Self.relayTarget("https://example.com/wp-json/../wp-admin/"))
 
         #expect(exchange.response.status == 403)
         #expect(exchange.sentRequest == nil, "nothing should have been sent upstream")
@@ -270,12 +271,17 @@ struct RestRelayHandleTests {
 
     // MARK: - Helpers
 
-    /// The relay target for a request to `url` on another host, encoded as the page
-    /// encodes it (`encodeURIComponent`).
-    private static func forwardTarget(_ url: String) -> String {
+    /// The relay target for a request to `url`, encoded as the page encodes it
+    /// (`encodeURIComponent`).
+    static func relayTarget(_ url: String) -> String {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-_.!~*'()")
-        return "/forward?url=" + url.addingPercentEncoding(withAllowedCharacters: allowed)!
+        return "\(RestRelay.route)?url=" + url.addingPercentEncoding(withAllowedCharacters: allowed)!
+    }
+
+    /// The relay URL the page sends a request for `url` to.
+    static func relayURL(for url: String) -> URL {
+        URL(string: "gbk-rest://relay" + relayTarget(url))!
     }
 
     /// One relayed exchange: what reached the stub, and what the relay returned.
@@ -296,7 +302,7 @@ struct RestRelayHandleTests {
 
     /// Relays one request through a stubbed session and reports both sides.
     private func relay(
-        target: String = "/proxy/wp/v2/posts?_locale=user",
+        target: String = RestRelayHandleTests.relayTarget("https://example.com/wp-json/wp/v2/posts?_locale=user"),
         method: String = "GET",
         headers: [String: String] = [:],
         body: Data? = nil,
@@ -354,7 +360,7 @@ struct RestRelaySchemeHandlerTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(failure: URLError(.notConnectedToInternet)))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))))
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
 
         handler.start(task)
         await task.waitUntilAnswered()
@@ -369,7 +375,7 @@ struct RestRelaySchemeHandlerTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init())
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: try #require(URL(string: "gbk-rest://relay/proxy/../wp-admin/"))))
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/../wp-admin/")))
 
         handler.start(task)
         await task.waitUntilAnswered()
@@ -385,7 +391,7 @@ struct RestRelaySchemeHandlerTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(body: Data("[]".utf8)))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))))
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
 
         handler.start(task)
         handler.stop(task)
