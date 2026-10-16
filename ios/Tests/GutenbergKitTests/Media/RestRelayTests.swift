@@ -2,10 +2,11 @@ import Foundation
 import Testing
 @testable import GutenbergKit
 
-/// Covers how a relayed request's path becomes an upstream URL. This is the
-/// relay's containment boundary: the web view supplies a path, never a URL, and
-/// nothing it can put in that path may address anything outside the site API
-/// root.
+/// Covers how a relayed request becomes an upstream URL. On the site API route
+/// this is the relay's containment boundary: the web view supplies a path, never
+/// a URL, and nothing it can put in that path may address anything outside the
+/// site API root. The forward route takes a URL, and never carries the site
+/// credential.
 @Suite("RestRelay upstream URL")
 struct RestRelayTests {
 
@@ -162,7 +163,59 @@ struct RestRelayTests {
         #expect(relay.upstreamURL(for: request("/proxying/wp/v2/posts")) == nil)
     }
 
+    // MARK: - Other hosts
+
+    @Test("reads the URL a forwarded request is for")
+    func readsForwardedURL() {
+        let relay = makeRelay(apiRoot: Self.prettyRoot)
+        #expect(
+            relay.forwardedURL(for: request("/forward?url=https%3A%2F%2Fexample.org%2Fapi%3Fq%3Da%2520b%26x%3D1"))?.absoluteString
+                == "https://example.org/api?q=a%20b&x=1"
+        )
+        #expect(
+            relay.forwardedURL(for: request("/forward?url=http%3A%2F%2F127.0.0.1%3A8888%2Fwp-json%2F"))?.absoluteString
+                == "http://127.0.0.1:8888/wp-json/"
+        )
+    }
+
+    @Test("forwards only to http and https URLs")
+    func forwardsOnlyToWebURLs() {
+        let relay = makeRelay(apiRoot: Self.prettyRoot)
+        for target in [
+            "/forward?url=file%3A%2F%2F%2Fetc%2Fhosts",
+            "/forward?url=gbk-upload%3A%2F%2Fupload%2Fsessions",
+            "/forward?url=https%3Ano-host",
+            "/forward?url=%2Frelative%2Fpath",
+            "/forward",
+            "/forward?other=https%3A%2F%2Fexample.org%2F",
+        ] {
+            #expect(relay.forwardedURL(for: request(target)) == nil, "should refuse \(target)")
+        }
+    }
+
+    @Test("a forwarded request is not a site API request, and the reverse")
+    func routesDoNotOverlap() {
+        let relay = makeRelay(apiRoot: Self.prettyRoot)
+        #expect(relay.upstreamURL(for: request("/forward?url=https%3A%2F%2Fexample.org%2F")) == nil)
+        #expect(relay.forwardedURL(for: request("/proxy/wp/v2/posts?url=https%3A%2F%2Fexample.org%2F")) == nil)
+        #expect(relay.forwardedURL(for: request("/forwarding?url=https%3A%2F%2Fexample.org%2F")) == nil)
+    }
+
     // MARK: - Redirects
+
+    @Test("follows any redirect for a request to another host")
+    func followsEveryRedirectWithoutPrefix() {
+        // A request for another host carries no site credential to keep in.
+        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil)
+        for target in [
+            "https://elsewhere.example/wp-json/wp/v2/posts",
+            "https://example.com/wp-login.php",
+            "http://example.com/wp-json/wp/v2/posts",
+        ] {
+            #expect(decide(redirectGuard, target: target)?.url?.absoluteString == target, "should follow \(target)")
+        }
+        #expect(redirectGuard.refusedTarget == nil)
+    }
 
     @Test("follows a redirect that stays under the API root")
     func followsContainedRedirect() {

@@ -95,6 +95,11 @@ public struct GBKitGlobal: Sendable, Codable {
         /// slash-terminated.
         let baseURL: String
 
+        /// The URL a request for any other host is sent to, with that request's URL in
+        /// the `url` query parameter, or `nil` when those requests go straight from the
+        /// page.
+        let forwardURL: String?
+
         /// Whether native code reports each relayed request to the host itself. The
         /// page then leaves those requests out of its own network log, which would
         /// otherwise record each of them twice.
@@ -117,6 +122,9 @@ public struct GBKitGlobal: Sendable, Codable {
     ///     editor can't upload natively.
     ///   - restRelayBaseURL: The URL the page relays the site's REST API requests
     ///     through, or nil when it sends them itself.
+    ///   - restRelayForwardURL: The URL the page relays requests for other hosts
+    ///     through, or nil when it sends them itself. Used only with a
+    ///     `restRelayBaseURL`.
     ///   - restRelayReportsRequests: Whether native code reports each relayed
     ///     request to the host's ``EditorHTTPClientDelegate``.
     public init(
@@ -124,6 +132,7 @@ public struct GBKitGlobal: Sendable, Codable {
         dependencies: EditorDependencies,
         nativeUploadScheme: String? = nil,
         restRelayBaseURL: String? = nil,
+        restRelayForwardURL: String? = nil,
         restRelayReportsRequests: Bool = false
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
@@ -149,7 +158,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.enableNetworkLogging = configuration.enableNetworkLogging
         self.nativeUploadScheme = nativeUploadScheme
         self.restRelay = restRelayBaseURL.map {
-            RestRelayLocation(baseURL: $0, reportsRequests: restRelayReportsRequests)
+            RestRelayLocation(baseURL: $0, forwardURL: restRelayForwardURL, reportsRequests: restRelayReportsRequests)
         }
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()

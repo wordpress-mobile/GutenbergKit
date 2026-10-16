@@ -135,8 +135,8 @@ byte for byte.
 
 `gbk-upload:` and the REST relay's `gbk-rest:` don't check who is calling. A scheme
 handler serves every frame in the editor's web view, not only the editor page, and native
-code adds the site credential to what it sends on. So any frame can act as the user through
-them.
+code adds the site credential to what it sends to the site's REST API. So any frame can act
+as the user through them.
 
 The editor's frames fall into two groups:
 
@@ -170,6 +170,13 @@ the same reach in wp-admin.
 
 Neither check is in place. It was left out of the scheme transports because it would close
 the second group only, while the first stays as it was before the schemes.
+
+The relay also forwards requests for other hosts (`gbk-rest://relay/forward?url=…`), so a
+plugin's call to its own service works under Lockdown Mode. That gives every frame a
+response from any `http` or `https` URL without CORS, a local network address included.
+The site credential never goes with it: native code removes it if the page sent it, and
+sends a caller's own `Authorization` as it is. Without Lockdown Mode the editor page can
+already read those responses; the second group couldn't.
 
 ## Background and timeouts
 

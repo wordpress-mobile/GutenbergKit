@@ -559,6 +559,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             dependencies: dependencies,
             nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
             restRelayBaseURL: RestRelaySchemeHandler.baseURL,
+            restRelayForwardURL: RestRelaySchemeHandler.forwardURL,
             restRelayReportsRequests: relayObserver != nil
         )
         return WKUserScript(

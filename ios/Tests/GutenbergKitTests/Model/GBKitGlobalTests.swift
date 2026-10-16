@@ -69,6 +69,21 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(silent.restRelay?.reportsRequests == false)
   }
 
+  @Test("tells the page where to relay requests for other hosts")
+  func mapsRelayForwardURL() throws {
+    let forwarding = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayBaseURL: "gbk-rest://relay/proxy/", restRelayForwardURL: "gbk-rest://relay/forward"
+    )
+    let siteOnly = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayBaseURL: "gbk-rest://relay/proxy/"
+    )
+    #expect(forwarding.restRelay?.forwardURL == "gbk-rest://relay/forward")
+    #expect(siteOnly.restRelay?.forwardURL == nil)
+    #expect(try forwarding.toString().contains(#""forwardURL":"gbk-rest:\/\/relay\/forward""#))
+  }
+
   @Test("maps themeStyles from configuration")
   func mapsThemeStyles() throws {
     let withThemeStyles = makeConfiguration(shouldUseThemeStyles: true)
