@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { setUpEditorEnvironment } from './editor-environment';
+import {
+	setUpEditorEnvironment,
+	installFetchLayers,
+} from './editor-environment';
 import {
 	awaitGBKitGlobal,
 	getGBKit,
@@ -17,9 +20,12 @@ import { configureApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
 import { initializeFetchInterceptor } from './fetch-interceptor.js';
 import { injectEditorStyles } from './editor-styles.js';
+import { installFetchWrappers } from './fetch-chain.js';
 
 vi.mock( './bridge.js' );
 vi.mock( './fetch-interceptor.js' );
+vi.mock( './fetch-chain.js' );
+vi.mock( './fetch-relay.js' );
 vi.mock( './logger.js' );
 vi.mock( './editor-styles.js' );
 vi.mock( './ajax.js' );
@@ -287,5 +293,43 @@ describe( 'setUpEditorEnvironment', () => {
 			allowedBlockTypes: undefined,
 			pluginLoadFailed: true,
 		} );
+	} );
+} );
+
+describe( 'installFetchLayers', () => {
+	let order;
+
+	beforeEach( () => {
+		vi.clearAllMocks();
+		order = [];
+		installFetchWrappers.mockImplementation( () => order.push( 'relay' ) );
+		initializeFetchInterceptor.mockImplementation( () =>
+			order.push( 'network log' )
+		);
+	} );
+
+	// Each layer wraps whatever `fetch` it finds, so the one installed last is
+	// outermost and sees a request first.
+	it( 'puts the network log outside the relay, so it records the request the editor made', () => {
+		getGBKit.mockReturnValue( {
+			restRelay: { baseURL: 'gbk-rest://relay/proxy/' },
+		} );
+
+		installFetchLayers();
+
+		expect( order ).toEqual( [ 'relay', 'network log' ] );
+	} );
+
+	it( 'puts the network log inside the relay when native code reports relayed requests', () => {
+		getGBKit.mockReturnValue( {
+			restRelay: {
+				baseURL: 'gbk-rest://relay/proxy/',
+				reportsRequests: true,
+			},
+		} );
+
+		installFetchLayers();
+
+		expect( order ).toEqual( [ 'network log', 'relay' ] );
 	} );
 } );

@@ -9,6 +9,8 @@ import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { initializeFetchInterceptor } from './fetch-interceptor';
+import { installFetchWrappers } from './fetch-chain';
+import { createRelayFetchWrapper } from './fetch-relay';
 import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
@@ -27,7 +29,7 @@ export async function setUpEditorEnvironment() {
 		setBodyClasses();
 		await awaitGBKitGlobal();
 		setLogLevelFromGBKit();
-		initializeFetchInterceptor();
+		installFetchLayers();
 		const isRTL = await configureLocale();
 		injectEditorStyles( isRTL );
 		await initializeWordPressGlobals();
@@ -69,6 +71,30 @@ function setLogLevelFromGBKit() {
 	const { logLevel } = getGBKit();
 	if ( logLevel ) {
 		setLogLevel( logLevel );
+	}
+}
+
+/**
+ * Wraps `fetch` with the REST relay and the network log, in the order that logs
+ * each request once.
+ *
+ * Normally the relay goes in first, so the network log wraps it and records the
+ * request the editor made rather than the relay's rewrite of it. When native
+ * code reports each relayed request to the host itself, the log goes in first
+ * instead: the relay then wraps it, and the log sees a relayed request only as
+ * the `gbk-rest:` URL it skips, so the host isn't told about it twice.
+ *
+ * Exported for testing only.
+ *
+ * @return {void}
+ */
+export function installFetchLayers() {
+	if ( getGBKit().restRelay?.reportsRequests ) {
+		initializeFetchInterceptor();
+		installFetchWrappers( [ createRelayFetchWrapper() ] );
+	} else {
+		installFetchWrappers( [ createRelayFetchWrapper() ] );
+		initializeFetchInterceptor();
 	}
 }
 

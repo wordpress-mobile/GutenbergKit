@@ -80,11 +80,26 @@ public struct GBKitGlobal: Sendable, Codable {
     /// Whether to log network requests in the JavaScript console.
     let enableNetworkLogging: Bool
 
-    /// Port the local HTTP server is listening on for native media uploads.
-    let nativeUploadPort: Int?
+    /// The URL scheme the editor's page sends media uploads to native code over, or
+    /// `nil` when native code can't take them and the page sends them itself, through
+    /// the REST relay.
+    let nativeUploadScheme: String?
 
-    /// Per-session auth token for requests to the local upload server.
-    let nativeUploadToken: String?
+    /// Where the page sends the site's REST API requests for native code to relay, or
+    /// `nil` when they go straight from the page to the site.
+    let restRelay: RestRelayLocation?
+
+    /// Where the native REST relay is.
+    struct RestRelayLocation: Codable, Sendable {
+        /// The URL a path below the site's REST API root is appended to,
+        /// slash-terminated.
+        let baseURL: String
+
+        /// Whether native code reports each relayed request to the host itself. The
+        /// page then leaves those requests out of its own network log, which would
+        /// otherwise record each of them twice.
+        let reportsRequests: Bool
+    }
 
     let editorSettings: JSON?
 
@@ -98,13 +113,18 @@ public struct GBKitGlobal: Sendable, Codable {
     /// - Parameters:
     ///   - configuration: The editor configuration.
     ///   - dependencies: The pre-fetched editor dependencies (unused but reserved for future use).
-    ///   - nativeUploadPort: Port of the local upload server, or nil if not running.
-    ///   - nativeUploadToken: Auth token for the local upload server, or nil if not running.
+    ///   - nativeUploadScheme: The scheme native media uploads use, or nil when the
+    ///     editor can't upload natively.
+    ///   - restRelayBaseURL: The URL the page relays the site's REST API requests
+    ///     through, or nil when it sends them itself.
+    ///   - restRelayReportsRequests: Whether native code reports each relayed
+    ///     request to the host's ``EditorHTTPClientDelegate``.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
-        nativeUploadPort: Int? = nil,
-        nativeUploadToken: String? = nil
+        nativeUploadScheme: String? = nil,
+        restRelayBaseURL: String? = nil,
+        restRelayReportsRequests: Bool = false
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -127,8 +147,10 @@ public struct GBKitGlobal: Sendable, Codable {
         )
         self.logLevel = configuration.logLevel.rawValue
         self.enableNetworkLogging = configuration.enableNetworkLogging
-        self.nativeUploadPort = nativeUploadPort
-        self.nativeUploadToken = nativeUploadToken
+        self.nativeUploadScheme = nativeUploadScheme
+        self.restRelay = restRelayBaseURL.map {
+            RestRelayLocation(baseURL: $0, reportsRequests: restRelayReportsRequests)
+        }
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)

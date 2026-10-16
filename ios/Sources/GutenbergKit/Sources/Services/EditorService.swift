@@ -24,6 +24,9 @@ public actor EditorService {
     private var progress: EditorProgress?
     private var progressCallback: EditorProgressCallback?
 
+    /// How much of the asset bundle's weight has been counted toward `progress`.
+    private var assetBundleProgress = 0
+
     enum DependencyWeights: CaseIterable {
         case editorSettings
         case assetBundle
@@ -55,7 +58,10 @@ public actor EditorService {
     ///   - cachePolicy: The policy that determines when cached responses are considered valid.
     ///     Use `.ignore` to always fetch fresh data, `.maxAge(_:)` to expire entries after
     ///     a time interval, or `.always` (the default) to use cached data regardless of age.
-    ///     This policy applies to both API response caching and asset manifest caching.
+    ///     This policy applies to both API responses and plugin and theme assets. For assets, it
+    ///     decides when to check the site's asset manifest again. If the manifest hasn't changed,
+    ///     the bundle on disk is kept. `.ignore` is the exception: it downloads every asset again,
+    ///     whether or not the manifest has changed.
     public init(
         configuration: EditorConfiguration,
         httpClient: (any EditorHTTPClientProtocol)? = nil,
@@ -126,6 +132,9 @@ public actor EditorService {
     /// This method fetches editor settings, plugin assets, and preload data concurrently,
     /// caching results for future use. If offline mode is enabled, returns empty dependencies.
     ///
+    /// A failed asset download doesn't make this throw. The asset bundle is returned without that
+    /// asset, or with a copy of it from an earlier bundle.
+    ///
     /// - Parameter progress: A callback invoked with progress updates during loading.
     /// - Returns: The complete set of dependencies needed to initialize the editor.
     /// - Throws: An error if any required resource fails to download.
@@ -142,6 +151,7 @@ public actor EditorService {
 
         self.progress = EditorProgress(completed: 1, total: 100)
         self.progressCallback = progress
+        self.assetBundleProgress = 0
         defer {
             self.progressCallback = nil
             self.progress = nil
@@ -166,6 +176,7 @@ public actor EditorService {
     /// Clear unused on-disk resources associated with this service's configuration.
     ///
     /// Calling this method will preserve the most recent cache entries, ensuring that the editor still loads quickly without continuing to use unnecessary disk space.
+    /// It also keeps every asset bundle handed out to the app since it launched, because an open editor, or dependencies the host is holding, may still be reading it.
     /// Use this method to regularly clean up unused editor assets.
     public func cleanup() async throws {
         try await self.assetLibrary.cleanup()
@@ -179,14 +190,33 @@ public actor EditorService {
         try self.restRepository.purge()
     }
 
-    private func incrementProgress(for weight: DependencyWeights, fraction: Double = 1.0) async {
-        precondition(
-            self.progress != nil,
-            "Progress has not been initialized. This is a bug in the EditorService. Please file an issue."
-        )
+    private func incrementProgress(for weight: DependencyWeights) async {
+        await self.incrementProgress(by: Int(weight.rawValue))
+    }
+
+    /// Adds an asset bundle download's progress to the total. A download reports its progress so far,
+    /// not the change since its last report, so only the increase is added.
+    private func incrementProgress(forAssetBundleDownload download: EditorProgress) async {
+        let assetBundleProgress = Int(DependencyWeights.assetBundle.rawValue * download.fractionCompleted)
+        let increase = assetBundleProgress - self.assetBundleProgress
+        guard increase > 0 else { return }
+
+        self.assetBundleProgress = assetBundleProgress
+        await self.incrementProgress(by: increase)
+    }
+
+    private func incrementProgress(by amount: Int) async {
+        // Progress can arrive after the `prepare()` it belongs to has returned and cleared it. A
+        // bundle build shared with another service may already be calling in when this service
+        // gives up on it, and an overlapping `prepare()` on this service is cleared by whichever
+        // finishes first. There is nothing left to report to, so drop it.
+        guard let current = self.progress else { return }
+
+        // Progress starts at 1, and the weights add up to 100, or 110 with a post, so the sum can
+        // pass the total.
         let progress = EditorProgress(
-            completed: self.progress!.completed + Int(weight.rawValue * fraction),
-            total: self.progress!.total)
+            completed: min(current.completed + amount, current.total),
+            total: current.total)
         self.progress = progress
         await self.progressCallback?(progress)
     }
@@ -196,10 +226,12 @@ public actor EditorService {
         async let assetBundle = try self.prepareAssetBundle()
         async let preloadList = try preparePreloadList()
 
-        // Automatically clean up old asset bundles
-        try await onceEvery(.seconds(86_400)) {
-            try await self.cleanup()
-        }
+        // Automatically clean up old asset bundles, once a day for each site
+        try await onceEvery(
+            .seconds(86_400),
+            { try await self.cleanup() },
+            handle: "asset-bundle-cleanup-\(self.configuration.siteId)"
+        )
 
         return try await EditorDependencies(
             editorSettings: settings,
@@ -232,13 +264,38 @@ public actor EditorService {
     }
 
     private func prepareAssetBundle() async throws -> EditorAssetBundle {
-        if let latestAssetBundle = try await self.assetLibrary.readAssetBundles().first {
+        // The latest bundle on disk, if it's recent enough for the cache policy. It's read once, before
+        // any request, so the fallback below returns the same bundle this decision was based on.
+        let trusted = try await self.assetLibrary.readLatestAssetBundleWithinPolicy()
+
+        // A trusted bundle with every asset is used as it is. If it's missing assets, check the
+        // manifest and retry them.
+        if let trusted, !trusted.isMissingAssets, let bundle = await self.assetLibrary.handOut(trusted.bundle) {
             await self.incrementProgress(for: .assetBundle)
-            return latestAssetBundle
+            return bundle
         }
 
-        return try await self.assetLibrary.downloadAssetBundle { progress in
-            await self.incrementProgress(for: .assetBundle, fraction: progress.fractionCompleted)
+        do {
+            let assetBundle = try await self.assetLibrary.downloadAssetBundle { progress in
+                await self.incrementProgress(forAssetBundleDownload: progress)
+            }
+
+            // A caller that joined a build already in progress can miss the build's last report
+            await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
+            return assetBundle
+        } catch {
+            try Task.checkCancellation()
+
+            // The check threw: the site couldn't be reached, say. The cache policy didn't require a
+            // check, so return the trusted bundle without its missing assets. The next prepare retries
+            // them.
+            guard let trusted, let bundle = await self.assetLibrary.handOut(trusted.bundle) else {
+                throw error
+            }
+
+            log(.warn, "Failed to try the asset bundle's missing assets again: \(error.localizedDescription)")
+            await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
+            return bundle
         }
     }
 

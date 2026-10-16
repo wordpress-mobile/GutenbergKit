@@ -1,6 +1,28 @@
 import Foundation
+import Testing
 
 @testable import GutenbergKit
+
+/// How long a test waits for something that is supposed to happen before giving up.
+///
+/// Generous, because a wait that succeeds returns as soon as it can and only one that is going to
+/// fail runs this long. A run's first results take half a minute to arrive on a busy CI machine,
+/// which a shorter wait reads as a failure.
+let patientTimeout: Duration = .seconds(60)
+
+/// Polls `condition` until it holds, failing the test at the caller's line if it hasn't within
+/// `timeout`.
+func waitUntil(
+    timeout: Duration = patientTimeout,
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try #require(condition(), "timed out waiting", sourceLocation: sourceLocation)
+}
 
 func jsonResource(named name: String) throws -> Data {
     let url = Bundle.module.url(forResource: name, withExtension: "json")!
@@ -9,6 +31,45 @@ func jsonResource(named name: String) throws -> Data {
 
 func jsonResource(named name: String) throws -> String {
     String(data: try jsonResource(named: name), encoding: .utf8)!
+}
+
+/// Puts a bundle for each of `manifests` in `storageRoot`, as an earlier launch would have left them.
+/// Each bundle is complete, the last manifest's bundle is the latest, and none has been handed out by
+/// this process, so `cleanup()` is free to remove all but the latest.
+@discardableResult
+func plantBundles(
+    forManifests manifests: [String],
+    in storageRoot: URL,
+    configuration: EditorConfiguration = EditorAssetLibraryTests.testConfiguration
+) async throws -> [EditorAssetBundle] {
+    let scratchRoot = URL.randomTemporaryDirectory
+    let client = EditorAssetLibraryMockHTTPClient()
+    let library = EditorAssetLibrary(configuration: configuration, httpClient: client, storageRoot: scratchRoot)
+    try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
+
+    var planted: [EditorAssetBundle] = []
+    for manifest in manifests {
+        client.urlResponseHandler = { url in
+            url.path.contains("editor-assets") ? Data(manifest.utf8) : Data("mock content".utf8)
+        }
+        let bundle = try await library.downloadAssetBundle()
+        let destination = storageRoot.appending(path: bundle.id)
+        try FileManager.default.moveItem(at: scratchRoot.appending(path: bundle.id), to: destination)
+        planted.append(try EditorAssetBundle(url: destination.appending(path: "manifest.json")))
+    }
+    return planted
+}
+
+extension Data {
+    /// Whether this holds the same bytes as `other`, for an `#expect`.
+    ///
+    /// Not `==` in the `#expect` itself: Swift Testing describes a failed `==` between two
+    /// collections by working out the difference between them. For megabytes of bytes that takes
+    /// most of an hour on the thread the test runs on — and on the main actor, every other
+    /// main-actor test in the run waits behind it.
+    func hasSameBytes(as other: Data) -> Bool {
+        self == other
+    }
 }
 
 protocol MakesTestFixtures {
