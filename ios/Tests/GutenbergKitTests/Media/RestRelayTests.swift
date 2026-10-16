@@ -217,6 +217,49 @@ struct RestRelayTests {
         #expect(redirectGuard.refusedTarget == nil)
     }
 
+    @Test("keeps a caller's Authorization on a redirect to the same origin")
+    func keepsAuthorizationWithinOrigin() {
+        // `URLSession` drops it on every redirect. WebKit's `fetch` keeps it
+        // while the scheme, host, and port stay the same.
+        for target in [
+            "https://api.example/v1/query/",
+            "https://API.example:443/v2/other",
+        ] {
+            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+            let followed = decide(redirectGuard, from: "https://api.example/v1/query", target: target)
+            #expect(followed?.value(forHTTPHeaderField: "Authorization") == "Bearer jwt", "should keep it for \(target)")
+        }
+    }
+
+    @Test("drops a caller's Authorization on a redirect to another origin")
+    func dropsAuthorizationAcrossOrigins() {
+        // Another host, port, or scheme is another origin, and `fetch` drops
+        // the header for each. The redirect itself is still followed.
+        for target in [
+            "https://cdn.example/v1/query",
+            "https://www.api.example/v1/query",
+            "https://api.example:8443/v1/query",
+            "http://api.example/v1/query",
+        ] {
+            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+            let followed = decide(redirectGuard, from: "https://api.example/v1/query", target: target)
+            #expect(followed?.url?.absoluteString == target, "should follow \(target)")
+            #expect(followed?.value(forHTTPHeaderField: "Authorization") == nil, "should drop it for \(target)")
+        }
+    }
+
+    @Test("doesn't put a caller's Authorization back once a redirect has left its origin")
+    func keepsAuthorizationOffAfterLeavingOrigin() {
+        // WebKit's `fetch` reaches the original host without it after a
+        // redirect away and another one back.
+        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+        _ = decide(redirectGuard, from: "https://api.example/start", target: "https://cdn.example/bounce")
+        let followed = decide(redirectGuard, from: "https://cdn.example/bounce", target: "https://api.example/end")
+
+        #expect(followed?.url?.absoluteString == "https://api.example/end")
+        #expect(followed?.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
     @Test("follows a redirect that stays under the API root")
     func followsContainedRedirect() {
         let followed = redirectDecision(to: "https://example.com/wp-json/wp/v2/posts/1")
@@ -349,15 +392,21 @@ struct RestRelayTests {
         return session.dataTask(with: URL(string: "https://example.com/")!)
     }()
 
-    /// Asks `redirectGuard` whether to follow a redirect to `target`.
-    private func decide(_ redirectGuard: RestRelay.RedirectGuard, target: String) -> URLRequest? {
+    /// Asks `redirectGuard` whether to follow a redirect from `source` to `target`.
+    ///
+    /// The new request has no `Authorization`, as `URLSession` hands it over.
+    private func decide(
+        _ redirectGuard: RestRelay.RedirectGuard,
+        from source: String = "https://example.com/wp-json/wp/v2/posts",
+        target: String
+    ) -> URLRequest? {
         let url = URL(string: target)!
         var followed: URLRequest?
         redirectGuard.urlSession(
             .shared,
             task: Self.unusedTask,
             willPerformHTTPRedirection: HTTPURLResponse(
-                url: URL(string: "https://example.com/wp-json/wp/v2/posts")!,
+                url: URL(string: source)!,
                 statusCode: 301,
                 httpVersion: "HTTP/1.1",
                 headerFields: ["Location": target]

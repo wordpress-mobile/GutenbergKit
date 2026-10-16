@@ -191,12 +191,18 @@ struct RestRelay: Sendable {
         let reporter = observer.map(NetworkTaskReporter.init(reportingTo:))
         do {
             // The redirect guard is a per-task delegate: `URLSession` follows
-            // 3xx responses on its own, which would carry the site credential
+            // 3xx responses on its own, which would carry a site API request
             // to whatever host the `Location` header names and relay that
             // response back. See ``RedirectGuard``. A request for another host
-            // carries no site credential, so it follows redirects as `fetch`
-            // would.
-            let redirectGuard = RedirectGuard(allowedPrefix: isSiteAPI ? apiRoot : nil, reporter: reporter)
+            // follows every redirect, and keeps its `Authorization` on them the
+            // way `fetch` would.
+            let redirectGuard = isSiteAPI
+                ? RedirectGuard(allowedPrefix: apiRoot, reporter: reporter)
+                : RedirectGuard(
+                    allowedPrefix: nil,
+                    authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization"),
+                    reporter: reporter
+                )
             let (body, response) = try await session.data(for: upstreamRequest, delegate: redirectGuard)
             reporter?.complete(with: .bytes(body), error: nil)
 
@@ -327,16 +333,16 @@ struct RestRelay: Sendable {
     ///
     /// `URLSession` follows 3xx responses automatically, so without this the
     /// containment check would only ever apply to the first hop: a site that
-    /// redirected `/wp-json/wp/v2/posts` elsewhere would have the request —
-    /// carrying the site credential — followed to that host, and its response
-    /// relayed back to the editor. Refusing hands the 3xx itself back instead.
+    /// redirected `/wp-json/wp/v2/posts` elsewhere would have the request
+    /// followed to that host, and its response relayed back to the editor.
+    /// Refusing hands the 3xx itself back instead.
     ///
     /// The comparison is a prefix match on the whole URL, read through the
     /// host spellings `relayUpstreamPath` tolerates — `www.` versus bare, the
     /// loopback names — and an `http`→`https` upgrade. So another path on the
     /// same site (`/wp-login.php`), another port, another host, and a scheme
-    /// downgrade are refused: the site credential follows the request only to
-    /// the API it was configured for. The cost is that a legitimate
+    /// downgrade are refused: a site API request reaches only the API it was
+    /// configured for. The cost is that a legitimate
     /// permalink-structure redirect is refused too, which the response says
     /// specifically enough to diagnose.
     ///
@@ -353,8 +359,14 @@ struct RestRelay: Sendable {
     /// Without an allowed prefix it follows every redirect. That is the guard for a
     /// request to another host, which carries no site credential.
     ///
-    /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal is
-    /// recorded under a lock.
+    /// `URLSession` drops `Authorization` on every redirect it follows, even one to
+    /// the same server. Given the caller's `Authorization`, the guard puts it back
+    /// the way WebKit's `fetch` does: on a redirect to the same scheme, host, and
+    /// port. Once a redirect goes anywhere else the header stays off, even if a
+    /// later redirect comes back.
+    ///
+    /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal and
+    /// the caller's `Authorization` are kept under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         /// The API root, in the form ``normalized(_:)`` gives a target, or `nil`
         /// to follow every redirect.
@@ -369,13 +381,17 @@ struct RestRelay: Sendable {
         private let lock = NSLock()
         private var _refusedTarget: String?
 
+        /// The caller's `Authorization`, until a redirect leaves its origin.
+        private var _authorization: String?
+
         /// The redirect target that was refused, or `nil` if none was.
         var refusedTarget: String? {
             lock.withLock { _refusedTarget }
         }
 
-        init(allowedPrefix: String?, reporter: NetworkTaskReporter? = nil) {
+        init(allowedPrefix: String?, authorization: String? = nil, reporter: NetworkTaskReporter? = nil) {
             self.reporter = reporter
+            self._authorization = authorization
             let root = allowedPrefix.map { Self.normalized($0) ?? $0 }
             self.allowedPrefix = root
             let insecureScheme = "http://"
@@ -395,6 +411,10 @@ struct RestRelay: Sendable {
                 lock.withLock { _refusedTarget = request.url?.absoluteString ?? "an unreadable URL" }
                 completionHandler(nil)
                 return
+            }
+            var request = request
+            if let authorization = authorization(redirectingFrom: response.url, to: url) {
+                request.setValue(authorization, forHTTPHeaderField: "Authorization")
             }
             completionHandler(request)
         }
@@ -418,6 +438,30 @@ struct RestRelay: Sendable {
             }
             guard let upgradedPrefix else { return false }
             return target.hasPrefix(upgradedPrefix)
+        }
+
+        /// The caller's `Authorization` to send on a redirect from `source` to
+        /// `target`, or `nil` once a redirect has left the original origin.
+        private func authorization(redirectingFrom source: URL?, to target: URL) -> String? {
+            lock.withLock {
+                let sameOrigin = Self.origin(of: source).map { $0 == Self.origin(of: target) } ?? false
+                if !sameOrigin {
+                    _authorization = nil
+                }
+                return _authorization
+            }
+        }
+
+        /// `url`'s scheme, host, and port, with a default port filled in. `nil` for a
+        /// URL without a host.
+        private static func origin(of url: URL?) -> String? {
+            guard let url,
+                  let scheme = url.scheme?.lowercased(),
+                  let host = url.host()?.lowercased(),
+                  let port = url.port ?? defaultPort(for: scheme) else {
+                return nil
+            }
+            return "\(scheme)://\(host):\(port)"
         }
 
         /// `url` with its host in the form its aliases share and a default
