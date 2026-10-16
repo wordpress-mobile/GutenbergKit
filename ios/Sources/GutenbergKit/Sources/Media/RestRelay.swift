@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Relays the editor's REST API requests through the native networking stack.
+/// Relays the editor's requests through the native networking stack.
 ///
 /// ## Why this exists
 ///
@@ -13,10 +13,18 @@ import OSLog
 /// empty `Access-Control-Allow-Origin` and WebKit rejects every response.
 ///
 /// The relay sidesteps the problem: the page fetches a URL scheme its own web
-/// view serves (``RestRelaySchemeHandler``), and this forwards the request to
-/// the site's REST API with the configured authorization header, responding
-/// with CORS headers we control. Every request takes this path, Lockdown Mode
-/// or not, so there is one path to keep working.
+/// view serves (``RestRelaySchemeHandler``), and this sends the request on,
+/// responding with CORS headers we control. Every request takes this path,
+/// Lockdown Mode or not, so there is one path to keep working.
+///
+/// There are two routes:
+///
+/// - ``route`` (`/proxy/<path>`) is for the site's REST API. The path is
+///   resolved against the configured API root, and the site credential is
+///   added when the caller sent no `Authorization` of its own.
+/// - ``forwardRoute`` (`/forward?url=<url>`) is for every other host — a
+///   plugin calling its own service, for example. It never carries the site
+///   credential.
 ///
 /// ## Security
 ///
@@ -25,25 +33,36 @@ import OSLog
 ///   and the relay attaches the site credential to whatever they send. Why
 ///   that is left as it is: "Who can use the schemes" in
 ///   `docs/code/media-uploads.md`.
-/// - The caller supplies a **path**, not a URL: everything after `/proxy/` is
-///   resolved natively against the configured site API root, so the relay
-///   cannot be pointed at another host by construction rather than by string
-///   matching. The resolved URL is re-checked against the root, and redirects
-///   away from it are refused.
+/// - On ``route`` the caller supplies a **path**, not a URL: everything after
+///   `/proxy/` is resolved natively against the configured site API root, so
+///   a request that may carry the site credential cannot be pointed at another
+///   host by construction rather than by string matching. The resolved URL is
+///   re-checked against the root, and redirects away from it are refused.
 /// - Which route *within* the site is reached is the caller's to choose. The
 ///   query is forwarded as-is, and WordPress registers `rest_route` as a public
 ///   query variable that `WP::parse_request()` prefers over the route the path
 ///   names, so a caller-supplied one wins. There is no boundary here to
 ///   defend: every route reachable that way is one the editor may request
 ///   through the relay directly.
-/// - The upstream `Authorization` header is injected natively from the editor
-///   configuration; any client-supplied value is discarded.
+/// - A caller's own `Authorization` is sent as it is, on either route. It is
+///   the caller's credential, to send where it likes — Jetpack AI signs its
+///   requests to WordPress.com with a token of its own. The site credential is
+///   the relay's to guard: see ``authorization(sentByCaller:toSiteAPI:)``.
+/// - ``forwardRoute`` reaches any `http` or `https` URL, so any frame in the
+///   web view can read another host's response without CORS, a local network
+///   address included. Without Lockdown Mode the editor page can do that
+///   anyway; a sandboxed frame couldn't before.
 struct RestRelay: Sendable {
 
-    /// The route the relay answers. Everything after it is the upstream path,
-    /// relative to the site API root — `/proxy/wp/v2/posts?…` relays to
+    /// The route for the site's REST API. Everything after it is the upstream
+    /// path, relative to the site API root — `/proxy/wp/v2/posts?…` relays to
     /// `<site API root>wp/v2/posts?…`.
     static let route = "/proxy"
+
+    /// The route for any other host. The `url` query parameter is the URL to
+    /// send the request to — `/forward?url=https%3A%2F%2Fexample.org%2Fapi`
+    /// relays to `https://example.org/api`.
+    static let forwardRoute = "/forward"
 
     /// The site's API root, slash-terminated. Upstream paths are appended to
     /// it, and every resulting URL — including redirect targets — must still
@@ -129,10 +148,10 @@ struct RestRelay: Sendable {
         return root.hasSuffix("/") ? root : root + "/"
     }
 
-    /// Forwards a relayed request to the site's REST API and returns the
-    /// upstream response with permissive CORS headers.
+    /// Sends a relayed request on and returns the upstream response with
+    /// permissive CORS headers.
     ///
-    /// Throws when the site can't be reached — offline, DNS, TLS, a timeout —
+    /// Throws when the server can't be reached — offline, DNS, TLS, a timeout —
     /// so the scheme handler fails the page's `fetch` the way a network failure
     /// does without the relay. api-fetch turns that into `offline_error` or
     /// `fetch_error`, which Gutenberg's notices key off: a save while offline
@@ -147,23 +166,26 @@ struct RestRelay: Sendable {
     ///   string into an `ArrayBuffer` first (`bufferedBody` in `fetch-relay.js`).
     ///   The table of what was measured is in `docs/code/media-uploads.md`.
     func handle(_ request: URLRequest) async throws -> SchemeResponse {
-        guard let upstreamURL = request.url.flatMap(upstreamURL(for:)) else {
-            Logger.restRelay.error("Refusing to relay a request outside the site API root")
+        let siteAPIURL = request.url.flatMap(upstreamURL(for:))
+        guard let upstreamURL = siteAPIURL ?? request.url.flatMap(forwardedURL(for:)) else {
+            Logger.restRelay.error("Refusing to relay a request for neither the site API root nor an http(s) URL")
             return Self.errorResponse(
                 status: 403,
                 code: "relay_forbidden_path",
-                message: "The requested path is outside the site API root."
+                message: "The request names neither a path below the site API root nor an http or https URL."
             )
         }
+        let isSiteAPI = siteAPIURL != nil
 
         var upstreamRequest = URLRequest(url: upstreamURL)
         upstreamRequest.httpMethod = request.httpMethod
         for (name, value) in request.allHTTPHeaderFields ?? [:] where !Self.requestHeadersToStrip.contains(name.lowercased()) {
             upstreamRequest.setValue(value, forHTTPHeaderField: name)
         }
-        if !authHeader.isEmpty {
-            upstreamRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
-        }
+        upstreamRequest.setValue(
+            authorization(sentByCaller: request.value(forHTTPHeaderField: "Authorization"), toSiteAPI: isSiteAPI),
+            forHTTPHeaderField: "Authorization"
+        )
         upstreamRequest.httpBody = request.httpBody
 
         let reporter = observer.map(NetworkTaskReporter.init(reportingTo:))
@@ -171,8 +193,10 @@ struct RestRelay: Sendable {
             // The redirect guard is a per-task delegate: `URLSession` follows
             // 3xx responses on its own, which would carry the site credential
             // to whatever host the `Location` header names and relay that
-            // response back. See ``RedirectGuard``.
-            let redirectGuard = RedirectGuard(allowedPrefix: apiRoot, reporter: reporter)
+            // response back. See ``RedirectGuard``. A request for another host
+            // carries no site credential, so it follows redirects as `fetch`
+            // would.
+            let redirectGuard = RedirectGuard(allowedPrefix: isSiteAPI ? apiRoot : nil, reporter: reporter)
             let (body, response) = try await session.data(for: upstreamRequest, delegate: redirectGuard)
             reporter?.complete(with: .bytes(body), error: nil)
 
@@ -190,7 +214,7 @@ struct RestRelay: Sendable {
                 )
             }
             guard let response = response as? HTTPURLResponse else {
-                return Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The site did not answer over HTTP.")
+                return Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The server did not answer over HTTP.")
             }
             observer?.didPerformRequest(upstreamRequest, response: response, data: .bytes(body))
 
@@ -268,6 +292,37 @@ struct RestRelay: Sendable {
         }
     }
 
+    /// The URL a request on ``forwardRoute`` is for, or `nil` if its `url`
+    /// parameter isn't an `http` or `https` URL.
+    func forwardedURL(for relayURL: URL) -> URL? {
+        guard let components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false),
+              components.percentEncodedPath == Self.forwardRoute,
+              let value = components.queryItems?.first(where: { $0.name == "url" })?.value,
+              let url = URL(string: value),
+              ["http", "https"].contains(url.scheme?.lowercased()),
+              url.host() != nil else {
+            return nil
+        }
+        return url
+    }
+
+    // MARK: - Authorization
+
+    /// The `Authorization` header to send upstream, or `nil` for none.
+    ///
+    /// The caller's own header is sent as it is. The site credential is added
+    /// to a request for the site's REST API that has none, and removed from a
+    /// request for any other host. The page can put it there: api-fetch's
+    /// `tokenAuthMiddleware` adds it to every request it makes, whatever the
+    /// host.
+    func authorization(sentByCaller callerValue: String?, toSiteAPI: Bool) -> String? {
+        let siteCredential = authHeader.isEmpty ? nil : authHeader
+        if toSiteAPI {
+            return callerValue ?? siteCredential
+        }
+        return callerValue == siteCredential ? nil : callerValue
+    }
+
     /// Refuses redirects that leave the site API root.
     ///
     /// `URLSession` follows 3xx responses automatically, so without this the
@@ -295,11 +350,15 @@ struct RestRelay: Sendable {
     /// A `307` or `308` it follows has `URLSession` resend the body, which it can:
     /// a scheme request's body is `Data`, held in memory.
     ///
+    /// Without an allowed prefix it follows every redirect. That is the guard for a
+    /// request to another host, which carries no site credential.
+    ///
     /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal is
     /// recorded under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-        /// The API root, in the form ``normalized(_:)`` gives a target.
-        private let allowedPrefix: String
+        /// The API root, in the form ``normalized(_:)`` gives a target, or `nil`
+        /// to follow every redirect.
+        private let allowedPrefix: String?
 
         /// `allowedPrefix` under `https`, when the configured root is `http`.
         private let upgradedPrefix: String?
@@ -315,14 +374,14 @@ struct RestRelay: Sendable {
             lock.withLock { _refusedTarget }
         }
 
-        init(allowedPrefix: String, reporter: NetworkTaskReporter? = nil) {
+        init(allowedPrefix: String?, reporter: NetworkTaskReporter? = nil) {
             self.reporter = reporter
-            let root = Self.normalized(allowedPrefix) ?? allowedPrefix
+            let root = allowedPrefix.map { Self.normalized($0) ?? $0 }
             self.allowedPrefix = root
             let insecureScheme = "http://"
-            self.upgradedPrefix = root.hasPrefix(insecureScheme)
-                ? "https://" + root.dropFirst(insecureScheme.count)
-                : nil
+            self.upgradedPrefix = root.flatMap {
+                $0.hasPrefix(insecureScheme) ? "https://" + $0.dropFirst(insecureScheme.count) : nil
+            }
         }
 
         func urlSession(
@@ -349,8 +408,10 @@ struct RestRelay: Sendable {
         }
 
         /// Whether `target` is inside the API root, allowing only the host
-        /// spelling and a scheme upgrade to differ.
+        /// spelling and a scheme upgrade to differ. Always `true` without an
+        /// allowed prefix.
         private func contains(_ target: String) -> Bool {
+            guard let allowedPrefix else { return true }
             guard let target = Self.normalized(target) else { return false }
             if target.hasPrefix(allowedPrefix) {
                 return true
@@ -427,8 +488,8 @@ struct RestRelay: Sendable {
     /// `sec-fetch-*` describe the web view's fetch context and would leak the
     /// local page to the site (and WordPress rejects a `file://` origin — the
     /// exact problem the relay exists to solve); `cookie` is the page's, and
-    /// the relay carries the site credential itself; `authorization` is the
-    /// caller's, replaced by the natively held site credential.
+    /// the relay carries the site credential itself; `authorization` is set on
+    /// its own, by ``authorization(sentByCaller:toSiteAPI:)``.
     private static let requestHeadersToStrip: Set<String> = [
         "host", "connection", "content-length", "accept-encoding",
         "origin", "referer",

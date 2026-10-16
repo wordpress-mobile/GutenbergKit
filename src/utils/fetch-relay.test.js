@@ -16,7 +16,18 @@ vi.mock( './logger', () => ( {
 } ) );
 
 const RELAY_ROOT = 'gbk-rest://relay/proxy/';
-const REST_RELAY = { baseURL: RELAY_ROOT };
+const FORWARD_URL = 'gbk-rest://relay/forward';
+const REST_RELAY = { baseURL: RELAY_ROOT, forwardURL: FORWARD_URL };
+
+/**
+ * The relay URL a request for another host is sent to.
+ *
+ * @param {string} url The request's URL.
+ * @return {string} The forward route's URL for it.
+ */
+function forwarded( url ) {
+	return `${ FORWARD_URL }?url=${ encodeURIComponent( url ) }`;
+}
 
 describe( 'createRelayFetch', () => {
 	let next;
@@ -29,13 +40,14 @@ describe( 'createRelayFetch', () => {
 	 * The wrapper under test, over the shared `next` spy.
 	 *
 	 * @param {string} siteApiRoot The site's REST API root.
+	 * @param {Object} restRelay   Where the relay is.
 	 * @return {typeof fetch} The wrapped fetch.
 	 */
-	function relayFetch( siteApiRoot = 'https://example.com/wp-json/' ) {
-		return createRelayFetch( next, {
-			restRelay: REST_RELAY,
-			siteApiRoot,
-		} );
+	function relayFetch(
+		siteApiRoot = 'https://example.com/wp-json/',
+		restRelay = REST_RELAY
+	) {
+		return createRelayFetch( next, { restRelay, siteApiRoot } );
 	}
 
 	/** The URL `next` was called with. */
@@ -50,14 +62,16 @@ describe( 'createRelayFetch', () => {
 			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts?x=1` );
 		} );
 
-		it( "drops the page's copy of the site credential and sends no cookies", async () => {
+		it( "keeps the caller's Authorization and sends no cookies", async () => {
+			// Native code decides what reaches the site: it keeps a caller's
+			// own token, and adds the site credential only when there is none.
 			await relayFetch()( 'https://example.com/wp-json/wp/v2/posts', {
-				headers: { Authorization: 'Bearer site-token', 'X-Other': '1' },
+				headers: { Authorization: 'Bearer own-token', 'X-Other': '1' },
 			} );
 
 			const init = next.mock.calls[ 0 ][ 1 ];
 			const headers = new Headers( init.headers );
-			expect( headers.get( 'Authorization' ) ).toBeNull();
+			expect( headers.get( 'Authorization' ) ).toBe( 'Bearer own-token' );
 			expect( headers.get( 'X-Other' ) ).toBe( '1' );
 			expect( init.credentials ).toBe( 'omit' );
 		} );
@@ -280,21 +294,21 @@ describe( 'createRelayFetch', () => {
 				);
 			} );
 
-			it( 'leaves the same page alone without the route', async () => {
+			it( 'forwards the same page without the route', async () => {
 				const url = 'https://example.com/index.php?p=1';
 				await relayFetch( PLAIN_ROOT )( url );
 
-				expect( next ).toHaveBeenCalledWith( url, undefined );
+				expect( calledURL() ).toBe( forwarded( url ) );
 			} );
 
-			it( 'leaves a route outside the root alone', async () => {
+			it( 'forwards a route outside the root', async () => {
 				const url =
 					'https://public-api.example/wp-json/?rest_route=%2Fsites%2F2%2Fwp%2Fv2%2Fposts';
 				await relayFetch(
 					'https://public-api.example/wp-json/?rest_route=/sites/1/'
 				)( url );
 
-				expect( next ).toHaveBeenCalledWith( url, undefined );
+				expect( calledURL() ).toBe( forwarded( url ) );
 			} );
 		} );
 	} );
@@ -333,68 +347,19 @@ describe( 'createRelayFetch', () => {
 			await expectPassthrough( 'gbk-media-file:///photo.jpg' );
 		} );
 
-		it( 'another origin entirely', async () => {
+		it( "a request to the page's own origin, which CORS doesn't apply to", async () => {
+			// A dev server's, when the editor is loaded from one.
 			await expectPassthrough(
-				'https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query'
+				`${ window.location.origin }/src/translations.json`
 			);
 		} );
 
-		it( 'another service on the site host', async () => {
-			// A different port is a different server, however its paths are
-			// shaped. Relaying it would answer one service's request with
-			// another's response.
-			await expectPassthrough(
-				'https://example.com:8443/wp-json/wp/v2/posts'
-			);
-			await relayFetch( 'http://localhost:8888/wp-json/' )(
-				'http://127.0.0.1:3000/wp-json/wp/v2/posts'
-			);
-			expect( next ).toHaveBeenCalledWith(
-				'http://127.0.0.1:3000/wp-json/wp/v2/posts',
-				undefined
-			);
-		} );
+		it( 'another host, when native code offers no forward route', async () => {
+			const url =
+				'https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query';
+			await relayFetch( undefined, { baseURL: RELAY_ROOT } )( url );
 
-		it( 'a host alias the canonical form does not cover', async () => {
-			// A documented limitation, not a decision: a site reached by LAN IP
-			// emits `localhost` URLs, which are not recognized as the same host,
-			// so paginated `Link` targets take the direct path — and fail under
-			// Lockdown Mode. Provenance belongs at the relay, which knows the
-			// response came from the configured site; see `relayUpstreamPath`.
-			await relayFetch( 'http://192.168.1.50:8888/wp-json/' )(
-				'http://localhost:8888/wp-json/wp/v2/posts?page=2'
-			);
-
-			expect( next ).toHaveBeenCalledWith(
-				'http://localhost:8888/wp-json/wp/v2/posts?page=2',
-				undefined
-			);
-		} );
-
-		it( 'another WordPress site whose path matches the root', async () => {
-			// A different host is a different server, however its paths are
-			// shaped. Rewriting one onto the configured site would send its
-			// request to the user's own site with the site credential.
-			await expectPassthrough(
-				'https://other-wp.example/wp-json/wp/v2/posts'
-			);
-		} );
-
-		it( 'a sibling of the API root', async () => {
-			// `https://site/wp-json` must not match `https://site/wp-jsonx/…`.
-			await expectPassthrough( 'https://example.com/wp-jsonx/secrets' );
-		} );
-
-		it( 'a different site in a subdirectory multisite', async () => {
-			// A path difference is a different site, not an alias. Matching
-			// across them would route site B through site A's API root.
-			await relayFetch( 'https://example.com/a/wp-json/' )(
-				'https://example.com/b/wp-json/wp/v2/posts'
-			);
-
-			expect( calledURL() ).toBe(
-				'https://example.com/b/wp-json/wp/v2/posts'
-			);
+			expect( next ).toHaveBeenCalledWith( url, undefined );
 		} );
 
 		it( 'a Request object, which would have to be rebuilt', async () => {
@@ -404,6 +369,88 @@ describe( 'createRelayFetch', () => {
 			await relayFetch()( request );
 
 			expect( next ).toHaveBeenCalledWith( request, undefined );
+		} );
+	} );
+
+	describe( 'requests for other hosts', () => {
+		it( 'forwards another origin entirely, with its own credential', async () => {
+			// Jetpack AI signs its requests to WordPress.com with a token of its
+			// own, which has to arrive as it was sent.
+			const url =
+				'https://public-api.wordpress.com/wpcom/v2/jetpack-ai-query?stream=true';
+			await relayFetch()( url, {
+				method: 'POST',
+				headers: { Authorization: 'Bearer jwt' },
+				body: '{"question":"Hi"}',
+			} );
+
+			expect( calledURL() ).toBe( forwarded( url ) );
+			const init = next.mock.calls[ 0 ][ 1 ];
+			expect( new Headers( init.headers ).get( 'Authorization' ) ).toBe(
+				'Bearer jwt'
+			);
+			expect( init.method ).toBe( 'POST' );
+			expect( init.body ).toBe( '{"question":"Hi"}' );
+			expect( init.credentials ).toBe( 'omit' );
+		} );
+
+		it( 'forwards another service on the site host', async () => {
+			// A different port is a different server, however its paths are
+			// shaped. Relaying it onto the API root would answer one service's
+			// request with another's response.
+			const url = 'https://example.com:8443/wp-json/wp/v2/posts';
+			await relayFetch()( url );
+
+			expect( calledURL() ).toBe( forwarded( url ) );
+		} );
+
+		it( 'forwards a host alias the canonical form does not cover', async () => {
+			// A documented limitation, not a decision: a site reached by LAN IP
+			// emits `localhost` URLs, which are not recognized as the same host,
+			// so paginated `Link` targets go out without the site credential.
+			// Provenance belongs at the relay, which knows the response came
+			// from the configured site; see `relayUpstreamPath`.
+			const url = 'http://localhost:8888/wp-json/wp/v2/posts?page=2';
+			await relayFetch( 'http://192.168.1.50:8888/wp-json/' )( url );
+
+			expect( calledURL() ).toBe( forwarded( url ) );
+		} );
+
+		it( 'forwards another WordPress site whose path matches the root', async () => {
+			// A different host is a different server, however its paths are
+			// shaped. Rewriting one onto the configured site would send its
+			// request to the user's own site with the site credential.
+			const url = 'https://other-wp.example/wp-json/wp/v2/posts';
+			await relayFetch()( url );
+
+			expect( calledURL() ).toBe( forwarded( url ) );
+		} );
+
+		it( 'forwards a sibling of the API root', async () => {
+			// `https://site/wp-json` must not match `https://site/wp-jsonx/…`.
+			const url = 'https://example.com/wp-jsonx/secrets';
+			await relayFetch()( url );
+
+			expect( calledURL() ).toBe( forwarded( url ) );
+		} );
+
+		it( 'forwards a different site in a subdirectory multisite', async () => {
+			// A path difference is a different site, not an alias. Matching
+			// across them would route site B through site A's API root.
+			const url = 'https://example.com/b/wp-json/wp/v2/posts';
+			await relayFetch( 'https://example.com/a/wp-json/' )( url );
+
+			expect( calledURL() ).toBe( forwarded( url ) );
+		} );
+
+		it( 'forwards the whole URL, query and all', async () => {
+			const url = 'https://example.org/api?q=a%20b&tags=x,y';
+			await relayFetch()( url );
+
+			const relayed = new URL( calledURL() );
+			expect( relayed.searchParams.get( 'url' ) ).toBe(
+				'https://example.org/api?q=a%20b&tags=x,y'
+			);
 		} );
 	} );
 

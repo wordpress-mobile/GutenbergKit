@@ -29,21 +29,26 @@ export function createRelayFetchWrapper() {
 		return null;
 	}
 
-	debug( `Relaying site REST requests through ${ restRelay.baseURL }` );
+	debug( `Relaying requests through ${ restRelay.baseURL }` );
 	return ( next ) => createRelayFetch( next, { restRelay, siteApiRoot } );
 }
 
 /**
- * Wraps `fetch` so requests for the site's REST API go through the native
- * relay.
+ * Wraps `fetch` so requests to other origins go through the native relay.
  *
  * Under iOS Lockdown Mode the editor's `file://` page loses its CORS exemption
  * and WordPress sanitizes its `Origin: file://` into an empty
  * `Access-Control-Allow-Origin`, so every direct REST request rejects. The
  * native host serves a URL scheme in the editor's own web view and advertises
- * it as `GBKit.restRelay`; it forwards each request to the site's REST API
- * natively and responds with CORS headers the web view accepts. Every request
- * takes this path, Lockdown Mode or not, so there is one path to keep working.
+ * it as `GBKit.restRelay`; it sends each request on natively and responds with
+ * CORS headers the web view accepts. Every request takes this path, Lockdown
+ * Mode or not, so there is one path to keep working.
+ *
+ * A request for the site's REST API goes to `restRelay.baseURL` as a path below
+ * the API root, and native code adds the site credential if it has no
+ * `Authorization` of its own. A request for any other host goes to
+ * `restRelay.forwardURL` as a full URL, and native code never sends the site
+ * credential with it. A caller's own `Authorization` is sent on either way.
  *
  * The relay wraps `fetch` rather than registering an api-fetch middleware or
  * fetch handler, either of which would replace api-fetch's own request building
@@ -59,7 +64,6 @@ export function createRelayFetchWrapper() {
  */
 export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
 	const apiRoot = normalizedApiRoot( siteApiRoot );
-	const relayRoot = restRelay.baseURL;
 	const apiRootHost = canonicalHost( apiRoot.hostname );
 
 	// `async` so that a throw becomes a rejection, as it would from the `fetch`
@@ -78,24 +82,18 @@ export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
 		}
 
 		const target = requestURL( input );
-		const upstreamPath = target
-			? relayUpstreamPath( target, apiRoot, apiRootHost )
+		const relayURL = target
+			? relayURLFor( target, { restRelay, apiRoot, apiRootHost } )
 			: null;
 
-		// Not a site REST request: native uploads over `gbk-upload:`,
-		// `blob:`/`data:`/`gbk-media-file:` reads, a third party's own API.
-		// Those keep the network path they had before a relay existed.
-		if ( upstreamPath === null ) {
+		if ( relayURL === null ) {
 			return next( input, init );
 		}
 
 		const headers = new Headers( init?.headers );
-		// The site credential is injected natively; the page's copy is dropped
-		// so there is one source for it.
-		headers.delete( 'Authorization' );
 		const body = await bufferedBody( init?.body, headers );
 
-		return next( relayRoot + upstreamPath, {
+		return next( relayURL, {
 			...init,
 			headers,
 			body,
@@ -106,6 +104,42 @@ export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
 			credentials: 'omit',
 		} );
 	};
+}
+
+/**
+ * The relay URL a request goes to, or `null` when it keeps its own path.
+ *
+ * Kept on their own path: anything that isn't `http` or `https` — native
+ * uploads over `gbk-upload:`, `blob:`/`data:`/`gbk-media-file:` reads, the
+ * relay itself — and a request to the page's own origin, which CORS doesn't
+ * apply to. That origin is a dev server's when the editor is loaded from one.
+ *
+ * @param {URL}                          target            The request's target.
+ * @param {Object}                       relay             The relay configuration.
+ * @param {import('./bridge').RestRelay} relay.restRelay   Where the relay is.
+ * @param {URL}                          relay.apiRoot     The site's REST API root, normalized and slash-terminated.
+ * @param {string}                       relay.apiRootHost `apiRoot`'s hostname in canonical form.
+ * @return {string|null} The relay URL, or `null`.
+ */
+function relayURLFor( target, { restRelay, apiRoot, apiRootHost } ) {
+	if (
+		! [ 'http:', 'https:' ].includes( target.protocol ) ||
+		target.origin === window.location.origin
+	) {
+		return null;
+	}
+
+	const upstreamPath = relayUpstreamPath( target, apiRoot, apiRootHost );
+	if ( upstreamPath !== null ) {
+		return restRelay.baseURL + upstreamPath;
+	}
+
+	if ( ! restRelay.forwardURL ) {
+		return null;
+	}
+	return `${ restRelay.forwardURL }?url=${ encodeURIComponent(
+		target.href
+	) }`;
 }
 
 /**
@@ -212,14 +246,15 @@ function requestURL( input ) {
  * resource: in a subdirectory multisite `https://site/a/wp-json/` and
  * `https://site/b/wp-json/` are separate sites.
  *
- * Anything else keeps the direct path it had before a relay existed, because
- * rewriting it would send a third party's request to the user's own site with
- * the site credential attached. The cost is an alias this cannot recognize —
- * a site reached by LAN IP whose `home_url()` says `localhost`, a mapped
- * domain, a migration — where a paginated `Link` target goes direct and fails
- * under Lockdown Mode. Growing the list of spellings cannot close that: the
- * fix is for the relay to canonicalize the URLs the site emits, since it knows
- * the response came from the configured root and this layer can only guess.
+ * Anything else goes to the relay's forward route, which sends it where it was
+ * going without the site credential. Rewriting it onto the API root would send
+ * a third party's request to the user's own site with the site credential
+ * attached. The cost is an alias this cannot recognize — a site reached by LAN
+ * IP whose `home_url()` says `localhost`, a mapped domain, a migration — where
+ * a paginated `Link` target reaches the site without the credential. Growing
+ * the list of spellings cannot close that: the fix is for the relay to
+ * canonicalize the URLs the site emits, since it knows the response came from
+ * the configured root and this layer can only guess.
  *
  * @param {URL}    target      The request's target.
  * @param {URL}    apiRoot     The site's REST API root, normalized and slash-terminated.
