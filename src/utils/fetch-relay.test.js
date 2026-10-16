@@ -223,6 +223,16 @@ describe( 'createRelayFetch', () => {
 			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts` );
 		} );
 
+		it( 'accepts a root configured with a doubled trailing slash', async () => {
+			// api-fetch's root middleware collapses it, so requests arrive
+			// with one slash.
+			await relayFetch( 'https://example.com/wp-json//' )(
+				'https://example.com/wp-json/wp/v2/posts'
+			);
+
+			expect( calledURL() ).toBe( `${ RELAY_ROOT }wp/v2/posts` );
+		} );
+
 		describe( 'a root that carries its route in the query', () => {
 			// Plain permalinks. WordPress advertises the root through
 			// `add_query_arg`, which percent-encodes the route.

@@ -1,5 +1,6 @@
 import { getGBKit } from './bridge';
 import { debug, warn } from './logger';
+import { ensureTrailingSlash } from './url';
 
 /** Hostnames that name the loopback interface. */
 const LOOPBACK_HOSTNAMES = new Set( [ 'localhost', '127.0.0.1', '[::1]' ] );
@@ -115,7 +116,8 @@ export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
  * Slash-terminated so a sibling cannot match the root as a prefix
  * (`https://site/wp-json` would otherwise match `https://site/wp-jsonx/…`),
  * and parsed so both sides of every comparison normalize the same way —
- * default ports collapsed, host lowercased.
+ * default ports collapsed, host lowercased. A doubled trailing slash collapses
+ * to one, as it does in api-fetch's root, or no request would match.
  *
  * A plain-permalink root carries its route in the query, and WordPress
  * advertises it percent-encoded — `index.php?rest_route=%2F` — because it
@@ -135,7 +137,7 @@ function normalizedApiRoot( siteApiRoot ) {
 			? siteApiRoot
 			: siteApiRoot.slice( 0, separator ) +
 			  decodeSlashes( siteApiRoot.slice( separator ) );
-	return new URL( root.endsWith( '/' ) ? root : `${ root }/` );
+	return new URL( ensureTrailingSlash( root ) );
 }
 
 /**
