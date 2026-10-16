@@ -5,12 +5,25 @@ import WebKit
 /// answering each.
 ///
 /// WebKit raises an Objective-C exception if a stopped task is answered, so a handler
-/// answers a task only through this, which does nothing for one WebKit has stopped. Tasks
-/// are held strongly: a finished task's identity can be reused by the next one, so
-/// tracking tasks by identifier alone would answer the wrong request.
+/// answers a task only through this, which does nothing for one WebKit has stopped.
+///
+/// Each task is tracked under a number that is never reused, not under its address.
+/// WebKit can create a new task at the address of one it just stopped, while the work for
+/// the stopped task is still running. Tracked by address, that work would answer the new
+/// task.
 @MainActor
 struct ActiveSchemeTasks {
-    private var entries: [ObjectIdentifier: Entry] = [:]
+    /// A task's number. Counts up from zero and is never reused.
+    typealias Key = Int
+
+    private var entries: [Key: Entry] = [:]
+
+    /// The number of each task in `entries`, for `stop(_:)`, which WebKit calls with the
+    /// task itself. Looking a task up by its address is safe here: a task is held while it
+    /// is in `entries`, so no other task can have its address.
+    private var keys: [ObjectIdentifier: Key] = [:]
+
+    private var nextKey: Key = 0
 
     private struct Entry {
         let task: any WKURLSchemeTask
@@ -21,8 +34,10 @@ struct ActiveSchemeTasks {
 
     /// Tracks `task`, answered by the work `answer` starts. `answer` is given the key the
     /// task is answered under.
-    mutating func start(_ task: any WKURLSchemeTask, answer: (ObjectIdentifier) -> Task<Void, Never>) {
-        let key = ObjectIdentifier(task)
+    mutating func start(_ task: any WKURLSchemeTask, answer: (Key) -> Task<Void, Never>) {
+        let key = nextKey
+        nextKey += 1
+        keys[ObjectIdentifier(task)] = key
         entries[key] = Entry(task: task, work: nil)
         entries[key]?.work = answer(key)
     }
@@ -30,7 +45,8 @@ struct ActiveSchemeTasks {
     /// Stops tracking `task` and cancels its work: WebKit stopped it, because the page
     /// aborted its `fetch` or went away.
     mutating func stop(_ task: any WKURLSchemeTask) {
-        entries.removeValue(forKey: ObjectIdentifier(task))?.work?.cancel()
+        guard let key = keys[ObjectIdentifier(task)] else { return }
+        removeEntry(key)?.work?.cancel()
     }
 
     /// Cancels the work answering every task. Each is still answered, as its work
@@ -42,19 +58,19 @@ struct ActiveSchemeTasks {
     }
 
     /// The task under `key`, or `nil` once WebKit has stopped it.
-    func task(for key: ObjectIdentifier) -> (any WKURLSchemeTask)? {
+    func task(for key: Key) -> (any WKURLSchemeTask)? {
         entries[key]?.task
     }
 
     /// Stops tracking the task under `key` and returns it, for a handler that answers it
     /// in parts. `nil` once WebKit has stopped it.
-    mutating func remove(_ key: ObjectIdentifier) -> (any WKURLSchemeTask)? {
-        entries.removeValue(forKey: key)?.task
+    mutating func remove(_ key: Key) -> (any WKURLSchemeTask)? {
+        removeEntry(key)?.task
     }
 
     /// Answers the task under `key` with `response` and stops tracking it, unless WebKit
     /// has stopped it.
-    mutating func answer(_ key: ObjectIdentifier, with response: SchemeResponse) {
+    mutating func answer(_ key: Key, with response: SchemeResponse) {
         guard let task = remove(key) else { return }
         guard let url = task.request.url,
               let httpResponse = HTTPURLResponse(
@@ -75,7 +91,14 @@ struct ActiveSchemeTasks {
 
     /// Fails the task under `key` with `error` and stops tracking it, unless WebKit has
     /// stopped it.
-    mutating func fail(_ key: ObjectIdentifier, with error: any Error) {
+    mutating func fail(_ key: Key, with error: any Error) {
         remove(key)?.didFailWithError(error)
+    }
+
+    /// Stops tracking the task under `key` and returns its entry.
+    private mutating func removeEntry(_ key: Key) -> Entry? {
+        guard let entry = entries.removeValue(forKey: key) else { return nil }
+        keys.removeValue(forKey: ObjectIdentifier(entry.task))
+        return entry
     }
 }

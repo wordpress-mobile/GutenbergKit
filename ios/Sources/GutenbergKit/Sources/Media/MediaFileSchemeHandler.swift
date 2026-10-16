@@ -53,7 +53,7 @@ final class MediaFileSchemeHandler: NSObject, WKURLSchemeHandler {
 
     var activeRequestCount: Int { active.count }
 
-    private func serve(_ fileURL: URL, to key: ObjectIdentifier) async {
+    private func serve(_ fileURL: URL, to key: ActiveSchemeTasks.Key) async {
         let reader: ChunkedFileReader
         do {
             reader = try await ChunkedFileReader.open(fileURL)
@@ -96,7 +96,7 @@ final class MediaFileSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
-    private func fail(_ key: ObjectIdentifier, with error: any Error) {
+    private func fail(_ key: ActiveSchemeTasks.Key, with error: any Error) {
         guard let task = active.task(for: key) else { return }
         Logger.media.error("Failed to serve \(task.request.url?.absoluteString ?? "?"): \(error)")
         active.fail(key, with: error)
