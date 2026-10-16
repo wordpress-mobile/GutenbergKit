@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import UniformTypeIdentifiers
 import WebKit
 
 /// Serves imported media to the editor's page over `gbk-media-file:` URLs.
@@ -66,7 +65,7 @@ final class MediaFileSchemeHandler: NSObject, WKURLSchemeHandler {
 
         guard let url = active.task(for: key)?.request.url,
               let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-                "Content-Type": UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType ?? "application/octet-stream",
+                "Content-Type": MediaFileManager.mimeType(forExtension: fileURL.pathExtension),
                 "Content-Length": "\(reader.size)",
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
