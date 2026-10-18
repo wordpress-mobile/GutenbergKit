@@ -1,5 +1,6 @@
 package org.wordpress.gutenberg.model
 
+import android.util.Log
 import java.util.Locale
 
 /**
@@ -33,7 +34,8 @@ import java.util.Locale
  *
  * The supported set is generated at build time from the JS build manifest
  * (see `:Gutenberg:generateSupportedLocales`), so the resolver and the
- * shipped bundles cannot drift.
+ * shipped bundles cannot drift. Dev-server builds read the bundles the dev
+ * server serves instead, which may be none.
  */
 internal class LocaleResolver(supportedLocales: Collection<String>) {
     private val supportedLocales: Set<String> =
@@ -81,6 +83,16 @@ internal class LocaleResolver(supportedLocales: Collection<String>) {
 
         if (supportedLocales.contains(language)) return language
 
+        // Only dev-server builds can lack translations, and the JS loader
+        // never sees the requested locale, so this is the one place to say why.
+        if (supportedLocales.isEmpty() && language != DEFAULT_LOCALE) {
+            Log.w(
+                TAG,
+                "No translations were available at build time, so \"$language\" falls back " +
+                    "to English. Run `make fetch-translations`, then rebuild the app.",
+            )
+        }
+
         return DEFAULT_LOCALE
     }
 
@@ -89,6 +101,7 @@ internal class LocaleResolver(supportedLocales: Collection<String>) {
         // supported-set HashSet isn't rebuilt on every call.
         val Default: LocaleResolver = LocaleResolver()
 
+        private const val TAG = "LocaleResolver"
         private const val DEFAULT_LOCALE = "en"
 
         // Android's `Locale` class still emits the legacy ISO 639-1 codes for
