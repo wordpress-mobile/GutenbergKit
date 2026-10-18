@@ -11,6 +11,10 @@ val generateSupportedLocales = tasks.register<GenerateSupportedLocales>("generat
     group = "build"
 
     manifest.from(layout.projectDirectory.file("src/main/assets/supported-locales.json"))
+    devServer.set((rootProject.ext["gutenbergEditorUrl"] as? String).orEmpty().isNotEmpty())
+    devServerTranslations.from(
+        rootProject.fileTree("../src/translations") { include("*.json") }
+    )
 }
 
 androidComponents.onVariants { variant ->
