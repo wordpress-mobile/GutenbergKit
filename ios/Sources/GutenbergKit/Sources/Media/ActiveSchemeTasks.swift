@@ -71,22 +71,30 @@ struct ActiveSchemeTasks {
     /// Answers the task under `key` with `response` and stops tracking it, unless WebKit
     /// has stopped it.
     mutating func answer(_ key: Key, with response: SchemeResponse) {
-        guard let task = remove(key) else { return }
-        guard let url = task.request.url,
-              let httpResponse = HTTPURLResponse(
-                url: url,
-                statusCode: response.status,
-                httpVersion: "HTTP/1.1",
-                headerFields: response.headers
-              ) else {
-            task.didFailWithError(URLError(.badServerResponse))
-            return
-        }
-        task.didReceive(httpResponse)
+        guard let task = respond(key, status: response.status, headers: response.headers) else { return }
         if !response.body.isEmpty {
             task.didReceive(response.body)
         }
-        task.didFinish()
+        finish(key)
+    }
+
+    /// Sends a response's status and headers to the task under `key`, and returns the
+    /// task so the caller can send the body in chunks. Returns `nil` if WebKit has
+    /// stopped the task, or if the headers are invalid, which also fails the task.
+    mutating func respond(_ key: Key, status: Int, headers: [String: String]) -> (any WKURLSchemeTask)? {
+        guard let task = task(for: key) else { return nil }
+        guard let url = task.request.url,
+              let httpResponse = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers) else {
+            fail(key, with: URLError(.badServerResponse))
+            return nil
+        }
+        task.didReceive(httpResponse)
+        return task
+    }
+
+    /// Finishes the task under `key` and stops tracking it, unless WebKit has stopped it.
+    mutating func finish(_ key: Key) {
+        remove(key)?.didFinish()
     }
 
     /// Fails the task under `key` with `error` and stops tracking it, unless WebKit has
