@@ -534,23 +534,24 @@ struct RestRelay: Sendable {
     /// `Access-Control-Allow-Origin` (WordPress sends an empty one for origins
     /// it rejects) would otherwise replace the relay's own.
     ///
-    /// `Content-Encoding` and `Content-Length` must go because `URLSession`
-    /// already decompressed the body: advertising the upstream encoding would
-    /// make WebKit decode the plain bytes a second time, and the upstream
-    /// length is the compressed one.
-    ///
     /// `Set-Cookie` is the site's, scoped to the site. The relay carries the
     /// site credential natively and never needs it.
+    ///
+    /// `Content-Encoding`, `Content-Length` and `Vary` are kept, because `fetch`
+    /// shows them as the server sent them. `URLSession` has already decoded
+    /// the body, so `Content-Length` is the encoded size, as it is in `fetch`.
+    /// WebKit doesn't act on either header in a scheme response: it neither
+    /// decodes the body again nor cuts it to `Content-Length` (measured on
+    /// macOS 27 and in the iOS 27.0 Simulator).
     private static let responseHeadersToStrip: Set<String> = [
         "access-control-allow-origin", "access-control-allow-credentials",
         "access-control-allow-headers", "access-control-allow-methods",
-        "access-control-expose-headers", "access-control-max-age", "vary",
-        "content-encoding", "content-length",
+        "access-control-expose-headers", "access-control-max-age",
         "set-cookie", "set-cookie2",
     ]
 
     /// The upstream response's headers as the editor should see them: the
-    /// upstream's CORS and transport-encoding headers dropped (see
+    /// upstream's CORS headers and cookies dropped (see
     /// `responseHeadersToStrip`), and the relay's own CORS headers added.
     private static func merged(_ upstream: [AnyHashable: Any]) -> [String: String] {
         var headers: [String: String] = [:]

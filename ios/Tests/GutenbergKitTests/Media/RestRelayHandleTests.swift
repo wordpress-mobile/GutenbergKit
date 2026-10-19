@@ -7,8 +7,7 @@ import Testing
 ///
 /// The header rewriting on both sides of the hop is the part of the relay that
 /// fails silently: an upstream `Access-Control-Allow-Origin` that survives is
-/// honored by WebKit over the policy's own, and a surviving `Content-Encoding`
-/// makes WebKit decode an already-decoded body.
+/// honored by WebKit over the policy's own.
 @Suite("RestRelay request handling")
 struct RestRelayHandleTests {
 
@@ -261,15 +260,9 @@ struct RestRelayHandleTests {
             "Access-Control-Allow-Origin": "",
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Expose-Headers": "X-Upstream",
-            "Vary": "Origin",
         ])
 
-        for header in ["Access-Control-Allow-Credentials", "Vary"] {
-            #expect(
-                exchange.response.header(header) == nil,
-                "\(header) should not reach the web view"
-            )
-        }
+        #expect(exchange.response.header("Access-Control-Allow-Credentials") == nil)
         // The relay's own headers replace the upstream's, rather than both
         // arriving and the browser reading whichever came first.
         #expect(exchange.response.header("Access-Control-Allow-Origin") == "*")
@@ -289,15 +282,19 @@ struct RestRelayHandleTests {
         #expect(exchange.response.header("Set-Cookie") == nil)
     }
 
-    @Test("strips Content-Encoding and Content-Length, which URLSession already acted on")
-    func stripsContentEncoding() async throws {
-        // `URLSession` decompresses transparently, so advertising the upstream
-        // encoding makes WebKit decode plain bytes a second time, and the
-        // upstream length is the compressed one.
-        let exchange = try await relay(responseHeaders: ["Content-Encoding": "gzip", "Content-Length": "12"])
+    @Test("relays Content-Encoding, Content-Length and Vary as the server sent them")
+    func relaysEncodingHeaders() async throws {
+        // `fetch` shows the server's values over the decoded body, and WebKit
+        // acts on neither header in a scheme response.
+        let exchange = try await relay(
+            responseHeaders: ["Content-Encoding": "gzip", "Content-Length": "12", "Vary": "Origin"],
+            responseBody: Data(String(repeating: "x", count: 100).utf8)
+        )
 
-        #expect(exchange.response.header("Content-Encoding") == nil)
-        #expect(exchange.response.header("Content-Length") == nil)
+        #expect(exchange.response.header("Content-Encoding") == "gzip")
+        #expect(exchange.response.header("Content-Length") == "12")
+        #expect(exchange.response.header("Vary") == "Origin")
+        #expect(exchange.response.body.count == 100)
     }
 
     @Test("sends the page's body on, and exposes a block's own response headers")
