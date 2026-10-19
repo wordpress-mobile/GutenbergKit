@@ -58,7 +58,9 @@ export function createRelayFetch( next, { restRelay } ) {
 		// what it asks: the connectivity probe in `offline-indicator` would
 		// report the site reachable whenever native code answered, which is
 		// always.
-		if ( init?.mode === 'no-cors' ) {
+		const isRequest = input instanceof Request;
+		const mode = init?.mode ?? ( isRequest ? input.mode : undefined );
+		if ( mode === 'no-cors' ) {
 			return next( input, init );
 		}
 
@@ -67,12 +69,27 @@ export function createRelayFetch( next, { restRelay } ) {
 			return next( input, init );
 		}
 
-		const headers = new Headers( init?.headers );
-		const body = await bufferedBody( init?.body, headers );
+		// A `Request` is rebuilt with `init` over it, as `fetch` would. Only
+		// once it is relayed: the rebuilt one takes over its body, so one
+		// passed on as it is would arrive with its body already used.
+		const request = isRequest ? new Request( input, init ) : null;
+		const headers = new Headers(
+			request ? request.headers : init?.headers
+		);
+		// A `Request`'s body is read whole into an `ArrayBuffer`, the form
+		// WebKit delivers to a scheme handler; see `bufferedBody`.
+		const body = request
+			? request.body && ( await request.arrayBuffer() )
+			: await bufferedBody( init?.body, headers );
 		const url = encodeURIComponent( target.href );
 
 		return next( `${ restRelay.endpoint }?url=${ url }`, {
 			...init,
+			...( request && {
+				method: request.method,
+				mode: request.mode,
+				signal: request.signal,
+			} ),
 			headers,
 			body,
 			// The relay answers `Access-Control-Allow-Origin: *`, which a
@@ -87,22 +104,18 @@ export function createRelayFetch( next, { restRelay } ) {
 /**
  * The URL a `fetch` call addresses, or `null` when it cannot be determined.
  *
- * A `Request` object returns `null` rather than being relayed: rewriting one
- * means rebuilding it, and nothing in the editor's REST path constructs one —
- * api-fetch always calls `fetch( url, init )`. Such a request keeps the direct
- * path it had before a relay existed.
- *
  * @param {string|URL|Request} input The first argument to `fetch`.
  * @return {URL|null} The target URL.
  */
 function requestURL( input ) {
-	if ( typeof input !== 'string' && ! ( input instanceof URL ) ) {
-		return null;
-	}
 	try {
 		// Resolved against the document, so a relative URL becomes a `file://`
-		// (or dev-server) URL, which `isRelayed` leaves alone.
-		return new URL( input, document.baseURI );
+		// (or dev-server) URL, which `isRelayed` leaves alone. A `Request`'s
+		// URL is already absolute.
+		return new URL(
+			input instanceof Request ? input.url : input,
+			document.baseURI
+		);
 	} catch {
 		return null;
 	}
