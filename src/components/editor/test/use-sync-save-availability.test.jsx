@@ -70,17 +70,6 @@ describe( 'useSyncSaveAvailability', () => {
 		);
 	} );
 
-	it( 'does not report a state reverting to the last reported one twice', () => {
-		const { rerender } = renderHook( () => useSyncSaveAvailability() );
-
-		editorState.isReady = false;
-		rerender();
-		editorState.isReady = true;
-		rerender();
-
-		expect( onEditorSaveAvailabilityChanged ).toHaveBeenCalledTimes( 1 );
-	} );
-
 	it( 'stops reporting after unmounting', () => {
 		const { unmount } = renderHook( () => useSyncSaveAvailability() );
 		vi.clearAllMocks();

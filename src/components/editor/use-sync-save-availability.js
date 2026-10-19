@@ -1,4 +1,4 @@
-import { useEffect, useRef } from '@wordpress/element';
+import { useEffect } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { onEditorSaveAvailabilityChanged } from '../../utils/bridge';
@@ -23,22 +23,10 @@ export function useSyncSaveAvailability() {
 			isSavingLocked: store.isPostSavingLocked(),
 		};
 	}, [] );
-	const lastReported = useRef();
 
 	useEffect( () => {
-		if ( ! isReady ) {
-			return;
+		if ( isReady ) {
+			onEditorSaveAvailabilityChanged( isSaveable, isSavingLocked );
 		}
-
-		const previous = lastReported.current;
-		if (
-			previous?.isSaveable === isSaveable &&
-			previous?.isSavingLocked === isSavingLocked
-		) {
-			return;
-		}
-
-		lastReported.current = { isSaveable, isSavingLocked };
-		onEditorSaveAvailabilityChanged( isSaveable, isSavingLocked );
 	}, [ isReady, isSaveable, isSavingLocked ] );
 }
