@@ -64,12 +64,13 @@ GUTENBERG_EDITOR_URL=http://10.0.2.2:5173/
 
 </details>
 
-The development server serves only the translations fetched into `src/translations/`, so the editor renders in English until translations are fetched. To test translations, run `make fetch-translations`, then rebuild the app.
-
 > [!NOTE]
 > Android emulators route `http://10.0.2.2` to the host machine's IP address, allowing easy access to the development server from the emulator. For iOS simulators, the localhost URL is `http://localhost`. Appending the correct Vite development server port is required, which Vite logs when starting the server.
 >
 > To run the demo app on a physical device, see the [physical device setup guide](./physical-device-setup.md).
+
+> [!NOTE]
+> The development server serves only the translations fetched into `src/translations/`, so the editor renders in English until translations are fetched. To test translations, run `make fetch-translations`, then rebuild the app.
 
 ## Production Builds
 
