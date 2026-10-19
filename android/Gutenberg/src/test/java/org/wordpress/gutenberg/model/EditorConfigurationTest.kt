@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class EditorConfigurationBuilderTest {
@@ -214,6 +215,11 @@ class EditorConfigurationBuilderTest {
 
     @Test
     fun `setLocale runs the resolver against the shipped manifest`() {
+        assumeTrue(
+            "No translations in this dev-server build; run `make fetch-translations`",
+            SupportedLocales.ALL.isNotEmpty()
+        )
+
         // Direct match — `pt-br` is shipped.
         assertEquals(
             "pt-br",
