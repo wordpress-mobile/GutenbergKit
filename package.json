@@ -114,7 +114,7 @@
 		"@testing-library/user-event": "^14.6.7",
 		"@types/react": "^19.2.7",
 		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^6.1.1",
+		"@vitejs/plugin-react": "^6.1.2",
 		"@wordpress/dependency-extraction-webpack-plugin": "^6.57.0",
 		"@wordpress/env": "^11.16.0",
 		"@wordpress/eslint-plugin": "^27.0.0",
