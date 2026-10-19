@@ -12,6 +12,9 @@ import { ensureTrailingSlash, stripTrailingSlash } from './url';
 /** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
+/** The response core-data builds post type entity configurations from. */
+const POST_TYPES_PATH = '/wp/v2/types?context=view';
+
 /** Methods that do not change server state, so are safe to repeat. */
 const SAFE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
 
@@ -45,11 +48,53 @@ export function configureApiFetch() {
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use( siteIndexMiddleware );
 	apiFetch.use(
-		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
+		apiFetch.createPreloadingMiddleware(
+			withEditedPostType( preloadData ?? defaultPreloadData )
+		)
 	);
 	apiFetch.setFetchHandler(
 		withRateLimitRetry( apiFetch.defaultFetchHandler )
 	);
+}
+
+/**
+ * Adds the edited post's type to the preloaded post types when missing.
+ *
+ * Core-data builds post type entity configurations from this response, so a
+ * missing type, e.g. a custom post type in offline mode, would leave the post
+ * without a configuration.
+ *
+ * Exported for testing only.
+ *
+ * @param {Object} preloadData The preloaded responses, keyed by path.
+ * @return {Object} The preloaded responses.
+ */
+export function withEditedPostType( preloadData ) {
+	const { post } = getGBKit();
+	const postTypes = preloadData[ POST_TYPES_PATH ]?.body;
+	const type = post?.type || POST_FALLBACKS.type;
+
+	if ( ! post || ! postTypes || postTypes[ type ] ) {
+		return preloadData;
+	}
+
+	return {
+		...preloadData,
+		[ POST_TYPES_PATH ]: {
+			...preloadData[ POST_TYPES_PATH ],
+			body: {
+				...postTypes,
+				[ type ]: {
+					name: type,
+					slug: type,
+					taxonomies: [],
+					rest_base: post.restBase || POST_FALLBACKS.restBase,
+					rest_namespace:
+						post.restNamespace || POST_FALLBACKS.restNamespace,
+				},
+			},
+		},
+	};
 }
 
 /**
@@ -690,7 +735,7 @@ async function parseResponse( response, isOk ) {
 }
 
 const defaultPreloadData = {
-	'/wp/v2/types?context=view': {
+	[ POST_TYPES_PATH ]: {
 		body: {
 			post: {
 				description: '',
@@ -713,6 +758,32 @@ const defaultPreloadData = {
 				slug: 'page',
 				taxonomies: [],
 				rest_base: 'pages',
+				rest_namespace: 'wp/v2',
+				template: [],
+				template_lock: false,
+				_links: {},
+			},
+			attachment: {
+				description: '',
+				hierarchical: false,
+				has_archive: false,
+				name: 'Media',
+				slug: 'attachment',
+				taxonomies: [],
+				rest_base: 'media',
+				rest_namespace: 'wp/v2',
+				template: [],
+				template_lock: false,
+				_links: {},
+			},
+			wp_block: {
+				description: '',
+				hierarchical: false,
+				has_archive: false,
+				name: 'Patterns',
+				slug: 'wp_block',
+				taxonomies: [ 'wp_pattern_category' ],
+				rest_base: 'blocks',
 				rest_namespace: 'wp/v2',
 				template: [],
 				template_lock: false,

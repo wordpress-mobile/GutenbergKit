@@ -91,7 +91,7 @@ test.describe( 'Post entity seeding', () => {
 			.toBeGreaterThan( 0 );
 	} );
 
-	test( "uses core's post type entity configuration", async ( { page } ) => {
+	test( "uses core's post type entity configurations", async ( { page } ) => {
 		const editor = new EditorPage( page );
 		await editor.setup( { post: HOST_POST } );
 
@@ -99,21 +99,29 @@ test.describe( 'Post entity seeding', () => {
 			const configs = window.wp.data
 				.select( 'core' )
 				.getEntitiesConfig( 'postType' )
-				.filter( ( { name } ) => name === 'post' );
+				.filter( ( { name } ) =>
+					[ 'post', 'attachment', 'wp_block' ].includes( name )
+				);
 			return configs.map( ( entity ) => ( {
+				name: entity.name,
+				baseURL: entity.baseURL,
 				baseURLParams: entity.baseURLParams,
-				revisionKey: entity.revisionKey,
 				prePersist: typeof entity.__unstablePrePersist,
 			} ) );
 		} );
 
-		expect( config ).toEqual( [
-			{
+		expect( config ).toEqual(
+			[
+				[ 'post', '/wp/v2/posts' ],
+				[ 'attachment', '/wp/v2/media' ],
+				[ 'wp_block', '/wp/v2/blocks' ],
+			].map( ( [ name, baseURL ] ) => ( {
+				name,
+				baseURL,
 				baseURLParams: { context: 'edit' },
-				revisionKey: 'id',
 				prePersist: 'function',
-			},
-		] );
+			} ) )
+		);
 	} );
 
 	test( 'blocks saving the post from the editor', async ( { page } ) => {
