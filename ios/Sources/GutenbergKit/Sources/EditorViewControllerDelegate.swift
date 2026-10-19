@@ -60,6 +60,9 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// `true`, for example while a media upload is in progress, so they don't
     /// persist temporary media URLs.
     ///
+    /// - warning: Gutenberg releases the lock for a multi-file upload as soon
+    /// as any file fails, while the remaining files may still be uploading.
+    ///
     /// - note: Disregard the last reported availability after
     /// ``editorDidBecomeUnavailable(_:)``. The editor reports it again once it
     /// reloads.

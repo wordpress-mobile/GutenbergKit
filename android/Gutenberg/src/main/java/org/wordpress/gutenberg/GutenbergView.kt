@@ -888,6 +888,9 @@ class GutenbergView : FrameLayout {
      * Hosts should disable their save controls while
      * [SaveAvailability.isSavingLocked] is `true`, for example while a media
      * upload is in progress, so they don't persist temporary media URLs.
+     * Gutenberg releases the lock for a multi-file upload as soon as any file
+     * fails, while the remaining files may still be uploading.
+     *
      * Disregard the last reported availability after
      * [EditorUnavailableListener.onEditorUnavailable]; the editor reports it
      * again once it reloads.
