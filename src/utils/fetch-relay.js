@@ -117,13 +117,18 @@ function requestURL( input ) {
  * relay itself — and a request to the page's own origin, which CORS doesn't
  * apply to. That origin is a dev server's when the editor is loaded from one.
  *
+ * A URL with a user name or password is left alone too, so `fetch` refuses it
+ * as it would without the relay. Native code refuses one as well.
+ *
  * @param {URL} target The request's target.
  * @return {boolean} Whether to relay it.
  */
 function isRelayed( target ) {
 	return (
 		[ 'http:', 'https:' ].includes( target.protocol ) &&
-		target.origin !== window.location.origin
+		target.origin !== window.location.origin &&
+		! target.username &&
+		! target.password
 	);
 }
 

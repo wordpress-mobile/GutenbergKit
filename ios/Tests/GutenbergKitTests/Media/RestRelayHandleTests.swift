@@ -139,6 +139,78 @@ struct RestRelayHandleTests {
         }
     }
 
+    @Test("refuses a URL with a user name or password before sending anything")
+    func refusesCredentialsInURL() async throws {
+        // As `fetch` does. `URLSession` would store them and send them on
+        // later requests to the host, in place of the caller's own.
+        for url in [
+            "https://user:pass@api.example/v1",
+            "https://user@api.example/v1",
+            "https://example.com@evil.example/",
+            "https://user:pass@example.com/wp-json/wp/v2/posts",
+        ] {
+            let exchange = try await relay(target: Self.relayTarget(url))
+
+            #expect(exchange.response.status == 400, "\(url)")
+            #expect(String(decoding: exchange.response.body, as: UTF8.self).contains("relay_credentials_in_url"), "\(url)")
+            #expect(exchange.sentRequest == nil, "nothing should have been sent for \(url)")
+        }
+    }
+
+    // MARK: - Plain http
+
+    @Test("refuses a plain http request to another host before sending it")
+    func refusesHTTPToOtherHosts() async throws {
+        // A local address in any spelling, a name that could point at one, and
+        // a public host. None of them is the site.
+        for url in [
+            "http://192.168.1.1/admin",
+            "http://127.0.0.1:8080/x",
+            "http://2130706433:8080/x",
+            "http://[::1]:3000/",
+            "http://router.example/admin",
+            "http://api.example/v1",
+            "http://example.com.evil.example/",
+        ] {
+            let exchange = try await relay(target: Self.relayTarget(url))
+
+            #expect(exchange.response.status == 426, "\(url)")
+            #expect(exchange.response.header("Upgrade") == "TLS/1.2, HTTP/1.1", "\(url)")
+            #expect(String(decoding: exchange.response.body, as: UTF8.self).contains("relay_https_required"), "\(url)")
+            #expect(exchange.sentRequest == nil, "nothing should have been sent for \(url)")
+        }
+    }
+
+    @Test("sends a plain http request to the site's own host, on any port")
+    func sendsHTTPToSiteHost() async throws {
+        // The host of the API root or of the site URL, in the spellings
+        // `destination(of:)` takes for the site.
+        for (root, siteURL, url) in [
+            ("http://192.168.1.50/wp-json/", "http://192.168.1.50", "http://192.168.1.50/wp-admin/admin-ajax.php"),
+            ("http://192.168.1.50/wp-json/", "http://192.168.1.50", "http://192.168.1.50:8080/api"),
+            ("http://localhost:8888/wp-json/", "http://localhost:8888", "http://127.0.0.1:3000/api"),
+            ("https://example.com/wp-json/", "https://example.com", "http://www.example.com/legacy.php"),
+            // A Jetpack site reached through WordPress.com, whose plugins call
+            // the site's own host.
+            ("https://public-api.wordpress.com/", "http://jetpack.example", "http://jetpack.example/wp-admin/admin-ajax.php"),
+        ] {
+            let exchange = try await relay(target: Self.relayTarget(url), siteApiRoot: root, siteURL: siteURL)
+
+            #expect(exchange.sentRequest?.url?.absoluteString == url, "\(url)")
+        }
+    }
+
+    @Test("sends an https request to any host")
+    func sendsHTTPSToAnyHost() async throws {
+        // A device on the local network can't present a valid certificate for
+        // the name, so TLS stops a name pointed at one before anything is sent.
+        for url in ["https://192.168.1.1/admin", "https://localhost:8443/", "https://api.example/v1"] {
+            let exchange = try await relay(target: Self.relayTarget(url))
+
+            #expect(exchange.sentRequest?.url?.absoluteString == url, "\(url)")
+        }
+    }
+
     @Test("strips the headers that describe the web view's own hop")
     func stripsHopHeaders() async throws {
         // `origin`/`referer`/`sec-fetch-*` describe the `file://` page and are
@@ -342,7 +414,9 @@ struct RestRelayHandleTests {
         responseHeaders: [String: String] = [:],
         responseBody: Data = Data(),
         failure: (any Error)? = nil,
-        observer: (any EditorHTTPClientDelegate)? = nil
+        observer: (any EditorHTTPClientDelegate)? = nil,
+        siteApiRoot: String = "https://example.com/wp-json/",
+        siteURL: String = "https://example.com"
     ) async throws -> Exchange {
         let stub = StubURLProtocol.Stub(
             status: status,
@@ -356,8 +430,8 @@ struct RestRelayHandleTests {
         let relay = RestRelay(
             configuration: EditorConfigurationBuilder(
                 postType: .post,
-                siteURL: URL(string: "https://example.com")!,
-                siteApiRoot: URL(string: "https://example.com/wp-json/")!,
+                siteURL: URL(string: siteURL)!,
+                siteApiRoot: URL(string: siteApiRoot)!,
                 authHeader: "Bearer test-token"
             ).build(),
             session: stubbed.session,

@@ -49,10 +49,19 @@ import OSLog
 ///   signs its requests to WordPress.com with a token of its own. The site
 ///   credential is the relay's to guard: see
 ///   ``authorization(sentByCaller:toSiteAPI:)``.
-/// - The relay reaches any `http` or `https` URL, so any frame in the web view
-///   can read another host's response without CORS, a local network address
-///   included. Without Lockdown Mode the editor page can do that anyway; a
-///   sandboxed frame couldn't before.
+/// - The relay reaches any `https` URL, so any frame in the web view can read
+///   another host's response without CORS. Without Lockdown Mode the editor
+///   page can do that anyway; a sandboxed frame couldn't before.
+/// - A request for another host goes over `https`, or over plain `http` only to
+///   the site's own host. A device on the local network or this device itself
+///   can't present a valid certificate for another host's name, so a name
+///   pointed at one fails before anything is sent. Local hosts that do have a
+///   valid certificate for their own name stay reachable.
+/// - A redirect is followed only to an `http` or `https` URL, never from `https`
+///   to `http`. So a request that starts over `https` stays on it.
+/// - A URL with a user name or password is refused, as `fetch` refuses one.
+///   `URLSession` would store the credential and send it on later requests to
+///   that host.
 struct RestRelay: Sendable {
 
     /// The relay's route. Its `url` query parameter is the URL the page was
@@ -90,6 +99,14 @@ struct RestRelay: Sendable {
     /// ``EditorHTTPClientDelegate``, so relayed requests are observed with the
     /// editor's own.
     private let observer: (any EditorHTTPClientDelegate)?
+
+    /// The hosts of the API root and the site URL, in ``canonicalHost(_:)``
+    /// form: the only hosts a request may reach over plain `http`.
+    ///
+    /// Both, because they can differ: a Jetpack site reached through
+    /// WordPress.com has the API root `public-api.wordpress.com`, while its
+    /// plugins call the site's own host.
+    private let siteHosts: Set<String>
 
     /// The session every relay shares.
     ///
@@ -133,6 +150,9 @@ struct RestRelay: Sendable {
         self.authHeader = configuration.authHeader
         self.session = session ?? Self.sharedSession
         self.observer = observer
+        self.siteHosts = Set(
+            [configuration.siteApiRoot.host(), configuration.siteURL.host()].compactMap { $0.map(Self.canonicalHost) }
+        )
     }
 
     /// The configured root, slash-terminated, with the route value of a
@@ -187,6 +207,14 @@ struct RestRelay: Sendable {
                 message: "The relay can only send a request to an http or https URL."
             )
         }
+        guard !Self.hasCredentials(requestedURL) else {
+            Logger.restRelay.error("Refusing to relay a request whose URL holds credentials")
+            return Self.errorResponse(
+                status: 400,
+                code: "relay_credentials_in_url",
+                message: "The relay can't send a request to a URL with a user name or password in it."
+            )
+        }
         guard let destination = destination(of: requestedURL) else {
             Logger.restRelay.error("Refusing to relay a request outside the site API root")
             return Self.errorResponse(
@@ -198,6 +226,11 @@ struct RestRelay: Sendable {
         let (upstreamURL, isSiteAPI) = switch destination {
         case .siteAPI(let url): (url, true)
         case .otherHost(let url): (url, false)
+        }
+
+        if !isSiteAPI, upstreamURL.scheme?.lowercased() == "http", !isSiteHost(upstreamURL) {
+            Logger.restRelay.error("Refusing to relay a plain http request to another host")
+            return Self.httpsRequired()
         }
 
         var upstreamRequest = URLRequest(url: upstreamURL)
@@ -217,7 +250,8 @@ struct RestRelay: Sendable {
             // 3xx responses on its own, which would carry a site API request
             // to whatever host the `Location` header names and relay that
             // response back. See ``RedirectGuard``. A request for another host
-            // follows every redirect. Either keeps its `Authorization` on a
+            // follows a redirect to any host, but neither follows one from
+            // `https` to `http`. Either keeps its `Authorization` on a
             // redirect the way `fetch` would.
             let redirectGuard = RedirectGuard(
                 allowedPrefix: isSiteAPI ? apiRoot : nil,
@@ -230,14 +264,14 @@ struct RestRelay: Sendable {
             // A refused redirect leaves `URLSession` holding the 3xx itself.
             // Relaying that would undo the refusal: the response carries the
             // `Location` the guard just declined, and `fetch` follows redirects
-            // by default, so the web view would chase it to the very host the
+            // by default, so the web view would chase it to the very URL the
             // guard exists to keep the request away from.
-            if let refused = redirectGuard.refusedTarget {
-                Logger.restRelay.error("Refused a relay redirect outside the site API root")
+            if let refusal = redirectGuard.refusal {
+                Logger.restRelay.error("Refused a relay redirect")
                 return Self.errorResponse(
                     status: 502,
                     code: "relay_redirect_refused",
-                    message: "The site redirected this request to \(refused), which is outside its configured REST API root. The editor did not follow it."
+                    message: "The server redirected this request to \(refusal.target), which \(refusal.reason). The editor did not follow it."
                 )
             }
             guard let response = response as? HTTPURLResponse else {
@@ -255,6 +289,35 @@ struct RestRelay: Sendable {
             Logger.restRelay.error("Upstream request failed: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    /// Whether `url` has a user name or password in it.
+    ///
+    /// `fetch` refuses such a URL. `URLSession` would answer the host's
+    /// challenge with it, then store it and send it on every later request to
+    /// that host, in place of the request's own `Authorization`.
+    private static func hasCredentials(_ url: URL) -> Bool {
+        url.user(percentEncoded: true) != nil || url.password(percentEncoded: true) != nil
+    }
+
+    /// Whether `url` is on the site's own host, whatever its port.
+    private func isSiteHost(_ url: URL) -> Bool {
+        url.host().map { siteHosts.contains(Self.canonicalHost($0)) } ?? false
+    }
+
+    /// The answer to a plain `http` request for another host.
+    ///
+    /// `426 Upgrade Required` is the status for a request that "can't be
+    /// completed without TLS" (RFC 2817, section 4.2), and it must name the
+    /// protocol to switch to in an `Upgrade` header (RFC 9110, section 15.5.22).
+    private static func httpsRequired() -> SchemeResponse {
+        var response = errorResponse(
+            status: 426,
+            code: "relay_https_required",
+            message: "The editor only sends a plain http request to the site itself. Use https for any other host."
+        )
+        response.headers["Upgrade"] = "TLS/1.2, HTTP/1.1"
+        return response
     }
 
     // MARK: - Destination
@@ -505,8 +568,15 @@ struct RestRelay: Sendable {
     /// A `307` or `308` it follows has `URLSession` resend the body, which it can:
     /// a scheme request's body is `Data`, held in memory.
     ///
-    /// Without an allowed prefix it follows every redirect. That is the guard for a
-    /// request to another host, which carries no site credential.
+    /// Without an allowed prefix it follows a redirect to any host. That is the
+    /// guard for a request to another host, which carries no site credential.
+    ///
+    /// Every request, with a prefix or without, follows a redirect only to an
+    /// `http` or `https` URL without a user name or password, and never from
+    /// `https` to `http`. `URLSession` would follow a redirect to a `data:` or
+    /// `ftp:` URL, and to `http` from `https`. A request for another host may go
+    /// over plain `http` only to the site's own host, so a chain of plain `http`
+    /// redirects can only start at the site.
     ///
     /// `URLSession` drops `Authorization` on every redirect it follows, even one to
     /// the same server. Given the request's `Authorization` — the site credential
@@ -516,11 +586,20 @@ struct RestRelay: Sendable {
     /// later redirect comes back. So the `www.` alias and the `https` upgrade it
     /// follows within the API root arrive without it, as they would from `fetch`.
     ///
-    /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal and
-    /// the request's `Authorization` are kept under a lock.
+    /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal
+    /// and the request's `Authorization` are kept under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+        /// A redirect the guard refused.
+        struct Refusal: Equatable {
+            /// Where the redirect went, without any user name or password.
+            let target: String
+
+            /// Why it was refused, worded to follow "which".
+            let reason: String
+        }
+
         /// The API root, in the form ``normalized(_:)`` gives a target, or `nil`
-        /// to follow every redirect.
+        /// to follow a redirect to any host.
         private let allowedPrefix: String?
 
         /// `allowedPrefix` under `https`, when the configured root is `http`.
@@ -530,14 +609,14 @@ struct RestRelay: Sendable {
         private let reporter: NetworkTaskReporter?
 
         private let lock = NSLock()
-        private var _refusedTarget: String?
+        private var _refusal: Refusal?
 
         /// The request's `Authorization`, until a redirect leaves its origin.
         private var _authorization: String?
 
-        /// The redirect target that was refused, or `nil` if none was.
-        var refusedTarget: String? {
-            lock.withLock { _refusedTarget }
+        /// The redirect that was refused, or `nil` if none was.
+        var refusal: Refusal? {
+            lock.withLock { _refusal }
         }
 
         init(allowedPrefix: String?, authorization: String? = nil, reporter: NetworkTaskReporter? = nil) {
@@ -558,8 +637,13 @@ struct RestRelay: Sendable {
             newRequest request: URLRequest,
             completionHandler: @escaping (URLRequest?) -> Void
         ) {
-            guard let url = request.url, contains(url.absoluteString) else {
-                lock.withLock { _refusedTarget = request.url?.absoluteString ?? "an unreadable URL" }
+            guard let url = request.url else {
+                lock.withLock { _refusal = Refusal(target: "an unreadable URL", reason: "the editor can't read") }
+                completionHandler(nil)
+                return
+            }
+            if let reason = refusalReason(from: response.url, to: url) {
+                lock.withLock { _refusal = Refusal(target: Self.withoutCredentials(url), reason: reason) }
                 completionHandler(nil)
                 return
             }
@@ -576,6 +660,40 @@ struct RestRelay: Sendable {
 
         func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
             reporter?.urlSession(session, task: task, didFinishCollecting: metrics)
+        }
+
+        /// Why a redirect from `source` to `target` can't be followed, worded to
+        /// follow "which", or `nil` if it can.
+        private func refusalReason(from source: URL?, to target: URL) -> String? {
+            switch target.scheme?.lowercased() {
+            case "https":
+                break
+            case "http":
+                if source?.scheme?.lowercased() == "https" {
+                    return "would leave https"
+                }
+            default:
+                return "isn't an http or https URL"
+            }
+            if RestRelay.hasCredentials(target) {
+                return "has a user name or password in it"
+            }
+            if !contains(target.absoluteString) {
+                return "is outside the site's configured REST API root"
+            }
+            return nil
+        }
+
+        /// `url` as text, without its user name and password, which the page
+        /// shouldn't be shown.
+        private static func withoutCredentials(_ url: URL) -> String {
+            guard RestRelay.hasCredentials(url),
+                  var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                return url.absoluteString
+            }
+            components.user = nil
+            components.password = nil
+            return components.string ?? "a URL with a user name or password in it"
         }
 
         /// Whether `target` is inside the API root, allowing only the host
