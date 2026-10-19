@@ -131,7 +131,8 @@ data class EditorConfiguration(
          * Languages for which no bundle ships at all silently resolve to
          * `en`. The resolver does not log or signal the fallback — consumers
          * expecting coverage for a specific language should verify the build
-         * manifest includes it.
+         * manifest includes it. The exception is a dev-server build without
+         * fetched translations, which logs a warning.
          */
         fun setLocale(locale: Locale) = apply {
             this.locale = LocaleResolver.Default.resolve(locale)

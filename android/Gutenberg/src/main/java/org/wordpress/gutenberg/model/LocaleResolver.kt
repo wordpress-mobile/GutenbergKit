@@ -85,10 +85,12 @@ internal class LocaleResolver(supportedLocales: Collection<String>) {
 
         // Only dev-server builds can lack translations, and the JS loader
         // never sees the requested locale, so this is the one place to say why.
-        if (supportedLocales.isEmpty() && language != DEFAULT_LOCALE) {
+        // US English is the source language, so it never needs a bundle.
+        val requested = if (region.isEmpty()) language else "$language-$region"
+        if (supportedLocales.isEmpty() && requested != DEFAULT_LOCALE && requested != "en-us") {
             Log.w(
                 TAG,
-                "No translations were available at build time, so \"$language\" falls back " +
+                "No translations were available at build time, so \"$requested\" falls back " +
                     "to English. Run `make fetch-translations`, then rebuild the app.",
             )
         }
