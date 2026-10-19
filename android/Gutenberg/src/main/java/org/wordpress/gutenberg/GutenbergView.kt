@@ -881,8 +881,9 @@ class GutenbergView : FrameLayout {
     )
 
     /**
-     * Notified on the main thread once the editor is ready, then each time the
-     * post's save availability changes.
+     * Notified on the main thread with the initial save availability, which
+     * may arrive before [EditorAvailableListener.onEditorAvailable], then each
+     * time it changes. Register before loading the editor to receive it.
      *
      * Hosts should disable their save controls while
      * [SaveAvailability.isSavingLocked] is `true`, for example while a media

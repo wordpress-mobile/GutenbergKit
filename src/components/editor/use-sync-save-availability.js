@@ -7,7 +7,8 @@ import { onEditorSaveAvailabilityChanged } from '../../utils/bridge';
  * Synchronizes the host's save controls with the editor's save availability.
  *
  * Reports whether the post is saveable and whether saving is locked (e.g. by
- * an in-progress upload), once the editor is ready and then on each change.
+ * an in-progress upload) once the post is set up, which precedes
+ * `editorLoaded`, and then on each change.
  * Reporting stops when the editor unmounts; `onEditorUnavailable` tells the
  * host to disregard the last reported state.
  *

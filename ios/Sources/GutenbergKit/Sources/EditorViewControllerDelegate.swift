@@ -54,10 +54,11 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
     /// Notifies the client that the post's save availability changed.
     ///
-    /// Called once the editor is ready, then each time the availability
-    /// changes. Clients should disable their save controls while
-    /// ``EditorSaveAvailability/isSavingLocked`` is `true`, for example while a
-    /// media upload is in progress, so they don't persist temporary media URLs.
+    /// Called with the initial availability, which may arrive before
+    /// ``editorDidLoad(_:)``, then each time it changes. Clients should disable
+    /// their save controls while ``EditorSaveAvailability/isSavingLocked`` is
+    /// `true`, for example while a media upload is in progress, so they don't
+    /// persist temporary media URLs.
     ///
     /// - note: Disregard the last reported availability after
     /// ``editorDidBecomeUnavailable(_:)``. The editor reports it again once it
