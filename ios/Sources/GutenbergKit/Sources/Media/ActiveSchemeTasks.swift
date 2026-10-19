@@ -81,9 +81,12 @@ struct ActiveSchemeTasks {
     /// Sends a response's status and headers to the task under `key`, and returns the
     /// task so the caller can send the body in chunks. Returns `nil` if WebKit has
     /// stopped the task, or if the headers are invalid, which also fails the task.
-    mutating func respond(_ key: Key, status: Int, headers: [String: String]) -> (any WKURLSchemeTask)? {
+    ///
+    /// The page reads `url` as the response's URL. Without one, it reads the URL it
+    /// requested.
+    mutating func respond(_ key: Key, status: Int, headers: [String: String], url: URL? = nil) -> (any WKURLSchemeTask)? {
         guard let task = task(for: key) else { return nil }
-        guard let url = task.request.url,
+        guard let url = url ?? task.request.url,
               let httpResponse = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers) else {
             fail(key, with: URLError(.badServerResponse))
             return nil
