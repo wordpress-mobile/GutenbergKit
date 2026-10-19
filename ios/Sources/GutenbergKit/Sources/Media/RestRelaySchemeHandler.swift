@@ -44,12 +44,7 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
         let relay = relay
         active.start(task) { key in
             Task { [weak self] in
-                do {
-                    let response = try await relay.handle(request)
-                    self?.active.answer(key, with: response)
-                } catch {
-                    self?.active.fail(key, with: error)
-                }
+                await self?.answer(key, relaying: request, through: relay)
             }
         }
     }
@@ -60,4 +55,25 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     var activeRequestCount: Int { active.count }
+
+    /// Answers the task under `key` with the relay's response, sending each chunk of the
+    /// body as it arrives. WebKit passes each chunk to the page's `fetch` straight away,
+    /// with Lockdown Mode on or off (measured in the iOS 27.0 Simulator).
+    ///
+    /// Returning early drops the body, which cancels the request to the server.
+    private func answer(_ key: ActiveSchemeTasks.Key, relaying request: URLRequest, through relay: RestRelay) async {
+        do {
+            let response = try await relay.handle(request)
+            guard let task = active.respond(key, status: response.status, headers: response.headers) else { return }
+            for try await chunk in response.body {
+                // WebKit stopped the task while this chunk was on its way. Sending it now
+                // would raise an exception.
+                guard active.task(for: key) != nil else { return }
+                task.didReceive(chunk)
+            }
+            active.finish(key)
+        } catch {
+            active.fail(key, with: error)
+        }
+    }
 }
