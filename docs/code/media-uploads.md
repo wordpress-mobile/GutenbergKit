@@ -173,11 +173,19 @@ the second group only, while the first stays as it was before the schemes.
 The relay also sends requests for other hosts, so a plugin's call to its own service works
 under Lockdown Mode. The page sends every request for another origin to one URL,
 `gbk-rest://relay/fetch?url=…`, and native code decides how to send it. That gives every
-frame a response from any `http` or `https` URL without CORS, a local network address
-included. The site credential goes only with a request for the site's REST API, to a URL
-native code builds from the configured root. Native code removes it from any other request
-the page sent it with, and sends a caller's own `Authorization` as it is. Without Lockdown
-Mode the editor page can already read those responses; the second group couldn't.
+frame a response from any `https` URL without CORS. Plain `http` goes only to the site's own
+host — the API root's or the site URL's — on any port. Any other `http` request gets a `426`
+before anything is sent. A device on the local network, or this device itself, can't present
+a valid certificate for another host's name, so a name pointed at one fails before anything
+is sent. A local host with a valid certificate for its own name is still reachable. A
+redirect is followed only to an `http` or `https` URL, and never from `https` to `http`. A
+URL with a user name or password is refused, as `fetch` refuses one: `URLSession` would store
+it and send it on later requests to that host.
+
+The site credential goes only with a request for the site's REST API, to a URL native code
+builds from the configured root. Native code removes it from any other request the page
+sent it with, and sends a caller's own `Authorization` as it is. Without Lockdown Mode the
+editor page can already read those responses; the second group couldn't.
 
 ## Background and timeouts
 

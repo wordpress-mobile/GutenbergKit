@@ -261,6 +261,11 @@ describe( 'createRelayFetch', () => {
 			await expectPassthrough( 'gbk-media-file:///photo.jpg' );
 		} );
 
+		it( 'a URL with a user name or password, for fetch itself to refuse', async () => {
+			await expectPassthrough( 'https://user:pass@example.org/api' );
+			await expectPassthrough( 'https://user@example.org/api' );
+		} );
+
 		it( "a request to the page's own origin, which CORS doesn't apply to", async () => {
 			// A dev server's, when the editor is loaded from one.
 			await expectPassthrough(
