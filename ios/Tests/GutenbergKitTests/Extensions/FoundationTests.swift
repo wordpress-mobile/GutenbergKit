@@ -416,3 +416,27 @@ struct URLComponentsPortAndPathTests {
     #expect(URLComponents(string: "https://example.com/caf%C3%A9")!.percentEncodedPathOrSlash == "/caf%C3%A9")
   }
 }
+
+// MARK: - URL.deletingFragment() Tests
+
+@Suite
+struct URLDeletingFragmentTests {
+
+  @Test("removes the fragment and leaves the rest of the URL as written")
+  func removesFragment() {
+    let url = URL(string: "https://example.com/a?include%5B%5D=1#top")!
+    #expect(url.deletingFragment().absoluteString == "https://example.com/a?include%5B%5D=1")
+  }
+
+  @Test("removes an empty fragment")
+  func removesEmptyFragment() {
+    let url = URL(string: "https://example.com/a#")!
+    #expect(url.deletingFragment().absoluteString == "https://example.com/a")
+  }
+
+  @Test("returns a URL without a fragment unchanged")
+  func leavesURLWithoutFragment() {
+    let url = URL(string: "https://example.com/a?b=1")!
+    #expect(url.deletingFragment() == url)
+  }
+}

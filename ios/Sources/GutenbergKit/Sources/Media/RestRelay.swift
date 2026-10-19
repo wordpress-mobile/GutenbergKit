@@ -263,7 +263,24 @@ struct RestRelay: Sendable {
         guard let response = response as? HTTPURLResponse else {
             return Response(Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The server did not answer over HTTP."))
         }
-        return Response(status: response.statusCode, headers: Self.merged(response.allHeaderFields), body: body)
+
+        // Report the URL that `fetch` would: the one the page requested (not the
+        // site URL it was rewritten to), or where a redirect ended up. Otherwise
+        // the page sees the relay's own `gbk-rest:` URL, as it still does for the
+        // relay's refusals. The fragment is dropped because `fetch` never reports
+        // one, and WebKit ignores a response URL that has one.
+        //
+        // `response.redirected` stays `false` after a redirect: WebKit only sets
+        // it for redirects it followed itself, and `WKURLSchemeTask` has no
+        // public API to report one. The page could set it from a header, but
+        // nothing in the editor reads it yet (see #815).
+        let finalURL = redirectGuard.followedRedirect ? response.url ?? requestedURL : requestedURL
+        return Response(
+            status: response.statusCode,
+            headers: Self.merged(response.allHeaderFields),
+            body: body,
+            url: finalURL.deletingFragment()
+        )
     }
 
     /// Whether `url` is on the site's own host, whatever its port.
@@ -403,6 +420,7 @@ struct RestRelay: Sendable {
 
         private let lock = NSLock()
         private var _refusal: Refusal?
+        private var _followedRedirect = false
 
         /// The request's `Authorization`, until a redirect leaves its origin.
         private var _authorization: String?
@@ -410,6 +428,11 @@ struct RestRelay: Sendable {
         /// The redirect that was refused, or `nil` if none was.
         var refusal: Refusal? {
             lock.withLock { _refusal }
+        }
+
+        /// Whether a redirect was followed.
+        var followedRedirect: Bool {
+            lock.withLock { _followedRedirect }
         }
 
         init(apiRoot: SiteAPIRoot?, authorization: String? = nil) {
@@ -439,6 +462,7 @@ struct RestRelay: Sendable {
             // Set either way: `nil` removes the header, rather than relying on
             // `URLSession` having dropped it.
             request.setValue(authorization(redirectingFrom: response.url, to: url), forHTTPHeaderField: "Authorization")
+            lock.withLock { _followedRedirect = true }
             completionHandler(request)
         }
 
