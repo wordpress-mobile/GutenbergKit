@@ -296,6 +296,11 @@ struct SchemeResponse: Sendable {
     var headers: [String: String] = [:]
     var body = Data()
 
+    /// The URL the page reads as the response's `url`, or `nil` for the URL the
+    /// page requested. WebKit ignores one with a fragment and reports the
+    /// requested URL instead.
+    var url: URL?
+
     static func json(_ status: Int, _ object: [String: any Sendable]) -> SchemeResponse {
         let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
         return SchemeResponse(status: status, headers: ["Content-Type": "application/json"], body: body)
