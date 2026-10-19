@@ -246,6 +246,18 @@ struct RestRelayTests {
         )
     }
 
+    @Test("keeps a requested URL's escapes when it also has characters to encode")
+    func keepsEscapesBesideCharactersToEncode() {
+        // `fetch` leaves `[]` in a query as written. `URL(string:)` would encode
+        // them, and the `%` of the escapes beside them too.
+        let target = RestRelayHandleTests.relayTarget("https://example.org/wp-json/wp/v2/posts?search=caf%C3%A9&include[]=1")
+
+        #expect(
+            RestRelay.requestedURL(in: request(target))?.absoluteString
+                == "https://example.org/wp-json/wp/v2/posts?search=caf%C3%A9&include%5B%5D=1"
+        )
+    }
+
     @Test("relays only http and https URLs, on its own route")
     func relaysOnlyWebURLs() {
         for target in [

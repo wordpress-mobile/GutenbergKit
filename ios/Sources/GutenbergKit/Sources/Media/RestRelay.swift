@@ -324,11 +324,17 @@ struct RestRelay: Sendable {
 
     /// The URL a request to the relay is for: its `url` query parameter, if
     /// that is an `http` or `https` URL with a host. `nil` otherwise.
+    ///
+    /// The value is read as written. A URL can hold characters `URL(string:)`
+    /// doesn't allow, such as `[]` or `|`. `URL(string:)` percent-encodes them,
+    /// but it also encodes the `%` of every escape the URL already had, so
+    /// `caf%C3%A9` would reach the server as `caf%25C3%25A9`.
+    /// `URL(dataRepresentation:)` encodes only the characters that need it.
     static func requestedURL(in relayURL: URL) -> URL? {
         guard let components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false),
               components.percentEncodedPath == route,
               let value = components.queryItems?.first(where: { $0.name == "url" })?.value,
-              let url = URL(string: value),
+              let url = URL(dataRepresentation: Data(value.utf8), relativeTo: nil, isAbsolute: true),
               ["http", "https"].contains(url.scheme?.lowercased()),
               url.host() != nil else {
             return nil
