@@ -291,7 +291,12 @@ class SitePreparationViewModel(
             .setPlugins(capabilities.supportsPlugins)
             .setThemeStyles(capabilities.supportsThemeStyles)
             .setSiteApiNamespace(siteApiNamespace)
-            .setNamespaceExcludedPaths(arrayOf())
+            .setNamespaceExcludedPaths(
+                arrayOf(
+                    "/wpcom/v2/following/recommendations",
+                    "/wpcom/v2/following/mine"
+                )
+            )
             .setAuthHeader(config.authHeader)
             .setTitle("")
             .setContent("")
