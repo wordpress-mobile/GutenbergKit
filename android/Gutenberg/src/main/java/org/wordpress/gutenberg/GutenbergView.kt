@@ -244,7 +244,7 @@ class GutenbergView : FrameLayout {
         historyChangeListener = listener
     }
 
-    fun setSaveAvailabilityListener(listener: SaveAvailabilityListener?) {
+    fun setSaveAvailabilityListener(listener: SaveAvailabilityListener) {
         saveAvailabilityListener = listener
     }
 
