@@ -150,7 +150,7 @@ async function initializeEditor( pluginLoadResult = {} ) {
 		initializeVideoPressAjaxBridge();
 	}
 
-	_initializeEditor( {
+	await _initializeEditor( {
 		allowedBlockTypes,
 		pluginLoadFailed: pluginLoadResult.pluginLoadFailed,
 	} );
