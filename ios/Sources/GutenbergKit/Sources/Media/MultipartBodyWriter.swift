@@ -16,9 +16,12 @@ import OSLog
 /// can't be dressed up as a complete multipart — the stream ends early, which fails the
 /// upload rather than silently corrupting it, and the cause is logged.
 final class MultipartBodyWriter: NSObject, StreamDelegate, @unchecked Sendable {
-    /// One queue for every writer. Each event is a read of at most one buffer and a write
-    /// that doesn't wait, so writers don't hold one another up.
-    private static let queue = DispatchQueue(label: "org.wordpress.gutenbergkit.multipart-body")
+    /// The one serial queue every writer runs on. Handling an event reads at most one
+    /// buffer from the file and makes one write that doesn't block, so a writer holds up
+    /// the others only for as long as that file read takes. `writeNext()` keeps the write
+    /// from blocking by checking `hasSpaceAvailable` first. Not `private`, so tests can run
+    /// work on it.
+    static let queue = DispatchQueue(label: "org.wordpress.gutenbergkit.multipart-body")
 
     // Everything below is touched only on `queue` once `start` has run.
     private let output: OutputStream
@@ -60,7 +63,10 @@ final class MultipartBodyWriter: NSObject, StreamDelegate, @unchecked Sendable {
         keepAlive = self
         output.delegate = self
         CFWriteStreamSetDispatchQueue(output, Self.queue)
-        output.open()
+        // Open on the queue as well. Opened from another thread, the stream can deliver its
+        // first event here while `open` is still running, and the two threads' calls into
+        // the stream can leave it stuck opening for good.
+        Self.queue.async { [self] in output.open() }
     }
 
     /// Stops writing and lets go of the stream and the file. Does nothing to a writer
@@ -77,7 +83,9 @@ final class MultipartBodyWriter: NSObject, StreamDelegate, @unchecked Sendable {
 
     func stream(_ stream: Stream, handle event: Stream.Event) {
         switch event {
-        case .hasSpaceAvailable:
+        // `.openCompleted` too: if a stream reports room before it has finished opening,
+        // `writeNext()` skips that event, so try again once the stream has opened.
+        case .openCompleted, .hasSpaceAvailable:
             writeNext()
         case .endEncountered, .errorOccurred:
             // The reader has gone.
@@ -87,9 +95,17 @@ final class MultipartBodyWriter: NSObject, StreamDelegate, @unchecked Sendable {
         }
     }
 
-    /// One write for each event: the stream reports room again once this one is taken.
+    /// Makes one write per event.
+    ///
+    /// Returns early unless `output.hasSpaceAvailable` is true, because an event doesn't
+    /// promise room. It can be left over from before the last write filled the buffer, or
+    /// arrive before the stream has finished opening. Writing without room blocks the
+    /// shared `queue`, and with it every upload in the process. A full bound pair waits for
+    /// its reader. A stream that is still opening can wait forever. Skipping is safe: the
+    /// stream sends another event while its reader keeps reading, and `.openCompleted`
+    /// retries a skip made while opening.
     private func writeNext() {
-        guard !isFinished else { return }
+        guard !isFinished, output.hasSpaceAvailable else { return }
         if pending.isEmpty {
             guard refill() else {
                 finish(wroteEverything: false)
