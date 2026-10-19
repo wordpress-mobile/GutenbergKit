@@ -24,6 +24,10 @@ public actor EditorService {
     private var progress: EditorProgress?
     private var progressCallback: EditorProgressCallback?
 
+    /// The latest call to `progressCallback`. Each call waits for the one before it, so the
+    /// host hears progress in the order it was made.
+    private var progressDelivery: Task<Void, Never>?
+
     /// How much of the asset bundle's weight has been counted toward `progress`.
     private var assetBundleProgress = 0
 
@@ -218,7 +222,18 @@ public actor EditorService {
             completed: min(current.completed + amount, current.total),
             total: current.total)
         self.progress = progress
-        await self.progressCallback?(progress)
+        guard let callback = self.progressCallback else { return }
+
+        // The callback is `async` and runs off this actor. Awaiting it directly lets the next
+        // increment run in the meantime, and two calls in flight can reach the host in either
+        // order: 51 before 41. So each call waits for the one before it.
+        let previous = self.progressDelivery
+        let delivery = Task {
+            await previous?.value
+            await callback(progress)
+        }
+        self.progressDelivery = delivery
+        await delivery.value
     }
 
     private func fetchDependencies() async throws -> EditorDependencies {

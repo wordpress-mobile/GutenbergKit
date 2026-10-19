@@ -396,6 +396,33 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(completed == completed.sorted())
   }
 
+  @Test("prepare() reports progress in order when the host's callback is slow")
+  func prepareProgressArrivesInOrder() async throws {
+    // The first callback holds on while the other dependencies report progress. A callback
+    // awaited straight from the service lets those reach the host first.
+    let scripts = ["a", "b", "c", "d"]
+      .map { #"<script src=\"https://example.com/\#($0).js\"></script>"# }
+      .joined()
+    let site = TestSite(
+      configuration: makeConfiguration(),
+      manifest: #"{"scripts":"\#(scripts)","styles":"","allowed_block_types":[]}"#
+    )
+    let tracker = ProgressTracker()
+    let calls = ProgressTracker()
+
+    _ = try await site.service(cachePolicy: .always).prepare { progress in
+      calls.append(progress)
+      if calls.count == 1 {
+        try? await Task.sleep(for: .milliseconds(200))
+      }
+      tracker.append(progress)
+    }
+
+    let completed = tracker.updates.map(\.completed)
+    #expect(completed.count > 1)
+    #expect(completed == completed.sorted())
+  }
+
   // MARK: - Test Helpers
 
   /// URL-based response handler for EditorService.prepare() tests.
