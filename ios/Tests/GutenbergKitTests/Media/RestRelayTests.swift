@@ -309,6 +309,21 @@ struct RestRelayTests {
         }
     }
 
+    @Test("removes Authorization on a redirect to another origin, whatever URLSession left")
+    func removesAuthorizationAcrossOrigins() {
+        // The guard enforces the rule itself rather than relying on `URLSession`
+        // having dropped the header.
+        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+        let followed = decide(
+            redirectGuard,
+            from: "https://api.example/v1/query",
+            target: "https://elsewhere.example/v1/query",
+            carrying: "Bearer jwt"
+        )
+
+        #expect(followed?.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
     @Test("doesn't put a caller's Authorization back once a redirect has left its origin")
     func keepsAuthorizationOffAfterLeavingOrigin() {
         // WebKit's `fetch` reaches the original host without it after a
@@ -492,13 +507,17 @@ struct RestRelayTests {
 
     /// Asks `redirectGuard` whether to follow a redirect from `source` to `target`.
     ///
-    /// The new request has no `Authorization`, as `URLSession` hands it over.
+    /// The new request has no `Authorization`, as `URLSession` hands it over,
+    /// unless `authorization` is given.
     private func decide(
         _ redirectGuard: RestRelay.RedirectGuard,
         from source: String = "https://example.com/wp-json/wp/v2/posts",
-        target: String
+        target: String,
+        carrying authorization: String? = nil
     ) -> URLRequest? {
         let url = URL(string: target)!
+        var newRequest = URLRequest(url: url)
+        newRequest.setValue(authorization, forHTTPHeaderField: "Authorization")
         var followed: URLRequest?
         redirectGuard.urlSession(
             .shared,
@@ -509,7 +528,7 @@ struct RestRelayTests {
                 httpVersion: "HTTP/1.1",
                 headerFields: ["Location": target]
             )!,
-            newRequest: URLRequest(url: url),
+            newRequest: newRequest,
             completionHandler: { followed = $0 }
         )
         return followed

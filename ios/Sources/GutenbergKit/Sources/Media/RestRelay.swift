@@ -322,11 +322,34 @@ struct RestRelay: Sendable {
         return String(targetPath.dropFirst(rootPath.count)) + (target.percentEncodedQuery.map { "?\($0)" } ?? "")
     }
 
+    /// A host reduced to the form its aliases share: every loopback spelling
+    /// collapses to one, and a `www.` prefix is dropped.
+    ///
+    /// ``destination(of:)`` and ``RedirectGuard`` both read hosts through this,
+    /// so a spelling one accepts as the site, the other does too. Otherwise a
+    /// site whose canonical redirect uses that spelling would have every
+    /// request refused.
+    private static func canonicalHost(_ host: String) -> String {
+        let lowercased = host.lowercased()
+        if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(lowercased) {
+            return "localhost"
+        }
+        return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
+    }
+
     /// The port `components` names, or `nil` when it names none or its scheme's
     /// default — so `https://example.com:443` and `http://example.com` agree.
     private static func explicitPort(of components: URLComponents) -> Int? {
         guard let port = components.port, port != defaultPort(for: components.scheme) else { return nil }
         return port
+    }
+
+    private static func defaultPort(for scheme: String?) -> Int? {
+        switch scheme?.lowercased() {
+        case "http": return 80
+        case "https": return 443
+        default: return nil
+        }
     }
 
     /// The path below a root that carries its route in the query — plain
@@ -427,29 +450,6 @@ struct RestRelay: Sendable {
         }
     }
 
-    /// A host reduced to the form its aliases share: every loopback spelling
-    /// collapses to one, and a `www.` prefix is dropped.
-    ///
-    /// ``destination(of:)`` and ``RedirectGuard`` both read hosts through this,
-    /// so a spelling one accepts as the site, the other does too. Otherwise a
-    /// site whose canonical redirect uses that spelling would have every
-    /// request refused.
-    private static func canonicalHost(_ host: String) -> String {
-        let lowercased = host.lowercased()
-        if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(lowercased) {
-            return "localhost"
-        }
-        return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
-    }
-
-    private static func defaultPort(for scheme: String?) -> Int? {
-        switch scheme?.lowercased() {
-        case "http": return 80
-        case "https": return 443
-        default: return nil
-        }
-    }
-
     // MARK: - Authorization
 
     /// The `Authorization` header to send upstream, or `nil` for none.
@@ -459,12 +459,23 @@ struct RestRelay: Sendable {
     /// request for any other host. The page can put it there: api-fetch's
     /// `tokenAuthMiddleware` adds it to every request it makes, whatever the
     /// host.
+    ///
+    /// It can arrive joined to the caller's own value. When a caller writes its
+    /// header as `authorization` and api-fetch adds `Authorization`, `Headers`
+    /// keeps both, joined with ", ". `Headers` also trims whitespace from each
+    /// value. So the site credential is looked for as a trimmed, comma-separated
+    /// part, and only that part is removed.
     func authorization(sentByCaller callerValue: String?, toSiteAPI: Bool) -> String? {
-        let siteCredential = authHeader.isEmpty ? nil : authHeader
         if toSiteAPI {
-            return callerValue ?? siteCredential
+            return callerValue ?? (authHeader.isEmpty ? nil : authHeader)
         }
-        return callerValue == siteCredential ? nil : callerValue
+        let siteCredential = authHeader.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let callerValue, !siteCredential.isEmpty else { return callerValue }
+
+        let parts = callerValue.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let kept = parts.filter { $0 != siteCredential }
+        guard kept.count < parts.count else { return callerValue }
+        return kept.isEmpty ? nil : kept.joined(separator: ", ")
     }
 
     /// Refuses redirects that leave the site API root.
@@ -501,9 +512,9 @@ struct RestRelay: Sendable {
     /// the same server. Given the request's `Authorization` — the site credential
     /// or the caller's own — the guard puts it back the way WebKit's `fetch` does:
     /// on a redirect to the same scheme, host, and port. Once a redirect goes
-    /// anywhere else the header stays off, even if a later redirect comes back. So
-    /// the `www.` alias and the `https` upgrade it follows within the API root
-    /// arrive without it, as they would from `fetch`.
+    /// anywhere else the guard removes the header, and it stays off even if a
+    /// later redirect comes back. So the `www.` alias and the `https` upgrade it
+    /// follows within the API root arrive without it, as they would from `fetch`.
     ///
     /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal and
     /// the request's `Authorization` are kept under a lock.
@@ -553,9 +564,9 @@ struct RestRelay: Sendable {
                 return
             }
             var request = request
-            if let authorization = authorization(redirectingFrom: response.url, to: url) {
-                request.setValue(authorization, forHTTPHeaderField: "Authorization")
-            }
+            // Set either way: `nil` removes the header, rather than relying on
+            // `URLSession` having dropped it.
+            request.setValue(authorization(redirectingFrom: response.url, to: url), forHTTPHeaderField: "Authorization")
             completionHandler(request)
         }
 

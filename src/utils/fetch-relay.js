@@ -133,12 +133,13 @@ function isRelayed( target ) {
  * WebKit hands a scheme handler a string or an `ArrayBuffer` body, and drops a
  * `Blob` — or a `FormData` holding one — without an error: the request arrives
  * empty and still succeeds. So every body that is not a string is read into an
- * `ArrayBuffer` first, which costs the body's size in memory. That suits what
- * reaches here: JSON, and the few-megabyte chunks a block's own uploader
- * sends. Core's media uploads reach here only from an editor without site
- * credentials, which doesn't offer native uploads. Otherwise
- * `nativeMediaUploadMiddleware` sends them to native code in chunks before they
- * become a request.
+ * `ArrayBuffer` first, which costs the body's size in memory, and native code
+ * holds it whole again to send it. Most bodies are small: JSON, and the
+ * few-megabyte chunks a block's own uploader sends. Core's media uploads reach
+ * here only from an editor without site credentials, which doesn't offer native
+ * uploads; otherwise `nativeMediaUploadMiddleware` sends them to native code in
+ * chunks before they become a request. A large upload to another host, such as
+ * a file a plugin sends straight to its own storage, is held whole too.
  *
  * Every body, rather than those that are an `instanceof Blob` or `FormData`:
  * one made in another window — an iframe's — is an instance of that window's

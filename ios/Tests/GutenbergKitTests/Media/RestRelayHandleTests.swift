@@ -89,6 +89,38 @@ struct RestRelayHandleTests {
         }
     }
 
+    @Test("removes the site credential when the page joined it to the caller's own")
+    func removesSiteCredentialJoinedToCallerCredential() async throws {
+        // A caller that writes its header as `authorization`, plus api-fetch's
+        // `Authorization`: `Headers` keeps both, joined with ", ".
+        let exchange = try await relay(
+            target: Self.relayTarget("https://example.org/api"),
+            headers: ["Authorization": "Bearer own-key, Bearer test-token"]
+        )
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer own-key")
+    }
+
+    @Test("matches the site credential with its whitespace trimmed, and leaves other values alone")
+    func matchesTrimmedSiteCredential() {
+        // `Headers` trims whitespace, so the page's copy of a credential
+        // configured with a trailing space has none.
+        let relay = RestRelay(
+            configuration: EditorConfigurationBuilder(
+                postType: .post,
+                siteURL: URL(string: "https://example.com")!,
+                siteApiRoot: URL(string: "https://example.com/wp-json/")!,
+                authHeader: "Bearer test-token "
+            ).build()
+        )
+
+        #expect(relay.authorization(sentByCaller: "Bearer test-token", toSiteAPI: false) == nil)
+        #expect(relay.authorization(sentByCaller: "Bearer own-key,Bearer test-token", toSiteAPI: false) == "Bearer own-key")
+        // A value with commas of its own, and no site credential, goes as sent.
+        let digest = #"Digest username="a", realm="b", nonce="c""#
+        #expect(relay.authorization(sentByCaller: digest, toSiteAPI: false) == digest)
+    }
+
     @Test("refuses anything but an http or https URL before sending anything")
     func refusesOtherSchemes() async throws {
         for target in [
@@ -274,8 +306,8 @@ struct RestRelayHandleTests {
     /// The relay target for a request to `url`, encoded as the page encodes it
     /// (`encodeURIComponent`).
     static func relayTarget(_ url: String) -> String {
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-_.!~*'()")
+        // `CharacterSet.alphanumerics` would leave non-ASCII letters unencoded.
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.!~*'()")
         return "\(RestRelay.route)?url=" + url.addingPercentEncoding(withAllowedCharacters: allowed)!
     }
 
