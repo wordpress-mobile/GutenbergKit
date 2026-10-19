@@ -8,7 +8,11 @@ import {
 	vi,
 } from 'vitest';
 import apiFetch from '@wordpress/api-fetch';
-import { configureApiFetch, withRateLimitRetry } from './api-fetch';
+import {
+	configureApiFetch,
+	withEditedPostType,
+	withRateLimitRetry,
+} from './api-fetch';
 import * as bridge from './bridge';
 import * as logger from './logger';
 
@@ -183,6 +187,77 @@ describe( 'api-fetch credentials handling', () => {
 			await apiFetch( { path: '/wp/v2/posts/99', method: 'PUT' } );
 
 			expect( global.fetch ).toHaveBeenCalled();
+		} );
+	} );
+
+	describe( 'withEditedPostType', () => {
+		const typesPath = '/wp/v2/types?context=view';
+		const preloadData = {
+			[ typesPath ]: {
+				body: { post: { slug: 'post', rest_base: 'posts' } },
+				headers: { Allow: 'GET' },
+			},
+			'/wp/v2/settings': { body: {} },
+		};
+
+		it( 'adds a post type missing from the preloaded types', () => {
+			bridge.getGBKit.mockReturnValue( {
+				post: {
+					type: 'book',
+					restBase: 'books',
+					restNamespace: 'library/v1',
+				},
+			} );
+
+			const result = withEditedPostType( preloadData );
+
+			expect( result[ typesPath ] ).toEqual( {
+				body: {
+					post: { slug: 'post', rest_base: 'posts' },
+					book: {
+						name: 'book',
+						slug: 'book',
+						taxonomies: [],
+						rest_base: 'books',
+						rest_namespace: 'library/v1',
+					},
+				},
+				headers: { Allow: 'GET' },
+			} );
+			expect( result[ '/wp/v2/settings' ] ).toBe(
+				preloadData[ '/wp/v2/settings' ]
+			);
+			expect( preloadData[ typesPath ].body.book ).toBeUndefined();
+		} );
+
+		it( 'falls back to default restBase and restNamespace when omitted from the payload', () => {
+			bridge.getGBKit.mockReturnValue( { post: { type: 'book' } } );
+
+			const result = withEditedPostType( preloadData );
+
+			expect( result[ typesPath ].body.book ).toMatchObject( {
+				rest_base: 'posts',
+				rest_namespace: 'wp/v2',
+			} );
+		} );
+
+		it.each( [
+			[
+				'the post type is already preloaded',
+				{ post: { type: 'post' } },
+			],
+			[ 'no post payload is present', {} ],
+		] )( 'leaves the preload data unchanged when %s', ( _, gbkit ) => {
+			bridge.getGBKit.mockReturnValue( gbkit );
+
+			expect( withEditedPostType( preloadData ) ).toBe( preloadData );
+		} );
+
+		it( 'leaves the preload data unchanged when post types are not preloaded', () => {
+			bridge.getGBKit.mockReturnValue( { post: { type: 'book' } } );
+			const data = { '/wp/v2/settings': { body: {} } };
+
+			expect( withEditedPostType( data ) ).toBe( data );
 		} );
 	} );
 

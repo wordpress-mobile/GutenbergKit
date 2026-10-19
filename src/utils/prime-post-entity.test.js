@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { dispatch, resolveSelect, select } from '@wordpress/data';
 import { primePostEntity } from './prime-post-entity';
 import { getGBKit } from './bridge';
-import { buildPostTypeEntity } from './post-type-entities';
+import { warn } from './logger';
 
 // Loading the real core-data store in vitest trips on its ESM dependencies.
 vi.mock( '@wordpress/data', () => ( {
@@ -13,9 +13,6 @@ vi.mock( '@wordpress/data', () => ( {
 vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
 vi.mock( './bridge' );
 vi.mock( './logger' );
-vi.mock( './post-type-entities', () => ( {
-	buildPostTypeEntity: vi.fn( () => ( { name: 'fallback' } ) ),
-} ) );
 
 /**
  * Builds a post shaped like the one `getPost()` returns.
@@ -45,7 +42,6 @@ describe( 'primePostEntity', () => {
 		vi.clearAllMocks();
 
 		coreDispatch = {
-			addEntities: vi.fn(),
 			receiveEntityRecords: vi.fn(),
 			finishResolution: vi.fn(),
 		};
@@ -63,19 +59,17 @@ describe( 'primePostEntity', () => {
 
 		expect( getEntitiesConfig ).toHaveBeenCalledWith( 'postType' );
 		expect( getEntityConfig ).toHaveBeenCalledWith( 'postType', 'post' );
-		expect( coreDispatch.addEntities ).not.toHaveBeenCalled();
+		expect( warn ).not.toHaveBeenCalled();
 	} );
 
-	it( 'registers a fallback entity for a post type core did not load', async () => {
+	it( 'warns when core has no configuration for the post type', async () => {
 		getEntityConfig.mockReturnValue( undefined );
-		const post = buildPost( { type: 'book', restBase: 'books' } );
 
-		await primePostEntity( post );
+		await primePostEntity( buildPost( { type: 'book' } ) );
 
-		expect( buildPostTypeEntity ).toHaveBeenCalledWith( post );
-		expect( coreDispatch.addEntities ).toHaveBeenCalledWith( [
-			{ name: 'fallback' },
-		] );
+		expect( warn ).toHaveBeenCalledWith(
+			expect.stringContaining( '"book"' )
+		);
 	} );
 
 	it( 'marks the post resolved so core-data never fetches it', async () => {

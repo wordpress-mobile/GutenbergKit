@@ -2,7 +2,6 @@ import { dispatch, resolveSelect, select } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { getGBKit } from './bridge';
 import { warn } from './logger';
-import { buildPostTypeEntity } from './post-type-entities';
 
 /**
  * @typedef {import('./bridge').Post} Post
@@ -22,31 +21,17 @@ import { buildPostTypeEntity } from './post-type-entities';
  * @return {Promise<void>} Resolves once the post is seeded.
  */
 export async function primePostEntity( post ) {
-	await registerPostTypeEntity( post );
+	// Core builds the configurations from the preloaded `/wp/v2/types`
+	// response, which `withEditedPostType` ensures includes the post's type.
+	await resolveSelect( coreStore ).getEntitiesConfig( 'postType' );
+
+	if ( ! select( coreStore ).getEntityConfig( 'postType', post.type ) ) {
+		warn( `No entity configuration for post type "${ post.type }"` );
+	}
 
 	const { receiveEntityRecords, finishResolution } = dispatch( coreStore );
 	receiveEntityRecords( 'postType', post.type, buildPostRecord( post ) );
 	finishResolution( 'getEntityRecord', [ 'postType', post.type, post.id ] );
-}
-
-/**
- * Ensures core-data has an entity configuration for the post's type.
- *
- * Core builds the configurations from the `/wp/v2/types` response, which hosts
- * preload. A fallback is registered only for a type missing from it.
- *
- * @param {Post} post The post from the host.
- * @return {Promise<void>} Resolves once the configuration is registered.
- */
-async function registerPostTypeEntity( post ) {
-	await resolveSelect( coreStore ).getEntitiesConfig( 'postType' );
-
-	if ( select( coreStore ).getEntityConfig( 'postType', post.type ) ) {
-		return;
-	}
-
-	warn( `Post type "${ post.type }" not loaded; using a fallback config` );
-	dispatch( coreStore ).addEntities( [ buildPostTypeEntity( post ) ] );
 }
 
 /**
