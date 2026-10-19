@@ -273,13 +273,79 @@ describe( 'createRelayFetch', () => {
 			);
 		} );
 
-		it( 'a Request object, which would have to be rebuilt', async () => {
+		it( "a Request for the page's own origin, with its body unread", async () => {
 			const request = new Request(
-				'https://example.com/wp-json/wp/v2/posts'
+				`${ window.location.origin }/src/translations.json`,
+				{ method: 'POST', body: 'hello' }
 			);
 			await relayFetch()( request );
 
 			expect( next ).toHaveBeenCalledWith( request, undefined );
+			expect( request.bodyUsed ).toBe( false );
+		} );
+
+		it( 'a no-cors Request', async () => {
+			const request = new Request( 'https://example.org/ping', {
+				mode: 'no-cors',
+			} );
+			await relayFetch()( request );
+
+			expect( next ).toHaveBeenCalledWith( request, undefined );
+		} );
+	} );
+
+	describe( 'a Request object', () => {
+		// Libraries such as `ky` call `fetch( new Request( url, init ) )`.
+
+		it( 'is relayed with its method, headers, and body', async () => {
+			const url = 'https://example.org/api';
+			await relayFetch()(
+				new Request( url, {
+					method: 'POST',
+					headers: {
+						Authorization: 'Bearer own-token',
+						'Content-Type': 'application/json',
+					},
+					body: '{"q":1}',
+				} )
+			);
+
+			expect( calledURL() ).toBe( relayed( url ) );
+			const init = next.mock.calls[ 0 ][ 1 ];
+			const headers = new Headers( init.headers );
+			expect( init.method ).toBe( 'POST' );
+			expect( headers.get( 'Authorization' ) ).toBe( 'Bearer own-token' );
+			expect( headers.get( 'Content-Type' ) ).toBe( 'application/json' );
+			expect( new TextDecoder().decode( init.body ) ).toBe( '{"q":1}' );
+			expect( init.credentials ).toBe( 'omit' );
+		} );
+
+		it( 'takes what fetch is given alongside it over its own', async () => {
+			// As `fetch` does: `init` overrides the `Request`, and its headers
+			// replace the `Request`'s rather than adding to them.
+			await relayFetch()(
+				new Request( 'https://example.org/api', {
+					method: 'POST',
+					headers: { 'X-From-Request': '1' },
+					body: 'from request',
+				} ),
+				{ headers: { 'X-From-Init': '1' }, body: 'from init' }
+			);
+
+			const init = next.mock.calls[ 0 ][ 1 ];
+			const headers = new Headers( init.headers );
+			expect( init.method ).toBe( 'POST' );
+			expect( headers.get( 'X-From-Init' ) ).toBe( '1' );
+			expect( headers.get( 'X-From-Request' ) ).toBeNull();
+			expect( new TextDecoder().decode( init.body ) ).toBe( 'from init' );
+		} );
+
+		it( 'sends no body when it has none', async () => {
+			await relayFetch()( new Request( 'https://example.org/api' ) );
+
+			const init = next.mock.calls[ 0 ][ 1 ];
+			expect( init.method ).toBe( 'GET' );
+			expect( init.body ).toBeNull();
 		} );
 	} );
 
