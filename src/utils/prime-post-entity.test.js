@@ -87,13 +87,14 @@ describe( 'primePostEntity', () => {
 	it( 'seeds the host post when the server record is not preloaded', async () => {
 		const post = buildPost( { id: -1 } );
 
-		await primePostEntity( post );
+		const record = await primePostEntity( post );
 
 		expect( coreDispatch.receiveEntityRecords ).toHaveBeenCalledWith(
 			'postType',
 			'post',
 			post
 		);
+		expect( record ).toBe( post );
 	} );
 
 	it( 'seeds the preloaded server record with the host title and content', async () => {

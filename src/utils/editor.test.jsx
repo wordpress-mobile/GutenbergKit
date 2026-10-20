@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { dispatch } from '@wordpress/data';
+import * as element from '@wordpress/element';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { initializeEditor } from './editor';
 import { getGBKit, getPost } from './bridge';
@@ -10,6 +11,7 @@ import { primePostEntity } from './prime-post-entity';
 vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/editor' );
 vi.mock( import( '@wordpress/data' ), { spy: true } );
+vi.mock( import( '@wordpress/element' ), { spy: true } );
 vi.mock( '@wordpress/block-library' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );
@@ -34,6 +36,7 @@ describe( 'initializeEditor', () => {
 
 		mockEditorDispatch = {
 			updateEditorSettings: vi.fn(),
+			setupEditor: vi.fn(),
 		};
 
 		mockDispatch = vi.fn( ( store ) => {
@@ -157,5 +160,23 @@ describe( 'initializeEditor', () => {
 			title: { raw: 'Test Post' },
 			content: { raw: '' },
 		} );
+	} );
+
+	it( 'should set up the editor with the seeded record before rendering', async () => {
+		const record = { id: 1, type: 'post', featured_media: 123 };
+		primePostEntity.mockResolvedValueOnce( record );
+		const render = vi.fn();
+		vi.spyOn( element, 'createRoot' ).mockReturnValueOnce( { render } );
+		mockEditorDispatch.setupEditor.mockImplementation( () =>
+			expect( render ).not.toHaveBeenCalled()
+		);
+
+		await initializeEditor();
+
+		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
+			record,
+			{}
+		);
+		expect( render ).toHaveBeenCalled();
 	} );
 } );

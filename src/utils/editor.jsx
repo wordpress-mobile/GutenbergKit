@@ -42,7 +42,12 @@ export async function initializeEditor( {
 	unregisterDisallowedBlocks( allowedBlockTypes );
 
 	const post = await getPost();
-	await primePostEntity( post );
+	const record = await primePostEntity( post );
+
+	// Like core's edit-post, set up the editor before the first render, so that
+	// hooks see the post on mount rather than a later change. `EditorProvider`
+	// then skips its own setup.
+	dispatch( editorStore ).setupEditor( record, {} );
 
 	createRoot( document.getElementById( 'root' ) ).render(
 		<StrictMode>
