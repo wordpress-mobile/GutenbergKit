@@ -274,8 +274,8 @@ export function onNetworkRequest( requestData ) {
 
 /**
  * Default values used when the native host omits fields from the post payload.
- * Centralized here so all consumers (getPost, blockPostWritesMiddleware) agree
- * on the fallback contract.
+ * Centralized here so all consumers (getPost, getPostReference) agree on the
+ * fallback contract.
  */
 export const POST_FALLBACKS = {
 	id: -1,
@@ -306,6 +306,40 @@ export function getGBKit() {
  * @property {number} [author]      The author ID of the post.
  * @property {string} [status]      The status of the post.
  */
+
+/**
+ * @typedef {Object} PostReference
+ * @property {number} id            The ID of the post.
+ * @property {string} type          The type of the post.
+ * @property {string} restBase      The REST API base path for this post type.
+ * @property {string} restNamespace The REST API namespace for this post type.
+ */
+
+/**
+ * Returns the identifiers of a post from the host's payload, with
+ * `POST_FALLBACKS` applied to the fields it omits.
+ *
+ * @param {Object} [post] The `post` payload of the GBKit object.
+ * @return {PostReference} The post's identifiers.
+ */
+export function getPostReference( post ) {
+	return {
+		id: post?.id || POST_FALLBACKS.id,
+		type: post?.type || POST_FALLBACKS.type,
+		restBase: post?.restBase || POST_FALLBACKS.restBase,
+		restNamespace: post?.restNamespace || POST_FALLBACKS.restNamespace,
+	};
+}
+
+/**
+ * Returns the REST path of a post, e.g. `/wp/v2/posts/1`.
+ *
+ * @param {PostReference} post The post.
+ * @return {string} The path.
+ */
+export function getPostPath( { id, restBase, restNamespace } ) {
+	return `/${ restNamespace }/${ restBase }/${ id }`;
+}
 
 /**
  * Requests the latest persisted content from the native host.
@@ -358,10 +392,7 @@ export async function getPost() {
 	if ( hostContent ) {
 		debug( 'Using content from native host' );
 		return {
-			id: post?.id || POST_FALLBACKS.id,
-			type: post?.type || POST_FALLBACKS.type,
-			restBase: post?.restBase || POST_FALLBACKS.restBase,
-			restNamespace: post?.restNamespace || POST_FALLBACKS.restNamespace,
+			...getPostReference( post ),
 			status: post?.status || POST_FALLBACKS.status,
 			title: { raw: hostContent.title },
 			content: { raw: hostContent.content },
@@ -371,10 +402,7 @@ export async function getPost() {
 	if ( post ) {
 		debug( 'Native bridge unavailable, using GBKit initial content' );
 		return {
-			id: post.id || POST_FALLBACKS.id,
-			type: post.type || POST_FALLBACKS.type,
-			restBase: post.restBase || POST_FALLBACKS.restBase,
-			restNamespace: post.restNamespace || POST_FALLBACKS.restNamespace,
+			...getPostReference( post ),
 			status: post.status || POST_FALLBACKS.status,
 			title: { raw: decodeURIComponent( post.title ) },
 			content: { raw: decodeURIComponent( post.content ) },

@@ -1,6 +1,6 @@
 import { dispatch, resolveSelect, select } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
-import { getGBKit } from './bridge';
+import { getGBKit, getPostPath } from './bridge';
 import { warn } from './logger';
 
 /**
@@ -66,7 +66,7 @@ function buildPostRecord( post ) {
  */
 function getPreloadedPost( post ) {
 	const { preloadData } = getGBKit();
-	const path = `/${ post.restNamespace }/${ post.restBase }/${ post.id }?context=edit`;
+	const path = `${ getPostPath( post ) }?context=edit`;
 
 	return preloadData?.[ path ]?.body ?? null;
 }

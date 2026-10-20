@@ -3,6 +3,8 @@ import {
 	requestLatestContent,
 	getGBKit,
 	getPost,
+	getPostPath,
+	getPostReference,
 	showBlockInserter,
 	onEditorSaveAvailabilityChanged,
 } from './bridge';
@@ -223,6 +225,52 @@ describe( 'getGBKit', () => {
 		);
 
 		expect( getGBKit() ).toEqual( {} );
+	} );
+} );
+
+describe( 'getPostReference', () => {
+	it( "returns the host's post identifiers", () => {
+		expect(
+			getPostReference( {
+				id: 5,
+				type: 'book',
+				restBase: 'books',
+				restNamespace: 'library/v1',
+				title: 'Title',
+			} )
+		).toEqual( {
+			id: 5,
+			type: 'book',
+			restBase: 'books',
+			restNamespace: 'library/v1',
+		} );
+	} );
+
+	it( 'falls back for fields the host omits', () => {
+		expect( getPostReference( { id: 5 } ) ).toEqual( {
+			id: 5,
+			type: 'post',
+			restBase: 'posts',
+			restNamespace: 'wp/v2',
+		} );
+		expect( getPostReference() ).toEqual( {
+			id: -1,
+			type: 'post',
+			restBase: 'posts',
+			restNamespace: 'wp/v2',
+		} );
+	} );
+} );
+
+describe( 'getPostPath', () => {
+	it( "returns the post's REST path", () => {
+		expect(
+			getPostPath( {
+				id: 5,
+				restBase: 'books',
+				restNamespace: 'library/v1',
+			} )
+		).toBe( '/library/v1/books/5' );
 	} );
 } );
 
