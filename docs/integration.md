@@ -79,7 +79,8 @@ extension YourViewController: EditorViewControllerDelegate {
     }
 
     func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability) {
-        // Optional - disable saving while availability.isSavingLocked, e.g. during uploads
+        // Optional - while availability.isSavingLocked (e.g. during uploads), don't save
+        // the post to the server, whether from a save control or in code (e.g. autosave)
     }
 
     func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction) {
@@ -207,7 +208,8 @@ gutenbergView.setHistoryChangeListener { hasUndo, hasRedo ->
 }
 
 gutenbergView.setSaveAvailabilityListener { availability ->
-    // Disable saving while availability.isSavingLocked, e.g. during uploads
+    // While availability.isSavingLocked (e.g. during uploads), don't save the post
+    // to the server, whether from a save control or in code (e.g. autosave)
 }
 
 gutenbergView.setOpenMediaLibraryListener { config ->

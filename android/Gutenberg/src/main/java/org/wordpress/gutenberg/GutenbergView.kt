@@ -885,9 +885,11 @@ class GutenbergView : FrameLayout {
      * may arrive before [EditorAvailableListener.onEditorAvailable], then each
      * time it changes. Register before loading the editor to receive it.
      *
-     * Hosts should disable their save controls while
+     * Hosts should not save the post to the server while
      * [SaveAvailability.isSavingLocked] is `true`, for example while a media
-     * upload is in progress, so they don't persist temporary media URLs.
+     * upload is in progress, so they don't persist temporary media URLs. That
+     * covers saves the host starts in code, such as autosaves, not only its
+     * save controls.
      * Gutenberg releases the lock for a multi-file upload as soon as any file
      * fails, while the remaining files may still be uploading.
      *

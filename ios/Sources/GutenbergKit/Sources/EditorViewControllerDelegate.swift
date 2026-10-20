@@ -55,10 +55,11 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// Notifies the client that the post's save availability changed.
     ///
     /// Called with the initial availability, which may arrive before
-    /// ``editorDidLoad(_:)``, then each time it changes. Clients should disable
-    /// their save controls while ``EditorSaveAvailability/isSavingLocked`` is
-    /// `true`, for example while a media upload is in progress, so they don't
-    /// persist temporary media URLs.
+    /// ``editorDidLoad(_:)``, then each time it changes. Clients should not save
+    /// the post to the server while ``EditorSaveAvailability/isSavingLocked``
+    /// is `true`, for example while a media upload is in progress, so they
+    /// don't persist temporary media URLs. That covers saves the client starts
+    /// in code, such as autosaves, not only its save controls.
     ///
     /// - warning: Gutenberg releases the lock for a multi-file upload as soon
     /// as any file fails, while the remaining files may still be uploading.
