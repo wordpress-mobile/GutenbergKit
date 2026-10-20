@@ -43,8 +43,11 @@ test.describe( 'Post entity seeding', () => {
 		// `window.editorDelegate`.
 		await page.addInitScript( () => {
 			window.contentChangedCount = 0;
+			window.featuredImageChanges = [];
 			window.editorDelegate = {
 				onEditorContentChanged: () => window.contentChangedCount++,
+				onEditorFeaturedImageChanged: ( mediaID ) =>
+					window.featuredImageChanges.push( mediaID ),
 			};
 		} );
 
@@ -53,7 +56,8 @@ test.describe( 'Post entity seeding', () => {
 			post: HOST_POST,
 			preloadData: {
 				'/wp/v2/posts/1?context=edit': {
-					body: serverPost,
+					// The host may hold a different, unsynced featured image.
+					body: { ...serverPost, featured_media: 123 },
 					headers: {},
 				},
 			},
@@ -81,6 +85,9 @@ test.describe( 'Post entity seeding', () => {
 		expect( await page.evaluate( () => window.contentChangedCount ) ).toBe(
 			0
 		);
+		expect(
+			await page.evaluate( () => window.featuredImageChanges )
+		).toEqual( [] );
 		expect( postRequests ).toEqual( [] );
 
 		await page.getByText( 'Host content' ).click();

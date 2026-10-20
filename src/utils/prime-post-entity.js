@@ -18,7 +18,7 @@ import { warn } from './logger';
  * https://github.com/wordpress-mobile/GutenbergKit/pull/445.
  *
  * @param {Post} post The post from the host.
- * @return {Promise<void>} Resolves once the post is seeded.
+ * @return {Promise<Object>} The seeded record.
  */
 export async function primePostEntity( post ) {
 	// Core builds the configurations from the preloaded `/wp/v2/types`
@@ -29,9 +29,12 @@ export async function primePostEntity( post ) {
 		warn( `No entity configuration for post type "${ post.type }"` );
 	}
 
+	const record = buildPostRecord( post );
 	const { receiveEntityRecords, finishResolution } = dispatch( coreStore );
-	receiveEntityRecords( 'postType', post.type, buildPostRecord( post ) );
+	receiveEntityRecords( 'postType', post.type, record );
 	finishResolution( 'getEntityRecord', [ 'postType', post.type, post.id ] );
+
+	return record;
 }
 
 /**
