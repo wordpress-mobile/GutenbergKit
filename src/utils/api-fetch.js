@@ -1,4 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
+import { store as coreStore } from '@wordpress/core-data';
+import { select } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
 import { getGBKit, getPostPath, getPostReference } from './bridge';
 import { info, warn, error as logError } from './logger';
@@ -53,6 +55,8 @@ export function configureApiFetch() {
 			withEditedPostType( preloadData ?? defaultPreloadData )
 		)
 	);
+	// Registered last so it runs first, covering preloaded responses too.
+	apiFetch.use( persistedPostOverlayMiddleware );
 	apiFetch.setFetchHandler(
 		withRateLimitRetry( apiFetch.defaultFetchHandler )
 	);
@@ -611,6 +615,149 @@ export function postTypesFallbackMiddleware( options, next ) {
 		warn( 'Failed to load post types; using the built-in ones', err );
 		return withEditedPostType( defaultPreloadData )[ POST_TYPES_PATH ].body;
 	} );
+}
+
+/**
+ * Middleware keeping the persisted title and content of the post being edited
+ * in fetched copies of it.
+ *
+ * The post is seeded with the host's title and content, which may hold edits
+ * not yet uploaded. Core-data stores a fetched copy over the seeded record,
+ * e.g. from `getEntityRecord()` with a query or a list including the post, so
+ * the server's values would replace the host's. Other fields, such as embeds,
+ * are kept.
+ *
+ * Exported for testing only.
+ *
+ * @type {APIFetchMiddleware}
+ */
+export async function persistedPostOverlayMiddleware( options, next ) {
+	const method = ( options.method ?? 'GET' ).toUpperCase();
+
+	if ( method !== 'GET' || ! isPostReadPath( options.path ) ) {
+		return next( options );
+	}
+
+	const response = await next( options );
+	const persisted = getPersistedPost();
+
+	if ( ! persisted ) {
+		return response;
+	}
+
+	if ( options.parse !== false ) {
+		return overlayPersistedPost( response, persisted );
+	}
+
+	let body;
+	try {
+		body = await response.clone().json();
+	} catch {
+		return response;
+	}
+
+	const overlaid = overlayPersistedPost( body, persisted );
+
+	if ( overlaid === body ) {
+		return response;
+	}
+
+	return new Response( JSON.stringify( overlaid ), {
+		status: response.status,
+		statusText: response.statusText,
+		headers: response.headers,
+	} );
+}
+
+/**
+ * Whether a request path reads the post being edited, alone or in a list of
+ * its type.
+ *
+ * @param {string} [path] The request path, e.g. `/wp/v2/posts/1?_embed=1`.
+ * @return {boolean} True for the post's path and its type's collection path.
+ */
+function isPostReadPath( path ) {
+	if ( typeof path !== 'string' ) {
+		return false;
+	}
+
+	const postPath = getPostPath( getPostReference( getGBKit().post ) );
+	const collectionPath = postPath.slice( 0, postPath.lastIndexOf( '/' ) );
+	const pathname = path.split( '?' )[ 0 ];
+
+	return pathname === postPath || pathname === collectionPath;
+}
+
+/**
+ * Returns the persisted record of the post being edited once it is seeded.
+ *
+ * Checking the resolution first avoids triggering a fetch of the post.
+ *
+ * @return {Object|null} The record, or null before seeding.
+ */
+function getPersistedPost() {
+	const { id, type } = getPostReference( getGBKit().post );
+	const args = [ 'postType', type, id ];
+	const { hasFinishedResolution, getEntityRecord } = select( coreStore );
+
+	if ( ! hasFinishedResolution( 'getEntityRecord', args ) ) {
+		return null;
+	}
+
+	return getEntityRecord( ...args ) ?? null;
+}
+
+/**
+ * Applies the persisted title and content to copies of the post in a response.
+ *
+ * @param {Object|Object[]} body      A record or list of records.
+ * @param {Object}          persisted The post's persisted record.
+ * @return {Object|Object[]} The body, unchanged when it holds no stale copy.
+ */
+function overlayPersistedPost( body, persisted ) {
+	if ( ! Array.isArray( body ) ) {
+		return overlayRecord( body, persisted );
+	}
+
+	const records = body.map( ( record ) =>
+		overlayRecord( record, persisted )
+	);
+
+	return records.some( ( record, index ) => record !== body[ index ] )
+		? records
+		: body;
+}
+
+/**
+ * Applies the persisted title and content to a record of the post.
+ *
+ * Only raw values are replaced; rendered values stay the server's.
+ *
+ * @param {Object} record    A record from the response.
+ * @param {Object} persisted The post's persisted record.
+ * @return {Object} The record, unchanged when it isn't a stale copy.
+ */
+function overlayRecord( record, persisted ) {
+	if ( record?.id !== persisted.id ) {
+		return record;
+	}
+
+	let result = record;
+
+	for ( const field of [ 'title', 'content' ] ) {
+		const raw = persisted[ field ]?.raw;
+		const value = record[ field ];
+
+		if (
+			raw !== undefined &&
+			value?.raw !== undefined &&
+			value.raw !== raw
+		) {
+			result = { ...result, [ field ]: { ...value, raw } };
+		}
+	}
+
+	return result;
 }
 
 /**
