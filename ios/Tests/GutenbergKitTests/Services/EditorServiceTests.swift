@@ -411,8 +411,7 @@ struct EditorServiceTests: MakesTestFixtures {
     let calls = ProgressTracker()
 
     _ = try await site.service(cachePolicy: .always).prepare { progress in
-      calls.append(progress)
-      if calls.count == 1 {
+      if calls.append(progress) == 1 {
         try? await Task.sleep(for: .milliseconds(200))
       }
       tracker.append(progress)
