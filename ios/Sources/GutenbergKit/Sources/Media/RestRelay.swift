@@ -207,7 +207,7 @@ struct RestRelay: Sendable {
                 message: "The relay can only send a request to an http or https URL."
             )
         }
-        guard !Self.hasCredentials(requestedURL) else {
+        guard !requestedURL.hasCredentials else {
             Logger.restRelay.error("Refusing to relay a request whose URL holds credentials")
             return Self.errorResponse(
                 status: 400,
@@ -291,15 +291,6 @@ struct RestRelay: Sendable {
         }
     }
 
-    /// Whether `url` has a user name or password in it.
-    ///
-    /// `fetch` refuses such a URL. `URLSession` would answer the host's
-    /// challenge with it, then store it and send it on every later request to
-    /// that host, in place of the request's own `Authorization`.
-    private static func hasCredentials(_ url: URL) -> Bool {
-        url.user(percentEncoded: true) != nil || url.password(percentEncoded: true) != nil
-    }
-
     /// Whether `url` is on the site's own host, whatever its port.
     private func isSiteHost(_ url: URL) -> Bool {
         url.host().map { siteHosts.contains(Self.canonicalHost($0)) } ?? false
@@ -377,7 +368,7 @@ struct RestRelay: Sendable {
               let root = URLComponents(string: apiRoot),
               let targetHost = target.host, let rootHost = root.host,
               Self.canonicalHost(targetHost) == Self.canonicalHost(rootHost),
-              Self.explicitPort(of: target) == Self.explicitPort(of: root) else {
+              target.explicitPort == root.explicitPort else {
             return nil
         }
 
@@ -385,8 +376,8 @@ struct RestRelay: Sendable {
             return Self.queryRoutedPath(of: target, below: root)
         }
 
-        let rootPath = Self.path(of: root)
-        let targetPath = Self.path(of: target)
+        let rootPath = root.percentEncodedPathOrSlash
+        let targetPath = target.percentEncodedPathOrSlash
         guard targetPath.hasPrefix(rootPath) else { return nil }
         return String(targetPath.dropFirst(rootPath.count)) + (target.percentEncodedQuery.map { "?\($0)" } ?? "")
     }
@@ -406,21 +397,6 @@ struct RestRelay: Sendable {
         return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
     }
 
-    /// The port `components` names, or `nil` when it names none or its scheme's
-    /// default — so `https://example.com:443` and `http://example.com` agree.
-    private static func explicitPort(of components: URLComponents) -> Int? {
-        guard let port = components.port, port != defaultPort(for: components.scheme) else { return nil }
-        return port
-    }
-
-    private static func defaultPort(for scheme: String?) -> Int? {
-        switch scheme?.lowercased() {
-        case "http": return 80
-        case "https": return 443
-        default: return nil
-        }
-    }
-
     /// The path below a root that carries its route in the query — plain
     /// permalinks, `https://site/index.php?rest_route=/` — or `nil` when
     /// `target` isn't below it.
@@ -433,7 +409,7 @@ struct RestRelay: Sendable {
     /// decoded, and the other parameters are carried verbatim after a `?`.
     /// ``upstreamURL(forPath:)`` merges them into the root's query.
     private static func queryRoutedPath(of target: URLComponents, below root: URLComponents) -> String? {
-        guard path(of: target) == path(of: root), let rootQuery = root.percentEncodedQuery else { return nil }
+        guard target.percentEncodedPathOrSlash == root.percentEncodedPathOrSlash, let rootQuery = root.percentEncodedQuery else { return nil }
 
         // The root's query is the single `rest_route=/` pair `get_rest_url()`
         // emits; on a namespaced site the value is longer (`/sites/1/`), but it
@@ -450,11 +426,6 @@ struct RestRelay: Sendable {
         let path = route.dropFirst(rootRoute.value.count)
         let query = pairs.joined(separator: "&")
         return query.isEmpty ? String(path) : "\(path)?\(query)"
-    }
-
-    /// `components`' path, `/` when it has none.
-    private static func path(of components: URLComponents) -> String {
-        components.percentEncodedPath.isEmpty ? "/" : components.percentEncodedPath
     }
 
     /// A `name=value` query pair split at its first `=`, verbatim.
@@ -649,7 +620,8 @@ struct RestRelay: Sendable {
                 return
             }
             if let reason = refusalReason(from: response.url, to: url) {
-                lock.withLock { _refusal = Refusal(target: Self.withoutCredentials(url), reason: reason) }
+                let target = url.removingCredentials()?.absoluteString ?? "a URL with a user name or password in it"
+                lock.withLock { _refusal = Refusal(target: target, reason: reason) }
                 completionHandler(nil)
                 return
             }
@@ -681,25 +653,13 @@ struct RestRelay: Sendable {
             default:
                 return "isn't an http or https URL"
             }
-            if RestRelay.hasCredentials(target) {
+            if target.hasCredentials {
                 return "has a user name or password in it"
             }
             if !contains(target.absoluteString) {
                 return "is outside the site's configured REST API root"
             }
             return nil
-        }
-
-        /// `url` as text, without its user name and password, which the page
-        /// shouldn't be shown.
-        private static func withoutCredentials(_ url: URL) -> String {
-            guard RestRelay.hasCredentials(url),
-                  var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-                return url.absoluteString
-            }
-            components.user = nil
-            components.password = nil
-            return components.string ?? "a URL with a user name or password in it"
         }
 
         /// Whether `target` is inside the API root, allowing only the host
@@ -719,24 +679,12 @@ struct RestRelay: Sendable {
         /// `target`, or `nil` once a redirect has left the original origin.
         private func authorization(redirectingFrom source: URL?, to target: URL) -> String? {
             lock.withLock {
-                let sameOrigin = Self.origin(of: source).map { $0 == Self.origin(of: target) } ?? false
+                let sameOrigin = source?.origin.map { $0 == target.origin } ?? false
                 if !sameOrigin {
                     _authorization = nil
                 }
                 return _authorization
             }
-        }
-
-        /// `url`'s scheme, host, and port, with a default port filled in. `nil` for a
-        /// URL without a host.
-        private static func origin(of url: URL?) -> String? {
-            guard let url,
-                  let scheme = url.scheme?.lowercased(),
-                  let host = url.host()?.lowercased(),
-                  let port = url.port ?? RestRelay.defaultPort(for: scheme) else {
-                return nil
-            }
-            return "\(scheme)://\(host):\(port)"
         }
 
         /// `url` with its host in the form its aliases share and a default
@@ -748,7 +696,7 @@ struct RestRelay: Sendable {
                 return nil
             }
             components.host = RestRelay.canonicalHost(host)
-            if let port = components.port, port == RestRelay.defaultPort(for: components.scheme) {
+            if components.port == components.defaultPort {
                 components.port = nil
             }
             return components.string
