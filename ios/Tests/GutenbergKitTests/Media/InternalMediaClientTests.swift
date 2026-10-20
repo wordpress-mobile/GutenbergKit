@@ -279,7 +279,17 @@ struct MultipartBodyStreamTests {
       reader.close()
       writer.cancel()
     }
-    try await waitUntil { MultipartBodyWriter.queue.sync { !stream.hasSpaceAvailable } }
+    // Poll with `async`, not `queue.sync`, so a stuck queue fails this wait instead of
+    // hanging the run. Also require an open stream. A closed stream has no room either,
+    // so a writer that closed early would pass.
+    let bufferFull = OSAllocatedUnfairLock(initialState: false)
+    try await waitUntil {
+      MultipartBodyWriter.queue.async {
+        let full = stream.streamStatus == .open && !stream.hasSpaceAvailable
+        bufferFull.withLock { $0 = full }
+      }
+      return bufferFull.withLock { $0 }
+    }
 
     MultipartBodyWriter.queue.async { writer.stream(stream, handle: .hasSpaceAvailable) }
     let othersRan = OSAllocatedUnfairLock(initialState: false)
