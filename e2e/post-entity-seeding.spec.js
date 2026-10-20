@@ -145,6 +145,48 @@ test.describe( 'Post entity seeding', () => {
 		await expect( page.getByText( 'Host content' ) ).toBeVisible();
 	} );
 
+	test( "keeps the host's title and content when the post is fetched", async ( {
+		page,
+	} ) => {
+		const editor = new EditorPage( page );
+		await editor.setup( { post: HOST_POST } );
+
+		const records = await page.evaluate( async () => {
+			const { resolveSelect, select } = window.wp.data;
+			const { getEntityRecord, getEntityRecords } =
+				resolveSelect( 'core' );
+			await getEntityRecord( 'postType', 'post', 1, { _embed: true } );
+			await getEntityRecords( 'postType', 'post', { include: [ 1 ] } );
+			return {
+				embedded: select( 'core' ).getEntityRecord(
+					'postType',
+					'post',
+					1,
+					{ _embed: true }
+				),
+				listed: select( 'core' ).getEntityRecords( 'postType', 'post', {
+					include: [ 1 ],
+				} )[ 0 ],
+				edited: select( 'core/editor' ).getEditedPostAttribute(
+					'title'
+				),
+				dirty: select( 'core/editor' ).isEditedPostDirty(),
+			};
+		} );
+
+		for ( const record of [ records.embedded, records.listed ] ) {
+			expect( record.title.raw ).toBe( 'Host title' );
+			expect( record.content.raw ).toBe( HOST_POST.content );
+			expect( record.title.rendered ).toBe( serverPost.title.rendered );
+		}
+		expect( records.embedded._embedded ).toBeDefined();
+		expect( records.edited ).toBe( 'Host title' );
+		expect( records.dirty ).toBe( false );
+		await expect(
+			page.getByRole( 'textbox', { name: 'Add title' } )
+		).toHaveText( 'Host title' );
+	} );
+
 	test( 'blocks saving the post from the editor', async ( { page } ) => {
 		const writeRequests = [];
 		page.on( 'request', ( request ) => {

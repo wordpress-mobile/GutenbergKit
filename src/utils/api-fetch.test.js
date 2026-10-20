@@ -8,8 +8,10 @@ import {
 	vi,
 } from 'vitest';
 import apiFetch from '@wordpress/api-fetch';
+import { select } from '@wordpress/data';
 import {
 	configureApiFetch,
+	persistedPostOverlayMiddleware,
 	postTypesFallbackMiddleware,
 	withEditedPostType,
 	withRateLimitRetry,
@@ -25,6 +27,9 @@ vi.mock( './bridge', async ( importOriginal ) => {
 	};
 } );
 vi.mock( './logger' );
+// Loading the real core-data store in vitest trips on its ESM dependencies.
+vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
+vi.mock( '@wordpress/data', () => ( { select: vi.fn() } ) );
 
 describe( 'api-fetch credentials handling', () => {
 	let originalFetch;
@@ -41,6 +46,7 @@ describe( 'api-fetch credentials handling', () => {
 
 	beforeEach( () => {
 		vi.clearAllMocks();
+		select.mockReturnValue( { hasFinishedResolution: () => false } );
 		originalFetch = global.fetch;
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
@@ -307,6 +313,132 @@ describe( 'api-fetch credentials handling', () => {
 			await expect(
 				postTypesFallbackMiddleware( options, next )
 			).rejects.toBe( failure );
+		} );
+	} );
+
+	describe( 'persistedPostOverlayMiddleware', () => {
+		const persisted = {
+			id: 42,
+			title: { raw: 'Host title' },
+			content: { raw: '<p>Host content</p>' },
+		};
+		const serverRecord = {
+			id: 42,
+			title: { raw: 'Server title', rendered: 'Server title' },
+			content: {
+				raw: '<p>Server content</p>',
+				rendered: '<p>Server content</p>',
+			},
+			_embedded: { author: [] },
+		};
+		const overlaidRecord = {
+			...serverRecord,
+			title: { raw: 'Host title', rendered: 'Server title' },
+			content: {
+				raw: '<p>Host content</p>',
+				rendered: '<p>Server content</p>',
+			},
+		};
+		let getEntityRecord;
+
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				post: { id: 42, type: 'post' },
+			} );
+			getEntityRecord = vi.fn( () => persisted );
+			select.mockReturnValue( {
+				hasFinishedResolution: () => true,
+				getEntityRecord,
+			} );
+		} );
+
+		it( "keeps the persisted title and content in the post's record", async () => {
+			const next = vi.fn( () => Promise.resolve( serverRecord ) );
+
+			await expect(
+				persistedPostOverlayMiddleware(
+					{ path: '/wp/v2/posts/42?_embed=1' },
+					next
+				)
+			).resolves.toEqual( overlaidRecord );
+			expect( getEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'post',
+				42
+			);
+		} );
+
+		it( 'keeps the persisted title and content in a list including the post', async () => {
+			const other = { id: 7, title: { raw: 'Other' } };
+			const next = vi.fn( () =>
+				Promise.resolve( [ other, serverRecord ] )
+			);
+
+			const records = await persistedPostOverlayMiddleware(
+				{ path: '/wp/v2/posts?include=42' },
+				next
+			);
+
+			expect( records ).toEqual( [ other, overlaidRecord ] );
+			expect( records[ 0 ] ).toBe( other );
+		} );
+
+		it( 'overlays unparsed responses', async () => {
+			const next = vi.fn( () =>
+				Promise.resolve(
+					new Response( JSON.stringify( [ serverRecord ] ), {
+						status: 200,
+						headers: { 'X-WP-Total': '1' },
+					} )
+				)
+			);
+
+			const response = await persistedPostOverlayMiddleware(
+				{ path: '/wp/v2/posts?per_page=100', parse: false },
+				next
+			);
+
+			expect( response.headers.get( 'X-WP-Total' ) ).toBe( '1' );
+			await expect( response.json() ).resolves.toEqual( [
+				overlaidRecord,
+			] );
+		} );
+
+		it( 'returns responses without the post unchanged', async () => {
+			const records = [ { id: 7, title: { raw: 'Other' } } ];
+			const next = vi.fn( () => Promise.resolve( records ) );
+
+			await expect(
+				persistedPostOverlayMiddleware( { path: '/wp/v2/posts' }, next )
+			).resolves.toBe( records );
+		} );
+
+		it( 'leaves responses alone before the post is seeded', async () => {
+			select.mockReturnValue( {
+				hasFinishedResolution: () => false,
+				getEntityRecord,
+			} );
+			const next = vi.fn( () => Promise.resolve( serverRecord ) );
+
+			await expect(
+				persistedPostOverlayMiddleware(
+					{ path: '/wp/v2/posts/42' },
+					next
+				)
+			).resolves.toBe( serverRecord );
+			expect( getEntityRecord ).not.toHaveBeenCalled();
+		} );
+
+		it.each( [
+			[ 'sub-resources', { path: '/wp/v2/posts/42/autosaves' } ],
+			[ 'other posts', { path: '/wp/v2/posts/421' } ],
+			[ 'writes', { path: '/wp/v2/posts/42', method: 'PUT' } ],
+		] )( 'ignores %s', async ( _, options ) => {
+			const next = vi.fn( () => Promise.resolve( serverRecord ) );
+
+			await expect(
+				persistedPostOverlayMiddleware( options, next )
+			).resolves.toBe( serverRecord );
 		} );
 	} );
 
