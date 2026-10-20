@@ -396,10 +396,13 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(completed == completed.sorted())
   }
 
-  @Test("prepare() reports progress in order when the host's callback is slow")
+  @Test("prepare() reports progress in order, and returns after the last report, when the host's callback is slow")
   func prepareProgressArrivesInOrder() async throws {
     // The first callback holds on while the other dependencies report progress. A callback
     // awaited straight from the service lets those reach the host first.
+    //
+    // The last callback holds on too. It comes at the end of `prepare()`, so a `prepare()` that
+    // didn't wait for its callbacks would return before the last one reached the host.
     let scripts = ["a", "b", "c", "d"]
       .map { #"<script src=\"https://example.com/\#($0).js\"></script>"# }
       .joined()
@@ -411,7 +414,8 @@ struct EditorServiceTests: MakesTestFixtures {
     let calls = ProgressTracker()
 
     _ = try await site.service(cachePolicy: .always).prepare { progress in
-      if calls.append(progress) == 1 {
+      let isFirst = calls.append(progress) == 1
+      if isFirst || progress.completed == progress.total {
         try? await Task.sleep(for: .milliseconds(200))
       }
       tracker.append(progress)
@@ -420,6 +424,7 @@ struct EditorServiceTests: MakesTestFixtures {
     let completed = tracker.updates.map(\.completed)
     #expect(completed.count > 1)
     #expect(completed == completed.sorted())
+    #expect(tracker.updates.last?.completed == tracker.updates.last?.total)
   }
 
   // MARK: - Test Helpers
