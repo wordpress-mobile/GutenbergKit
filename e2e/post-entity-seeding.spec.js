@@ -131,6 +131,20 @@ test.describe( 'Post entity seeding', () => {
 		);
 	} );
 
+	test( 'renders the post when the post types fail to load', async ( {
+		page,
+	} ) => {
+		await page.route( /\/wp\/v2\/types\?/, ( route ) => route.abort() );
+
+		const editor = new EditorPage( page );
+		await editor.setup( { post: HOST_POST, preloadData: {} } );
+
+		await expect(
+			page.getByRole( 'textbox', { name: 'Add title' } )
+		).toHaveText( 'Host title' );
+		await expect( page.getByText( 'Host content' ) ).toBeVisible();
+	} );
+
 	test( 'blocks saving the post from the editor', async ( { page } ) => {
 		const writeRequests = [];
 		page.on( 'request', ( request ) => {
