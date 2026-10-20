@@ -10,6 +10,7 @@ import {
 import apiFetch from '@wordpress/api-fetch';
 import {
 	configureApiFetch,
+	postTypesFallbackMiddleware,
 	withEditedPostType,
 	withRateLimitRetry,
 } from './api-fetch';
@@ -258,6 +259,54 @@ describe( 'api-fetch credentials handling', () => {
 			const data = { '/wp/v2/settings': { body: {} } };
 
 			expect( withEditedPostType( data ) ).toBe( data );
+		} );
+	} );
+
+	describe( 'postTypesFallbackMiddleware', () => {
+		const typesPath = '/wp/v2/types?context=view';
+
+		it( 'answers a failed post types request with the built-in types', async () => {
+			bridge.getGBKit.mockReturnValue( { post: { type: 'book' } } );
+			const next = vi.fn( () =>
+				Promise.reject( new Error( 'Offline' ) )
+			);
+
+			const types = await postTypesFallbackMiddleware(
+				{ path: typesPath },
+				next
+			);
+
+			expect( Object.keys( types ) ).toEqual(
+				expect.arrayContaining( [
+					'post',
+					'page',
+					'attachment',
+					'wp_block',
+					'book',
+				] )
+			);
+			expect( logger.warn ).toHaveBeenCalled();
+		} );
+
+		it( 'returns the post types the site sends', async () => {
+			const types = { post: { slug: 'post' } };
+			const next = vi.fn( () => Promise.resolve( types ) );
+
+			await expect(
+				postTypesFallbackMiddleware( { path: typesPath }, next )
+			).resolves.toBe( types );
+		} );
+
+		it.each( [
+			[ 'other paths', { path: '/wp/v2/types/post?context=edit' } ],
+			[ 'unparsed requests', { path: typesPath, parse: false } ],
+		] )( 'lets failures of %s through', async ( _, options ) => {
+			const failure = new Error( 'Offline' );
+			const next = vi.fn( () => Promise.reject( failure ) );
+
+			await expect(
+				postTypesFallbackMiddleware( options, next )
+			).rejects.toBe( failure );
 		} );
 	} );
 

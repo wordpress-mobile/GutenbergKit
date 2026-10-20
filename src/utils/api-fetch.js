@@ -47,6 +47,7 @@ export function configureApiFetch() {
 	apiFetch.use( mediaPermissionsMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use( siteIndexMiddleware );
+	apiFetch.use( postTypesFallbackMiddleware );
 	apiFetch.use(
 		apiFetch.createPreloadingMiddleware(
 			withEditedPostType( preloadData ?? defaultPreloadData )
@@ -588,6 +589,28 @@ function isRestIndexPath( path ) {
 	}
 	const pathname = path.split( '?' )[ 0 ];
 	return pathname === '' || pathname === '/';
+}
+
+/**
+ * Middleware answering a failed post types request with the built-in types.
+ *
+ * Core-data builds post type entity configurations from this response, and the
+ * editor cannot render the post without one, e.g. offline when the host did not
+ * preload it.
+ *
+ * Exported for testing only.
+ *
+ * @type {APIFetchMiddleware}
+ */
+export function postTypesFallbackMiddleware( options, next ) {
+	if ( options.path !== POST_TYPES_PATH || options.parse === false ) {
+		return next( options );
+	}
+
+	return next( options ).catch( ( err ) => {
+		warn( 'Failed to load post types; using the built-in ones', err );
+		return withEditedPostType( defaultPreloadData )[ POST_TYPES_PATH ].body;
+	} );
 }
 
 /**
