@@ -165,6 +165,8 @@ fun EditorScreen(
     var isCodeEditorEnabled by remember { mutableStateOf(false) }
     var isEditorAvailable by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
+    // Whether the editor has locked saving, e.g. while a media upload is in progress.
+    var isSavingLocked by remember { mutableStateOf(false) }
     var gutenbergViewRef by remember { mutableStateOf<GutenbergView?>(null) }
     val openedContent = GutenbergView.LatestContent(configuration.title, configuration.content)
     // The newest content read from the editor, held in memory as a host app's
@@ -177,7 +179,7 @@ fun EditorScreen(
     val context = LocalContext.current
 
     val hasChanges = latestContent != savedContent
-    val canSave = isEditorAvailable && !isSaving && accountId != null && configuration.postId != null && hasChanges
+    val canSave = isEditorAvailable && !isSaving && !isSavingLocked && accountId != null && configuration.postId != null && hasChanges
 
     BackHandler(enabled = isModalDialogOpen) {
         gutenbergViewRef?.dismissTopModal()
@@ -312,7 +314,14 @@ fun EditorScreen(
 
                     gutenbergViewRef = this
                     setEditorDidBecomeAvailable { isEditorAvailable = true }
-                    setEditorDidBecomeUnavailable { isEditorAvailable = false }
+                    setEditorDidBecomeUnavailable {
+                        isEditorAvailable = false
+                        // The crashed editor's save lock no longer applies.
+                        isSavingLocked = false
+                    }
+                    setSaveAvailabilityListener { availability ->
+                        isSavingLocked = availability.isSavingLocked
+                    }
                     setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
                         override fun onModalDialogOpened(dialogType: String) {
                             isModalDialogOpen = true

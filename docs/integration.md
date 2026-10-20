@@ -78,6 +78,11 @@ extension YourViewController: EditorViewControllerDelegate {
         // Undo/redo state changed - use state.hasUndo and state.hasRedo
     }
 
+    func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability) {
+        // Optional - while availability.isSavingLocked (e.g. during uploads), don't save
+        // the post to the server, whether from a save control or in code (e.g. autosave)
+    }
+
     func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction) {
         // User requested media picker - present your media library UI
     }
@@ -200,6 +205,11 @@ gutenbergView.setContentChangeListener {
 
 gutenbergView.setHistoryChangeListener { hasUndo, hasRedo ->
     // Undo/redo state changed
+}
+
+gutenbergView.setSaveAvailabilityListener { availability ->
+    // While availability.isSavingLocked (e.g. during uploads), don't save the post
+    // to the server, whether from a save control or in code (e.g. autosave)
 }
 
 gutenbergView.setOpenMediaLibraryListener { config ->

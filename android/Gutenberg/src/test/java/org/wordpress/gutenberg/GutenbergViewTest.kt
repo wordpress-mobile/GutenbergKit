@@ -439,6 +439,17 @@ class GutenbergViewTest {
     }
 
     @Test
+    fun `onEditorSaveAvailabilityChanged notifies the listener`() {
+        var notified: GutenbergView.SaveAvailability? = null
+        gutenbergView.setSaveAvailabilityListener { availability -> notified = availability }
+
+        gutenbergView.onEditorSaveAvailabilityChanged(isSaveable = true, isSavingLocked = true)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(GutenbergView.SaveAvailability(isSaveable = true, isSavingLocked = true), notified)
+    }
+
+    @Test
     fun `onEditorUnavailable stops content reads from reaching the web view`() {
         gutenbergView.onEditorLoaded()
         shadowOf(Looper.getMainLooper()).idle()

@@ -52,6 +52,23 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// Notifies the client about new history state.
     func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState)
 
+    /// Notifies the client that the post's save availability changed.
+    ///
+    /// Called with the initial availability, which may arrive before
+    /// ``editorDidLoad(_:)``, then each time it changes. Clients should not save
+    /// the post to the server while ``EditorSaveAvailability/isSavingLocked``
+    /// is `true`, for example while a media upload is in progress, so they
+    /// don't persist temporary media URLs. That covers saves the client starts
+    /// in code, such as autosaves, not only its save controls.
+    ///
+    /// - warning: Gutenberg releases the lock for a multi-file upload as soon
+    /// as any file fails, while the remaining files may still be uploading.
+    ///
+    /// - note: Disregard the last reported availability after
+    /// ``editorDidBecomeUnavailable(_:)``. The editor reports it again once it
+    /// reloads.
+    func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability)
+
     /// Notifies the client about a new featured image.
     func editor(_ viewController: EditorViewController, didUpdateFeaturedImage mediaID: Int)
 
@@ -99,6 +116,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
 extension EditorViewControllerDelegate {
     public func editor(_ viewController: EditorViewController, didFailToLoad error: Error) {}
+    public func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability) {}
 }
 
 #endif
@@ -110,6 +128,20 @@ public struct EditorState {
     public var hasUndo = false
     /// Set to `true` if the editor has redo history.
     public var hasRedo = false
+}
+
+/// Whether the post can be saved, as reported by the editor.
+public struct EditorSaveAvailability: Decodable, Equatable, Sendable {
+    /// `true` if the post has a title, excerpt, or content worth saving.
+    public let isSaveable: Bool
+    /// `true` while something in the editor, such as a media upload, has
+    /// locked saving.
+    public let isSavingLocked: Bool
+
+    public init(isSaveable: Bool, isSavingLocked: Bool) {
+        self.isSaveable = isSaveable
+        self.isSavingLocked = isSavingLocked
+    }
 }
 
 // Definition of JavaScript exception, which will be used to
