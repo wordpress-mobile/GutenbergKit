@@ -11,7 +11,10 @@ vi.mock( '@wordpress/data', () => ( {
 	select: vi.fn(),
 } ) );
 vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
-vi.mock( './bridge' );
+vi.mock( './bridge', async ( importOriginal ) => ( {
+	...( await importOriginal() ),
+	getGBKit: vi.fn(),
+} ) );
 vi.mock( './logger' );
 
 /**

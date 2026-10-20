@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
-import { getGBKit, POST_FALLBACKS } from './bridge';
+import { getGBKit, getPostPath, getPostReference } from './bridge';
 import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
@@ -70,11 +70,12 @@ export function configureApiFetch() {
  * @return {Object} The preloaded responses.
  */
 export function withEditedPostType( preloadData ) {
-	const { post } = getGBKit();
 	const postTypes = preloadData[ POST_TYPES_PATH ]?.body;
-	const type = post?.type || POST_FALLBACKS.type;
+	const { type, restBase, restNamespace } = getPostReference(
+		getGBKit().post
+	);
 
-	if ( ! post || ! postTypes || postTypes[ type ] ) {
+	if ( ! postTypes || postTypes[ type ] ) {
 		return preloadData;
 	}
 
@@ -88,9 +89,8 @@ export function withEditedPostType( preloadData ) {
 					name: type,
 					slug: type,
 					taxonomies: [],
-					rest_base: post.restBase || POST_FALLBACKS.restBase,
-					rest_namespace:
-						post.restNamespace || POST_FALLBACKS.restNamespace,
+					rest_base: restBase,
+					rest_namespace: restNamespace,
 				},
 			},
 		},
@@ -210,15 +210,11 @@ function blockPostWritesMiddleware( options, next ) {
 function isPostPath( path ) {
 	const { post } = getGBKit();
 
-	if ( typeof path !== 'string' || ! post || post.id === undefined ) {
+	if ( typeof path !== 'string' || ! post ) {
 		return false;
 	}
 
-	// Apply the same fallback contract as `getPost()` so the guard still
-	// engages on hosts whose payload omits restBase/restNamespace.
-	const restNamespace = post.restNamespace || POST_FALLBACKS.restNamespace;
-	const restBase = post.restBase || POST_FALLBACKS.restBase;
-	const postPath = `/${ restNamespace }/${ restBase }/${ post.id }`;
+	const postPath = getPostPath( getPostReference( post ) );
 	const pathname = path.split( '?' )[ 0 ];
 
 	return pathname === postPath || pathname.startsWith( `${ postPath }/` );
