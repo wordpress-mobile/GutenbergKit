@@ -78,15 +78,9 @@ struct RestRelay: Sendable {
         case otherHost(URL)
     }
 
-    /// The site's API root, slash-terminated. Upstream paths are appended to
-    /// it, and every resulting URL — including redirect targets — must still
-    /// start with it.
-    ///
-    /// Held as a string rather than a `URL` because the root is not always
-    /// directory-shaped: a site on plain permalinks has
-    /// `https://example.com/?rest_route=/`, where relative URL resolution would
-    /// discard the query.
-    private let apiRoot: String
+    /// The site's REST API root. A site API request goes to a URL built from
+    /// it, and every redirect it follows must stay inside it.
+    private let apiRoot: SiteAPIRoot
 
     /// The site credential: added to a site API request that has no
     /// `Authorization` of its own, and never sent to another host.
@@ -100,8 +94,9 @@ struct RestRelay: Sendable {
     /// editor's own.
     private let observer: (any EditorHTTPClientDelegate)?
 
-    /// The hosts of the API root and the site URL, in ``canonicalHost(_:)``
-    /// form: the only hosts a request may reach over plain `http`.
+    /// The hosts of the API root and the site URL, in
+    /// ``SiteAPIRoot/canonicalHost(_:)`` form: the only hosts a request may
+    /// reach over plain `http`.
     ///
     /// Both, because they can differ: a Jetpack site reached through
     /// WordPress.com has the API root `public-api.wordpress.com`, while its
@@ -146,39 +141,13 @@ struct RestRelay: Sendable {
         session: URLSession? = nil,
         observer: (any EditorHTTPClientDelegate)? = nil
     ) {
-        self.apiRoot = Self.normalizedRoot(configuration.siteApiRoot.absoluteString)
+        self.apiRoot = SiteAPIRoot(configuration.siteApiRoot)
         self.authHeader = configuration.authHeader
         self.session = session ?? Self.sharedSession
         self.observer = observer
         self.siteHosts = Set(
-            [configuration.siteApiRoot.host(), configuration.siteURL.host()].compactMap { $0.map(Self.canonicalHost) }
+            [configuration.siteApiRoot.host(), configuration.siteURL.host()].compactMap { $0.map(SiteAPIRoot.canonicalHost) }
         )
-    }
-
-    /// The configured root, slash-terminated, with the route value of a
-    /// plain-permalink root decoded.
-    ///
-    /// WordPress advertises that root through `add_query_arg`, which
-    /// percent-encodes the value: `index.php?rest_route=%2F`. The separators
-    /// are decoded before the slash is added so it lands inside the route
-    /// value. Appended after `%2F`, it would make a root no path can extend:
-    /// WordPress reads `rest_route=%2F/wp/v2/posts` as the route
-    /// `//wp/v2/posts` and answers `rest_no_route`.
-    private static func normalizedRoot(_ configured: String) -> String {
-        var root = configured
-        if let query = root.firstIndex(of: "?") {
-            root = String(root[..<query]) + decodingSlashes(root[query...])
-        }
-        return root.hasSuffix("/") ? root : root + "/"
-    }
-
-    /// `component` with its percent-encoded slashes decoded, and nothing else.
-    ///
-    /// Only the separators are decoded, so any other encoded byte reaches the
-    /// site exactly as it was sent, rather than decoded once here and once more
-    /// by PHP.
-    private static func decodingSlashes(_ component: some StringProtocol) -> String {
-        component.replacingOccurrences(of: "%2f", with: "/", options: .caseInsensitive)
     }
 
     /// Sends a relayed request on and returns the upstream response with
@@ -254,7 +223,7 @@ struct RestRelay: Sendable {
             // `https` to `http`. Either keeps its `Authorization` on a
             // redirect the way `fetch` would.
             let redirectGuard = RedirectGuard(
-                allowedPrefix: isSiteAPI ? apiRoot : nil,
+                apiRoot: isSiteAPI ? apiRoot : nil,
                 authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization"),
                 reporter: reporter
             )
@@ -293,7 +262,7 @@ struct RestRelay: Sendable {
 
     /// Whether `url` is on the site's own host, whatever its port.
     private func isSiteHost(_ url: URL) -> Bool {
-        url.host().map { siteHosts.contains(Self.canonicalHost($0)) } ?? false
+        url.host().map { siteHosts.contains(SiteAPIRoot.canonicalHost($0)) } ?? false
     }
 
     /// The answer to a plain `http` request for another host.
@@ -335,159 +304,18 @@ struct RestRelay: Sendable {
 
     /// Where a request for `url` goes: the site's REST API when `url` is below
     /// the API root, another host otherwise. `nil` when `url` is below the root
-    /// but its path walks out of it.
-    ///
-    /// **Host aliases are tolerated; other hosts and path differences are
-    /// not.** WordPress builds `Link` headers and `_links` hrefs from
-    /// `home_url()`, which need not spell the host the app was configured with
-    /// — `www.` versus bare, or wp-env's `localhost` versus the `127.0.0.1` its
-    /// runtime writes into `WP_SITEURL`. The scheme may differ too — an `http`
-    /// `siteurl` behind a TLS-terminating proxy — since the request is sent to
-    /// the configured root whichever it names. The port has to match: another
-    /// port on the same host is another server, and answering its request with
-    /// the site's response is a different bug from the one this tolerance
-    /// exists to fix. A *path* difference is likewise a different resource: in
-    /// a subdirectory multisite `https://site/a/wp-json/` and
-    /// `https://site/b/wp-json/` are separate sites.
+    /// but its path walks out of it. What counts as below the root, host
+    /// aliases included, is ``SiteAPIRoot/path(below:)``'s to say.
     ///
     /// Anything else goes where it was going, without the site credential. The
     /// cost is an alias this can't recognize — a site reached by LAN IP whose
     /// `home_url()` says `localhost`, a mapped domain, a migration — where a
     /// paginated `Link` target reaches the site without the credential.
     func destination(of url: URL) -> Destination? {
-        guard let path = pathBelowRoot(of: url) else {
+        guard let path = apiRoot.path(below: url) else {
             return .otherHost(url)
         }
-        return upstreamURL(forPath: path).map(Destination.siteAPI)
-    }
-
-    /// The part of `url` below the site API root — its path and query, without
-    /// a leading slash — or `nil` when `url` isn't below the root.
-    private func pathBelowRoot(of url: URL) -> String? {
-        guard let target = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let root = URLComponents(string: apiRoot),
-              let targetHost = target.host, let rootHost = root.host,
-              Self.canonicalHost(targetHost) == Self.canonicalHost(rootHost),
-              target.explicitPort == root.explicitPort else {
-            return nil
-        }
-
-        if root.percentEncodedQuery != nil {
-            return Self.queryRoutedPath(of: target, below: root)
-        }
-
-        let rootPath = root.percentEncodedPathOrSlash
-        let targetPath = target.percentEncodedPathOrSlash
-        guard targetPath.hasPrefix(rootPath) else { return nil }
-        return String(targetPath.dropFirst(rootPath.count)) + (target.percentEncodedQuery.map { "?\($0)" } ?? "")
-    }
-
-    /// A host reduced to the form its aliases share: every loopback spelling
-    /// collapses to one, and a `www.` prefix is dropped.
-    ///
-    /// ``destination(of:)`` and ``RedirectGuard`` both read hosts through this,
-    /// so a spelling one accepts as the site, the other does too. Otherwise a
-    /// site whose canonical redirect uses that spelling would have every
-    /// request refused.
-    private static func canonicalHost(_ host: String) -> String {
-        let lowercased = host.lowercased()
-        if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(lowercased) {
-            return "localhost"
-        }
-        return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
-    }
-
-    /// The path below a root that carries its route in the query — plain
-    /// permalinks, `https://site/index.php?rest_route=/` — or `nil` when
-    /// `target` isn't below it.
-    ///
-    /// A prefix match can't decide this shape: the root spells the route `/`,
-    /// and every request spells it `%2F`. api-fetch's locale middleware
-    /// rebuilds the query through `addQueryArgs`, and WordPress builds
-    /// pagination `Link` URLs through `add_query_arg`; both percent-encode every
-    /// value. So the route is read out of the query by name, its separators
-    /// decoded, and the other parameters are carried verbatim after a `?`.
-    /// ``upstreamURL(forPath:)`` merges them into the root's query.
-    private static func queryRoutedPath(of target: URLComponents, below root: URLComponents) -> String? {
-        guard target.percentEncodedPathOrSlash == root.percentEncodedPathOrSlash, let rootQuery = root.percentEncodedQuery else { return nil }
-
-        // The root's query is the single `rest_route=/` pair `get_rest_url()`
-        // emits; on a namespaced site the value is longer (`/sites/1/`), but it
-        // is still the one parameter every request continues.
-        let rootRoute = queryPair(rootQuery)
-        var pairs = (target.percentEncodedQuery ?? "")
-            .split(separator: "&", omittingEmptySubsequences: false)
-            .map(String.init)
-        guard let index = pairs.firstIndex(where: { queryPair($0).name == rootRoute.name }) else { return nil }
-
-        let route = decodingSlashes(queryPair(pairs.remove(at: index)).value)
-        guard route.hasPrefix(rootRoute.value) else { return nil }
-
-        let path = route.dropFirst(rootRoute.value.count)
-        let query = pairs.joined(separator: "&")
-        return query.isEmpty ? String(path) : "\(path)?\(query)"
-    }
-
-    /// A `name=value` query pair split at its first `=`, verbatim.
-    private static func queryPair(_ pair: String) -> (name: String, value: String) {
-        guard let separator = pair.firstIndex(of: "=") else { return (pair, "") }
-        return (String(pair[..<separator]), String(pair[pair.index(after: separator)...]))
-    }
-
-    /// The site API URL for `path` — a path and query below the API root — or
-    /// `nil` if the result would address anything outside the root.
-    ///
-    /// The path is appended to the API root. Appending rather than resolving is
-    /// what `createRootURLMiddleware` does on the JavaScript side, and it is the
-    /// only approach that works for both root shapes WordPress produces: pretty
-    /// permalinks give `https://example.com/wp-json/`, plain permalinks give
-    /// `https://example.com/?rest_route=/`, where the path has to merge into an
-    /// existing query string.
-    ///
-    /// Dot segments — literal or percent-encoded — are refused rather than
-    /// normalized. A REST path never contains one, `URLSession` resolves them
-    /// before sending, and a normalized `..` is the one thing that could walk
-    /// out of the API root and reach the rest of the site with the credential
-    /// attached.
-    private func upstreamURL(forPath path: String) -> URL? {
-        let separator = path.firstIndex(of: "?")
-        // Leading slashes are dropped, so the path appends to the API root
-        // rather than resolving against the site root.
-        let relativePath = path[..<(separator ?? path.endIndex)].drop(while: { $0 == "/" })
-        guard !Self.containsDotSegment(relativePath) else { return nil }
-
-        var suffix = String(relativePath) + (separator.map { String(path[$0...]) } ?? "")
-        // A root that already carries a query (plain permalinks) continues it
-        // rather than starting a second one — mirroring `createRootURLMiddleware`.
-        if apiRoot.contains("?"), let separator = suffix.firstIndex(of: "?") {
-            suffix.replaceSubrange(separator...separator, with: "&")
-        }
-
-        guard let url = URL(string: apiRoot + suffix),
-              url.absoluteString.hasPrefix(apiRoot) else {
-            return nil
-        }
-        return url
-    }
-
-    /// Whether `path` contains a `.` or `..` segment, including the
-    /// percent-encoded spellings a server may decode before resolving it.
-    ///
-    /// The separators are decoded alongside the dots. A server that decodes
-    /// `%2f` before normalizing — nginx normalizes the request URI ahead of
-    /// location matching — reads `%2e%2e%2fwp-admin` as `../wp-admin`, which
-    /// splitting on literal slashes alone would pass through. `%5c` is decoded
-    /// too because Windows-hosted servers treat a backslash as a separator.
-    private static func containsDotSegment(_ path: some StringProtocol) -> Bool {
-        let decoded = path.lowercased()
-            .replacingOccurrences(of: "%2e", with: ".")
-            .replacingOccurrences(of: "%2f", with: "/")
-            .replacingOccurrences(of: "%5c", with: "/")
-            .replacingOccurrences(of: "\\", with: "/")
-        guard decoded.contains(".") else { return false }
-        return decoded.split(separator: "/", omittingEmptySubsequences: false).contains {
-            $0 == "." || $0 == ".."
-        }
+        return apiRoot.url(forPath: path).map(Destination.siteAPI)
     }
 
     // MARK: - Authorization
@@ -526,29 +354,23 @@ struct RestRelay: Sendable {
     /// followed to that host, and its response relayed back to the editor.
     /// Refusing hands the 3xx itself back instead.
     ///
-    /// The comparison is a prefix match on the whole URL, read through the
-    /// host spellings ``destination(of:)`` tolerates — `www.` versus bare, the
-    /// loopback names — and an `http`→`https` upgrade. So another path on the
-    /// same site (`/wp-login.php`), another port, another host, and a scheme
-    /// downgrade are refused: a site API request reaches only the API it was
-    /// configured for. The cost is that a legitimate
+    /// A target is inside the root when ``SiteAPIRoot/contains(_:)`` says so,
+    /// the same check ``destination(of:)`` makes, so the two agree. Another
+    /// path on the same site (`/wp-login.php`), another port, and another host
+    /// are refused: a site API request reaches only the API it was configured
+    /// for. The site's other spellings of its own host, such as its `www.`
+    /// name, are followed. Otherwise a site whose canonical redirect names one
+    /// would have every relayed request refused. The cost is that a legitimate
     /// permalink-structure redirect is refused too, which the response says
     /// specifically enough to diagnose.
-    ///
-    /// The host spellings are the ones ``destination(of:)`` accepts, so that the
-    /// two agree. A `Link` target on the `www.` alias goes to the site, and a
-    /// site whose canonical redirect names that alias — or whose `siteurl` is
-    /// `http` behind a TLS-terminating proxy — would otherwise have every
-    /// relayed request refused here. Containment holds: the same site under
-    /// another of its own names, and a strictly stronger scheme.
     ///
     /// A `307` or `308` it follows has `URLSession` resend the body, which it can:
     /// a scheme request's body is `Data`, held in memory.
     ///
-    /// Without an allowed prefix it follows a redirect to any host. That is the
+    /// Without an API root it follows a redirect to any host. That is the
     /// guard for a request to another host, which carries no site credential.
     ///
-    /// Every request, with a prefix or without, follows a redirect only to an
+    /// Every request, with a root or without, follows a redirect only to an
     /// `http` or `https` URL without a user name or password, and never from
     /// `https` to `http`. `URLSession` would follow a redirect to a `data:` or
     /// `ftp:` URL, and to `http` from `https`. A request for another host may go
@@ -563,7 +385,7 @@ struct RestRelay: Sendable {
     /// later redirect comes back. So the `www.` alias and the `https` upgrade it
     /// follows within the API root arrive without it, as they would from `fetch`.
     ///
-    /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal
+    /// `@unchecked Sendable`: the root is a `let` set at init; the refusal
     /// and the request's `Authorization` are kept under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         /// A redirect the guard refused.
@@ -575,12 +397,8 @@ struct RestRelay: Sendable {
             let reason: String
         }
 
-        /// The API root, in the form ``normalized(_:)`` gives a target, or `nil`
-        /// to follow a redirect to any host.
-        private let allowedPrefix: String?
-
-        /// `allowedPrefix` under `https`, when the configured root is `http`.
-        private let upgradedPrefix: String?
+        /// The site's API root, or `nil` to follow a redirect to any host.
+        private let apiRoot: SiteAPIRoot?
 
         /// Reports the task, which this delegate sees as the task's only one.
         private let reporter: NetworkTaskReporter?
@@ -596,15 +414,10 @@ struct RestRelay: Sendable {
             lock.withLock { _refusal }
         }
 
-        init(allowedPrefix: String?, authorization: String? = nil, reporter: NetworkTaskReporter? = nil) {
+        init(apiRoot: SiteAPIRoot?, authorization: String? = nil, reporter: NetworkTaskReporter? = nil) {
+            self.apiRoot = apiRoot
             self.reporter = reporter
             self._authorization = authorization
-            let root = allowedPrefix.map { Self.normalized($0) ?? $0 }
-            self.allowedPrefix = root
-            let insecureScheme = "http://"
-            self.upgradedPrefix = root.flatMap {
-                $0.hasPrefix(insecureScheme) ? "https://" + $0.dropFirst(insecureScheme.count) : nil
-            }
         }
 
         func urlSession(
@@ -656,23 +469,10 @@ struct RestRelay: Sendable {
             if target.hasCredentials {
                 return "has a user name or password in it"
             }
-            if !contains(target.absoluteString) {
+            if let apiRoot, !apiRoot.contains(target) {
                 return "is outside the site's configured REST API root"
             }
             return nil
-        }
-
-        /// Whether `target` is inside the API root, allowing only the host
-        /// spelling and a scheme upgrade to differ. Always `true` without an
-        /// allowed prefix.
-        private func contains(_ target: String) -> Bool {
-            guard let allowedPrefix else { return true }
-            guard let target = Self.normalized(target) else { return false }
-            if target.hasPrefix(allowedPrefix) {
-                return true
-            }
-            guard let upgradedPrefix else { return false }
-            return target.hasPrefix(upgradedPrefix)
         }
 
         /// The request's `Authorization` to send on a redirect from `source` to
@@ -685,21 +485,6 @@ struct RestRelay: Sendable {
                 }
                 return _authorization
             }
-        }
-
-        /// `url` with its host in the form its aliases share and a default
-        /// port dropped, so that a prefix comparison reads through the
-        /// spellings ``RestRelay/destination(of:)`` tolerates. `nil` for a URL
-        /// without a host.
-        private static func normalized(_ url: String) -> String? {
-            guard var components = URLComponents(string: url), let host = components.host else {
-                return nil
-            }
-            components.host = RestRelay.canonicalHost(host)
-            if components.port == components.defaultPort {
-                components.port = nil
-            }
-            return components.string
         }
     }
 

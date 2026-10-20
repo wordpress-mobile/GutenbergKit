@@ -279,7 +279,7 @@ struct RestRelayTests {
     @Test("follows a redirect to any host for a request to another host")
     func followsEveryRedirectWithoutPrefix() {
         // A request for another host carries no site credential to keep in.
-        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil)
+        let redirectGuard = RestRelay.RedirectGuard(root: nil)
         for target in [
             "https://elsewhere.example/wp-json/wp/v2/posts",
             "https://example.com/wp-login.php",
@@ -297,7 +297,7 @@ struct RestRelayTests {
             "https://api.example/v1/query/",
             "https://API.example:443/v2/other",
         ] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+            let redirectGuard = RestRelay.RedirectGuard(root: nil, authorization: "Bearer jwt")
             let followed = decide(redirectGuard, from: "https://api.example/v1/query", target: target)
             #expect(followed?.value(forHTTPHeaderField: "Authorization") == "Bearer jwt", "should keep it for \(target)")
         }
@@ -312,13 +312,13 @@ struct RestRelayTests {
             "https://www.api.example/v1/query",
             "https://api.example:8443/v1/query",
         ] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+            let redirectGuard = RestRelay.RedirectGuard(root: nil, authorization: "Bearer jwt")
             let followed = decide(redirectGuard, from: "https://api.example/v1/query", target: target)
             #expect(followed?.url?.absoluteString == target, "should follow \(target)")
             #expect(followed?.value(forHTTPHeaderField: "Authorization") == nil, "should drop it for \(target)")
         }
 
-        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+        let redirectGuard = RestRelay.RedirectGuard(root: nil, authorization: "Bearer jwt")
         let upgraded = decide(redirectGuard, from: "http://api.example/v1/query", target: "https://api.example/v1/query")
         #expect(upgraded?.url?.absoluteString == "https://api.example/v1/query")
         #expect(upgraded?.value(forHTTPHeaderField: "Authorization") == nil)
@@ -328,7 +328,7 @@ struct RestRelayTests {
     func removesAuthorizationAcrossOrigins() {
         // The guard enforces the rule itself rather than relying on `URLSession`
         // having dropped the header.
-        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+        let redirectGuard = RestRelay.RedirectGuard(root: nil, authorization: "Bearer jwt")
         let followed = decide(
             redirectGuard,
             from: "https://api.example/v1/query",
@@ -343,7 +343,7 @@ struct RestRelayTests {
     func keepsAuthorizationOffAfterLeavingOrigin() {
         // WebKit's `fetch` reaches the original host without it after a
         // redirect away and another one back.
-        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil, authorization: "Bearer jwt")
+        let redirectGuard = RestRelay.RedirectGuard(root: nil, authorization: "Bearer jwt")
         _ = decide(redirectGuard, from: "https://api.example/start", target: "https://cdn.example/bounce")
         let followed = decide(redirectGuard, from: "https://cdn.example/bounce", target: "https://api.example/end")
 
@@ -361,7 +361,7 @@ struct RestRelayTests {
             ("https://example.com/wp-json/", "https://www.example.com/wp-json/wp/v2/posts", nil),
             ("http://example.com/wp-json/", "https://example.com/wp-json/wp/v2/posts", nil),
         ] as [(String, String, String?)] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: root, authorization: "Bearer site")
+            let redirectGuard = RestRelay.RedirectGuard(root: root, authorization: "Bearer site")
             let followed = decide(redirectGuard, from: root + "wp/v2/posts", target: target)
             #expect(followed?.url?.absoluteString == target, "should follow \(target)")
             #expect(followed?.value(forHTTPHeaderField: "Authorization") == expected, "for \(target)")
@@ -377,7 +377,7 @@ struct RestRelayTests {
             (nil, "https://api.example/v1", "http://example.com/wp-admin/admin-ajax.php"),
             ("http://example.com/wp-json/", "https://example.com/wp-json/wp/v2/posts", "http://example.com/wp-json/wp/v2/posts"),
         ] as [(String?, String, String)] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: root)
+            let redirectGuard = RestRelay.RedirectGuard(root: root)
 
             #expect(decide(redirectGuard, from: source, target: target) == nil, "should refuse \(target)")
             #expect(redirectGuard.refusal?.reason == "would leave https", "\(target)")
@@ -389,7 +389,7 @@ struct RestRelayTests {
         // A request for another host reaches plain `http` only at the site's
         // own host, so a chain of `http` redirects started there.
         for target in ["http://192.168.1.50:8080/y", "http://192.168.1.60/y", "https://cdn.example/y"] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil)
+            let redirectGuard = RestRelay.RedirectGuard(root: nil)
 
             #expect(decide(redirectGuard, from: "http://192.168.1.50/x", target: target)?.url?.absoluteString == target, "should follow \(target)")
         }
@@ -400,7 +400,7 @@ struct RestRelayTests {
         // `URLSession` follows a redirect to a `data:` or `ftp:` URL.
         for target in ["data:text/plain,hello", "ftp://192.168.1.1/", "about:blank", "file:///etc/hosts"] {
             for prefix in [nil, "https://example.com/wp-json/"] as [String?] {
-                let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: prefix)
+                let redirectGuard = RestRelay.RedirectGuard(root: prefix)
 
                 #expect(decide(redirectGuard, target: target) == nil, "should refuse \(target)")
                 #expect(redirectGuard.refusal?.reason == "isn't an http or https URL", "\(target)")
@@ -413,7 +413,7 @@ struct RestRelayTests {
         // `URLSession` would answer the host's challenge with them, then store
         // them for every later request to that host.
         for target in ["https://user:pass@api.example/v1", "https://user@api.example/v1"] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: nil)
+            let redirectGuard = RestRelay.RedirectGuard(root: nil)
 
             #expect(decide(redirectGuard, target: target) == nil, "should refuse \(target)")
             #expect(redirectGuard.refusal == .init(target: "https://api.example/v1", reason: "has a user name or password in it"))
@@ -425,6 +425,31 @@ struct RestRelayTests {
         let followed = redirectDecision(to: "https://example.com/wp-json/wp/v2/posts/1")
 
         #expect(followed?.url?.absoluteString == "https://example.com/wp-json/wp/v2/posts/1")
+    }
+
+    @Test("follows a redirect to an encoded route under a plain-permalink root")
+    func followsEncodedPlainPermalinkRedirect() {
+        // WordPress writes the route as `%2F…` through `add_query_arg`.
+        // `destination(of:)` sends such a URL to the site, so the guard has to
+        // follow a redirect to one too.
+        let redirectGuard = RestRelay.RedirectGuard(root: "https://example.com/?rest_route=/")
+        let target = "https://example.com/?rest_route=%2Fwp%2Fv2%2Fposts%2F2"
+        let followed = decide(redirectGuard, from: "https://example.com/?rest_route=%2Fwp%2Fv2%2Fposts%2F1", target: target)
+
+        #expect(followed?.url?.absoluteString == target)
+        #expect(redirectGuard.refusal == nil)
+    }
+
+    @Test("refuses a redirect whose route walks out of the API root")
+    func refusesDotSegmentRedirect() {
+        // It starts with the root, but the server resolves the `..` and
+        // reaches the rest of the site.
+        for target in [
+            "https://example.com/wp-json/../wp-login.php",
+            "https://example.com/wp-json/%2e%2e/wp-login.php",
+        ] {
+            #expect(redirectDecision(to: target) == nil, "should refuse \(target)")
+        }
     }
 
     @Test("refuses a redirect that leaves the API root")
@@ -446,7 +471,7 @@ struct RestRelayTests {
         // A site whose `siteurl` is `http` but which answers on `https` is one
         // `destination(of:)` already sends to the site; refusing its redirect
         // here would fail every one of those requests.
-        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "http://example.com/wp-json/")
+        let redirectGuard = RestRelay.RedirectGuard(root: "http://example.com/wp-json/")
         let followed = decide(redirectGuard, target: "https://example.com/wp-json/wp/v2/posts")
 
         #expect(followed?.url?.absoluteString == "https://example.com/wp-json/wp/v2/posts")
@@ -461,7 +486,7 @@ struct RestRelayTests {
             "https://example.com/wp-login.php",
             "https://example.com:8443/wp-json/wp/v2/posts",
         ] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "http://example.com/wp-json/")
+            let redirectGuard = RestRelay.RedirectGuard(root: "http://example.com/wp-json/")
             #expect(decide(redirectGuard, target: target) == nil, "should refuse \(target)")
         }
     }
@@ -479,7 +504,7 @@ struct RestRelayTests {
             ("http://example.com/wp-json/", "https://www.example.com/wp-json/wp/v2/posts"),
             ("https://example.com/wp-json/", "https://Example.com:443/wp-json/wp/v2/posts"),
         ] {
-            let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: root)
+            let redirectGuard = RestRelay.RedirectGuard(root: root)
             #expect(decide(redirectGuard, from: root + "wp/v2/posts", target: target)?.url?.absoluteString == target, "should follow \(target)")
             #expect(redirectGuard.refusal == nil)
         }
@@ -505,7 +530,7 @@ struct RestRelayTests {
         // Without this the relay would hand back the 3xx itself, and `fetch`
         // — which follows redirects by default — would chase it to the host
         // the guard just declined.
-        let redirectGuard = RestRelay.RedirectGuard(allowedPrefix: "https://example.com/wp-json/")
+        let redirectGuard = RestRelay.RedirectGuard(root: "https://example.com/wp-json/")
         #expect(redirectGuard.refusal == nil)
 
         _ = decide(redirectGuard, target: "https://elsewhere.example/x")
@@ -556,7 +581,7 @@ struct RestRelayTests {
     /// `nil` if it refuses.
     private func redirectDecision(to target: String) -> URLRequest? {
         decide(
-            RestRelay.RedirectGuard(allowedPrefix: "https://example.com/wp-json/"),
+            RestRelay.RedirectGuard(root: "https://example.com/wp-json/"),
             target: target
         )
     }
@@ -599,5 +624,13 @@ struct RestRelayTests {
             completionHandler: { followed = $0 }
         )
         return followed
+    }
+}
+
+private extension RestRelay.RedirectGuard {
+    /// A guard for a site API request under `root`, or, given `nil`, for a
+    /// request to another host.
+    convenience init(root: String?, authorization: String? = nil) {
+        self.init(apiRoot: root.map { SiteAPIRoot(URL(string: $0)!) }, authorization: authorization)
     }
 }
