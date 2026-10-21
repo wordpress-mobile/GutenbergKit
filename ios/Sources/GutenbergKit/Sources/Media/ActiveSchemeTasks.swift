@@ -72,7 +72,7 @@ struct ActiveSchemeTasks {
     /// has stopped it.
     mutating func answer(_ key: Key, with response: SchemeResponse) {
         guard let task = remove(key) else { return }
-        guard let url = task.request.url,
+        guard let url = response.url ?? task.request.url,
               let httpResponse = HTTPURLResponse(
                 url: url,
                 statusCode: response.status,

@@ -248,10 +248,24 @@ struct RestRelay: Sendable {
             }
             observer?.didPerformRequest(upstreamRequest, response: response, data: .bytes(body))
 
+            // Report the URL that `fetch` would: the one the page requested
+            // (not the site URL it was rewritten to), or where a redirect
+            // ended up. Otherwise the page sees the relay's own `gbk-rest:`
+            // URL, as it still does for the relay's refusals. The fragment is
+            // dropped because `fetch` never reports one, and WebKit ignores a
+            // response URL that has one.
+            //
+            // `response.redirected` stays `false` after a redirect: WebKit
+            // only sets it for redirects it followed itself, and
+            // `WKURLSchemeTask` has no public API to report one. The page
+            // could set it from a header, but nothing in the editor reads it
+            // yet (see #815).
+            let finalURL = redirectGuard.followedRedirect ? response.url ?? requestedURL : requestedURL
             return SchemeResponse(
                 status: response.statusCode,
                 headers: Self.merged(response.allHeaderFields),
-                body: body
+                body: body,
+                url: finalURL.deletingFragment()
             )
         } catch {
             reporter?.complete(with: nil, error: error)
@@ -405,6 +419,7 @@ struct RestRelay: Sendable {
 
         private let lock = NSLock()
         private var _refusal: Refusal?
+        private var _followedRedirect = false
 
         /// The request's `Authorization`, until a redirect leaves its origin.
         private var _authorization: String?
@@ -412,6 +427,11 @@ struct RestRelay: Sendable {
         /// The redirect that was refused, or `nil` if none was.
         var refusal: Refusal? {
             lock.withLock { _refusal }
+        }
+
+        /// Whether a redirect was followed.
+        var followedRedirect: Bool {
+            lock.withLock { _followedRedirect }
         }
 
         init(apiRoot: SiteAPIRoot?, authorization: String? = nil, reporter: NetworkTaskReporter? = nil) {
@@ -442,6 +462,7 @@ struct RestRelay: Sendable {
             // Set either way: `nil` removes the header, rather than relying on
             // `URLSession` having dropped it.
             request.setValue(authorization(redirectingFrom: response.url, to: url), forHTTPHeaderField: "Authorization")
+            lock.withLock { _followedRedirect = true }
             completionHandler(request)
         }
 
@@ -534,23 +555,24 @@ struct RestRelay: Sendable {
     /// `Access-Control-Allow-Origin` (WordPress sends an empty one for origins
     /// it rejects) would otherwise replace the relay's own.
     ///
-    /// `Content-Encoding` and `Content-Length` must go because `URLSession`
-    /// already decompressed the body: advertising the upstream encoding would
-    /// make WebKit decode the plain bytes a second time, and the upstream
-    /// length is the compressed one.
-    ///
     /// `Set-Cookie` is the site's, scoped to the site. The relay carries the
     /// site credential natively and never needs it.
+    ///
+    /// `Content-Encoding`, `Content-Length` and `Vary` are kept, because `fetch`
+    /// shows them as the server sent them. `URLSession` has already decoded
+    /// the body, so `Content-Length` is the encoded size, as it is in `fetch`.
+    /// WebKit doesn't act on either header in a scheme response: it neither
+    /// decodes the body again nor cuts it to `Content-Length` (measured on
+    /// macOS 27 and in the iOS 27.0 Simulator).
     private static let responseHeadersToStrip: Set<String> = [
         "access-control-allow-origin", "access-control-allow-credentials",
         "access-control-allow-headers", "access-control-allow-methods",
-        "access-control-expose-headers", "access-control-max-age", "vary",
-        "content-encoding", "content-length",
+        "access-control-expose-headers", "access-control-max-age",
         "set-cookie", "set-cookie2",
     ]
 
     /// The upstream response's headers as the editor should see them: the
-    /// upstream's CORS and transport-encoding headers dropped (see
+    /// upstream's CORS headers and cookies dropped (see
     /// `responseHeadersToStrip`), and the relay's own CORS headers added.
     private static func merged(_ upstream: [AnyHashable: Any]) -> [String: String] {
         var headers: [String: String] = [:]

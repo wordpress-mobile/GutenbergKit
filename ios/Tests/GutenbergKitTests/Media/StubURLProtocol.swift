@@ -16,6 +16,9 @@ final class StubURLProtocol: URLProtocol {
         var body = Data()
         /// When set, the request fails with this error instead of responding.
         var failure: (any Error)?
+        /// Redirects by path. A request for a path in here gets a `302` to the
+        /// URL it maps to, which may be relative.
+        var redirects: [String: String] = [:]
     }
 
     /// The request that reached the stub, if any.
@@ -114,6 +117,20 @@ final class StubURLProtocol: URLProtocol {
 
         if let failure = registration.stub.failure {
             client?.urlProtocol(self, didFailWithError: failure)
+            return
+        }
+
+        if let location = registration.stub.redirects[request.url!.path],
+           let target = URL(string: location, relativeTo: request.url)?.absoluteURL {
+            let redirect = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 302,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": target.absoluteString]
+            )!
+            var next = request
+            next.url = target
+            client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: redirect)
             return
         }
 
