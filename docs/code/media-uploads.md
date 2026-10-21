@@ -74,8 +74,7 @@ the same results every way. No `OPTIONS` preflight reached the handler on any of
 An object made in another window is not an `instanceof` this window's `Blob` or
 `FormData`, so code that picks out the bodies to convert that way lets it through to be
 dropped. The REST relay (`gbk-rest:`, `src/utils/fetch-relay.js`) meets the same rule for
-every request the page sends the site, and reads every body that is not a string into an
-`ArrayBuffer`.
+every request it relays, and reads every body that is not a string into an `ArrayBuffer`.
 
 The streamed case depends on where the file came from, and every failure is silent, so
 the page always sends the file as 4 MB `ArrayBuffer` chunks:
@@ -135,8 +134,8 @@ byte for byte.
 
 `gbk-upload:` and the REST relay's `gbk-rest:` don't check who is calling. A scheme
 handler serves every frame in the editor's web view, not only the editor page, and native
-code adds the site credential to what it sends on. So any frame can act as the user through
-them.
+code adds the site credential to what it sends to the site's REST API. So any frame can act
+as the user through them.
 
 The editor's frames fall into two groups:
 
@@ -170,6 +169,23 @@ the same reach in wp-admin.
 
 Neither check is in place. It was left out of the scheme transports because it would close
 the second group only, while the first stays as it was before the schemes.
+
+The relay also sends requests for other hosts, so a plugin's call to its own service works
+under Lockdown Mode. The page sends every request for another origin to one URL,
+`gbk-rest://relay/fetch?url=…`, and native code decides how to send it. That gives every
+frame a response from any `https` URL without CORS. Plain `http` goes only to the site's own
+host — the API root's or the site URL's — on any port. Any other `http` request gets a `426`
+before anything is sent. A device on the local network, or this device itself, can't present
+a valid certificate for another host's name, so a name pointed at one fails before anything
+is sent. A local host with a valid certificate for its own name is still reachable. A
+redirect is followed only to an `http` or `https` URL, and never from `https` to `http`. A
+URL with a user name or password is refused, as `fetch` refuses one: `URLSession` would store
+it and send it on later requests to that host.
+
+The site credential goes only with a request for the site's REST API, to a URL native code
+builds from the configured root. Native code removes it from any other request the page
+sent it with, and sends a caller's own `Authorization` as it is. Without Lockdown Mode the
+editor page can already read those responses; the second group couldn't.
 
 ## Background and timeouts
 

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Relays the editor's REST API requests through the native networking stack.
+/// Relays the editor's requests through the native networking stack.
 ///
 /// ## Why this exists
 ///
@@ -13,49 +13,77 @@ import OSLog
 /// empty `Access-Control-Allow-Origin` and WebKit rejects every response.
 ///
 /// The relay sidesteps the problem: the page fetches a URL scheme its own web
-/// view serves (``RestRelaySchemeHandler``), and this forwards the request to
-/// the site's REST API with the configured authorization header, responding
-/// with CORS headers we control. Every request takes this path, Lockdown Mode
-/// or not, so there is one path to keep working.
+/// view serves (``RestRelaySchemeHandler``), and this sends the request on,
+/// responding with CORS headers we control. Every request takes this path,
+/// Lockdown Mode or not, so there is one path to keep working.
+///
+/// The page sends every request to one route, ``route``, with the URL it was
+/// going to fetch. Native code decides how to send it (``destination(of:)``):
+///
+/// - A URL below the site's REST API root goes to the site, and gets the site
+///   credential when the caller sent no `Authorization` of its own.
+/// - Any other URL — a plugin calling its own service, for example — goes
+///   where it was going, and never carries the site credential.
 ///
 /// ## Security
 ///
 /// - The scheme doesn't check who is calling. Every frame in the editor's web
 ///   view can load it, including sandboxed frames that can't reach the page,
-///   and the relay attaches the site credential to whatever they send. Why
-///   that is left as it is: "Who can use the schemes" in
+///   and the relay attaches the site credential to what they send to the
+///   site's REST API. Why that is left as it is: "Who can use the schemes" in
 ///   `docs/code/media-uploads.md`.
-/// - The caller supplies a **path**, not a URL: everything after `/proxy/` is
-///   resolved natively against the configured site API root, so the relay
-///   cannot be pointed at another host by construction rather than by string
-///   matching. The resolved URL is re-checked against the root, and redirects
-///   away from it are refused.
+/// - The site credential only goes to a URL the relay builds itself, from the
+///   configured API root and the path below it. The page's URL is matched
+///   against the root but never sent with the credential, so a mistake in the
+///   matching can send a request to the user's own site, but can't send the
+///   credential to another host. The built URL is re-checked against the
+///   root, and redirects away from it are refused.
 /// - Which route *within* the site is reached is the caller's to choose. The
 ///   query is forwarded as-is, and WordPress registers `rest_route` as a public
 ///   query variable that `WP::parse_request()` prefers over the route the path
 ///   names, so a caller-supplied one wins. There is no boundary here to
 ///   defend: every route reachable that way is one the editor may request
 ///   through the relay directly.
-/// - The upstream `Authorization` header is injected natively from the editor
-///   configuration; any client-supplied value is discarded.
+/// - A caller's own `Authorization` is sent as it is, wherever the request
+///   goes. It is the caller's credential, to send where it likes — Jetpack AI
+///   signs its requests to WordPress.com with a token of its own. The site
+///   credential is the relay's to guard: see
+///   ``authorization(sentByCaller:toSiteAPI:)``.
+/// - The relay reaches any `https` URL, so any frame in the web view can read
+///   another host's response without CORS. Without Lockdown Mode the editor
+///   page can do that anyway; a sandboxed frame couldn't before.
+/// - A request for another host goes over `https`, or over plain `http` only to
+///   the site's own host. A device on the local network or this device itself
+///   can't present a valid certificate for another host's name, so a name
+///   pointed at one fails before anything is sent. Local hosts that do have a
+///   valid certificate for their own name stay reachable.
+/// - A redirect is followed only to an `http` or `https` URL, never from `https`
+///   to `http`. So a request that starts over `https` stays on it.
+/// - A URL with a user name or password is refused, as `fetch` refuses one.
+///   `URLSession` would store the credential and send it on later requests to
+///   that host.
 struct RestRelay: Sendable {
 
-    /// The route the relay answers. Everything after it is the upstream path,
-    /// relative to the site API root — `/proxy/wp/v2/posts?…` relays to
-    /// `<site API root>wp/v2/posts?…`.
-    static let route = "/proxy"
+    /// The relay's route. Its `url` query parameter is the URL the page was
+    /// going to fetch: `/fetch?url=https%3A%2F%2Fexample.org%2Fapi` is a
+    /// request for `https://example.org/api`.
+    static let route = "/fetch"
 
-    /// The site's API root, slash-terminated. Upstream paths are appended to
-    /// it, and every resulting URL — including redirect targets — must still
-    /// start with it.
-    ///
-    /// Held as a string rather than a `URL` because the root is not always
-    /// directory-shaped: a site on plain permalinks has
-    /// `https://example.com/?rest_route=/`, where relative URL resolution would
-    /// discard the query.
-    private let apiRoot: String
+    /// Where a relayed request goes.
+    enum Destination: Equatable {
+        /// The site's REST API, at a URL built from the configured root.
+        case siteAPI(URL)
 
-    /// The authorization header injected into upstream requests.
+        /// Any other host, at the URL the page asked for.
+        case otherHost(URL)
+    }
+
+    /// The site's REST API root. A site API request goes to a URL built from
+    /// it, and every redirect it follows must stay inside it.
+    private let apiRoot: SiteAPIRoot
+
+    /// The site credential: added to a site API request that has no
+    /// `Authorization` of its own, and never sent to another host.
     private let authHeader: String
 
     /// The session upstream requests are sent on.
@@ -65,6 +93,15 @@ struct RestRelay: Sendable {
     /// ``EditorHTTPClientDelegate``, so relayed requests are observed with the
     /// editor's own.
     private let observer: (any EditorHTTPClientDelegate)?
+
+    /// The hosts of the API root and the site URL, in
+    /// ``SiteAPIRoot/canonicalHost(_:)`` form: the only hosts a request may
+    /// reach over plain `http`.
+    ///
+    /// Both, because they can differ: a Jetpack site reached through
+    /// WordPress.com has the API root `public-api.wordpress.com`, while its
+    /// plugins call the site's own host.
+    private let siteHosts: Set<String>
 
     /// The session every relay shares.
     ///
@@ -104,42 +141,26 @@ struct RestRelay: Sendable {
         session: URLSession? = nil,
         observer: (any EditorHTTPClientDelegate)? = nil
     ) {
-        self.apiRoot = Self.normalizedRoot(configuration.siteApiRoot.absoluteString)
+        self.apiRoot = SiteAPIRoot(configuration.siteApiRoot)
         self.authHeader = configuration.authHeader
         self.session = session ?? Self.sharedSession
         self.observer = observer
+        self.siteHosts = Set(
+            [configuration.siteApiRoot.host(), configuration.siteURL.host()].compactMap { $0.map(SiteAPIRoot.canonicalHost) }
+        )
     }
 
-    /// The configured root, slash-terminated, with the route value of a
-    /// plain-permalink root decoded.
+    /// Sends a relayed request on and returns the upstream response with
+    /// permissive CORS headers.
     ///
-    /// WordPress advertises that root through `add_query_arg`, which
-    /// percent-encodes the value: `index.php?rest_route=%2F`. The separators
-    /// are decoded before the slash is added so it lands inside the route
-    /// value. Appended after `%2F`, it would make a root no path can extend:
-    /// WordPress reads `rest_route=%2F/wp/v2/posts` as the route
-    /// `//wp/v2/posts` and answers `rest_no_route`. `createRelayFetch`
-    /// normalizes the same way, so both sides agree on what the root is.
-    private static func normalizedRoot(_ configured: String) -> String {
-        var root = configured
-        if let query = root.firstIndex(of: "?") {
-            let decoded = root[query...].replacingOccurrences(of: "%2f", with: "/", options: .caseInsensitive)
-            root = String(root[..<query]) + decoded
-        }
-        return root.hasSuffix("/") ? root : root + "/"
-    }
-
-    /// Forwards a relayed request to the site's REST API and returns the
-    /// upstream response with permissive CORS headers.
-    ///
-    /// Throws when the site can't be reached — offline, DNS, TLS, a timeout —
+    /// Throws when the server can't be reached — offline, DNS, TLS, a timeout —
     /// so the scheme handler fails the page's `fetch` the way a network failure
     /// does without the relay. api-fetch turns that into `offline_error` or
     /// `fetch_error`, which Gutenberg's notices key off: a save while offline
     /// says so. Answered with a `502` instead, the failure would read as the
-    /// site's error. The relay's own refusals — a path outside the API root, a
-    /// redirect away from it — are still answered, with a message the editor
-    /// shows.
+    /// site's error. The relay's own refusals — a URL it can't send, a path
+    /// outside the API root, a redirect away from it — are still answered, with
+    /// a message the editor shows.
     ///
     /// - Parameter request: The page's request to the relay scheme. WebKit
     ///   delivers a string or `ArrayBuffer` body as `httpBody` and drops some
@@ -147,7 +168,23 @@ struct RestRelay: Sendable {
     ///   string into an `ArrayBuffer` first (`bufferedBody` in `fetch-relay.js`).
     ///   The table of what was measured is in `docs/code/media-uploads.md`.
     func handle(_ request: URLRequest) async throws -> SchemeResponse {
-        guard let upstreamURL = request.url.flatMap(upstreamURL(for:)) else {
+        guard let requestedURL = request.url.flatMap(Self.requestedURL(in:)) else {
+            Logger.restRelay.error("Refusing to relay a request without an http or https URL")
+            return Self.errorResponse(
+                status: 400,
+                code: "relay_invalid_url",
+                message: "The relay can only send a request to an http or https URL."
+            )
+        }
+        guard !requestedURL.hasCredentials else {
+            Logger.restRelay.error("Refusing to relay a request whose URL holds credentials")
+            return Self.errorResponse(
+                status: 400,
+                code: "relay_credentials_in_url",
+                message: "The relay can't send a request to a URL with a user name or password in it."
+            )
+        }
+        guard let destination = destination(of: requestedURL) else {
             Logger.restRelay.error("Refusing to relay a request outside the site API root")
             return Self.errorResponse(
                 status: 403,
@@ -155,42 +192,59 @@ struct RestRelay: Sendable {
                 message: "The requested path is outside the site API root."
             )
         }
+        let (upstreamURL, isSiteAPI) = switch destination {
+        case .siteAPI(let url): (url, true)
+        case .otherHost(let url): (url, false)
+        }
+
+        if !isSiteAPI, upstreamURL.scheme?.lowercased() == "http", !isSiteHost(upstreamURL) {
+            Logger.restRelay.error("Refusing to relay a plain http request to another host")
+            return Self.httpsRequired()
+        }
 
         var upstreamRequest = URLRequest(url: upstreamURL)
         upstreamRequest.httpMethod = request.httpMethod
         for (name, value) in request.allHTTPHeaderFields ?? [:] where !Self.requestHeadersToStrip.contains(name.lowercased()) {
             upstreamRequest.setValue(value, forHTTPHeaderField: name)
         }
-        if !authHeader.isEmpty {
-            upstreamRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
-        }
+        upstreamRequest.setValue(
+            authorization(sentByCaller: request.value(forHTTPHeaderField: "Authorization"), toSiteAPI: isSiteAPI),
+            forHTTPHeaderField: "Authorization"
+        )
         upstreamRequest.httpBody = request.httpBody
 
         let reporter = observer.map(NetworkTaskReporter.init(reportingTo:))
         do {
             // The redirect guard is a per-task delegate: `URLSession` follows
-            // 3xx responses on its own, which would carry the site credential
+            // 3xx responses on its own, which would carry a site API request
             // to whatever host the `Location` header names and relay that
-            // response back. See ``RedirectGuard``.
-            let redirectGuard = RedirectGuard(allowedPrefix: apiRoot, reporter: reporter)
+            // response back. See ``RedirectGuard``. A request for another host
+            // follows a redirect to any host, but neither follows one from
+            // `https` to `http`. Either keeps its `Authorization` on a
+            // redirect the way `fetch` would.
+            let redirectGuard = RedirectGuard(
+                apiRoot: isSiteAPI ? apiRoot : nil,
+                authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization"),
+                reporter: reporter
+            )
             let (body, response) = try await session.data(for: upstreamRequest, delegate: redirectGuard)
             reporter?.complete(with: .bytes(body), error: nil)
 
             // A refused redirect leaves `URLSession` holding the 3xx itself.
             // Relaying that would undo the refusal: the response carries the
             // `Location` the guard just declined, and `fetch` follows redirects
-            // by default, so the web view would chase it to the very host the
+            // by default, so the web view would chase it to the very URL the
             // guard exists to keep the request away from.
-            if let refused = redirectGuard.refusedTarget {
-                Logger.restRelay.error("Refused a relay redirect outside the site API root")
+            if let refusal = redirectGuard.refusal {
+                Logger.restRelay.error("Refused a relay redirect")
                 return Self.errorResponse(
                     status: 502,
                     code: "relay_redirect_refused",
-                    message: "The site redirected this request to \(refused), which is outside its configured REST API root. The editor did not follow it."
+                    message: "The server redirected this request to \(refusal.target), which \(refusal.reason). The editor did not follow it."
                 )
             }
             guard let response = response as? HTTPURLResponse else {
-                return Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The site did not answer over HTTP.")
+                return Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The server did not answer over HTTP.")
             }
             observer?.didPerformRequest(upstreamRequest, response: response, data: .bytes(body))
 
@@ -206,123 +260,164 @@ struct RestRelay: Sendable {
         }
     }
 
-    // MARK: - Upstream URL
+    /// Whether `url` is on the site's own host, whatever its port.
+    private func isSiteHost(_ url: URL) -> Bool {
+        url.host().map { siteHosts.contains(SiteAPIRoot.canonicalHost($0)) } ?? false
+    }
 
-    /// Builds the upstream URL for a request to the relay scheme, or `nil` if
-    /// the result would address anything outside the site API root.
+    /// The answer to a plain `http` request for another host.
     ///
-    /// Everything after the ``route`` prefix is treated as a path relative to
-    /// the API root and appended to it. Appending rather than resolving is what
-    /// `createRootURLMiddleware` does on the JavaScript side, and it is the only
-    /// approach that works for both root shapes WordPress produces: pretty
-    /// permalinks give `https://example.com/wp-json/`, plain permalinks give
-    /// `https://example.com/?rest_route=/`, where the path has to merge into an
-    /// existing query string.
+    /// `426 Upgrade Required` is the status for a request that "can't be
+    /// completed without TLS" (RFC 2817, section 4.2), and it must name the
+    /// protocol to switch to in an `Upgrade` header (RFC 9110, section 15.5.22).
+    private static func httpsRequired() -> SchemeResponse {
+        var response = errorResponse(
+            status: 426,
+            code: "relay_https_required",
+            message: "The editor only sends a plain http request to the site itself. Use https for any other host."
+        )
+        response.headers["Upgrade"] = "TLS/1.2, HTTP/1.1"
+        return response
+    }
+
+    // MARK: - Destination
+
+    /// The URL a request to the relay is for: its `url` query parameter, if
+    /// that is an `http` or `https` URL with a host. `nil` otherwise.
     ///
-    /// Dot segments — literal or percent-encoded — are refused rather than
-    /// normalized. A REST path never contains one, `URLSession` resolves them
-    /// before sending, and a normalized `..` is the one thing that could walk
-    /// out of the API root and reach the rest of the site with the credential
-    /// attached.
-    func upstreamURL(for relayURL: URL) -> URL? {
-        guard let components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false) else { return nil }
-        let path = components.percentEncodedPath
-        guard path == Self.route || path.hasPrefix("\(Self.route)/") else { return nil }
-
-        // Strip the route and any leading slashes, so the remainder appends to
-        // the API root rather than resolving against the site root.
-        let relativePath = path.dropFirst(Self.route.count).drop(while: { $0 == "/" })
-        guard !Self.containsDotSegment(relativePath) else { return nil }
-
-        var suffix = String(relativePath) + (components.percentEncodedQuery.map { "?\($0)" } ?? "")
-        // A root that already carries a query (plain permalinks) continues it
-        // rather than starting a second one — mirroring `createRootURLMiddleware`.
-        if apiRoot.contains("?"), let separator = suffix.firstIndex(of: "?") {
-            suffix.replaceSubrange(separator...separator, with: "&")
-        }
-
-        guard let url = URL(string: apiRoot + suffix),
-              url.absoluteString.hasPrefix(apiRoot) else {
+    /// The value is read as written. A URL can hold characters `URL(string:)`
+    /// doesn't allow, such as `[]` or `|`. `URL(string:)` percent-encodes them,
+    /// but it also encodes the `%` of every escape the URL already had, so
+    /// `caf%C3%A9` would reach the server as `caf%25C3%25A9`.
+    /// `URL(dataRepresentation:)` encodes only the characters that need it.
+    static func requestedURL(in relayURL: URL) -> URL? {
+        guard let components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false),
+              components.percentEncodedPath == route,
+              let value = components.queryItems?.first(where: { $0.name == "url" })?.value,
+              let url = URL(dataRepresentation: Data(value.utf8), relativeTo: nil, isAbsolute: true),
+              ["http", "https"].contains(url.scheme?.lowercased()),
+              url.host() != nil else {
             return nil
         }
         return url
     }
 
-    /// Whether `path` contains a `.` or `..` segment, including the
-    /// percent-encoded spellings a server may decode before resolving it.
+    /// Where a request for `url` goes: the site's REST API when `url` is below
+    /// the API root, another host otherwise. `nil` when `url` is below the root
+    /// but its path walks out of it. What counts as below the root, host
+    /// aliases included, is ``SiteAPIRoot/path(below:)``'s to say.
     ///
-    /// The separators are decoded alongside the dots. A server that decodes
-    /// `%2f` before normalizing — nginx normalizes the request URI ahead of
-    /// location matching — reads `%2e%2e%2fwp-admin` as `../wp-admin`, which
-    /// splitting on literal slashes alone would pass through. `%5c` is decoded
-    /// too because Windows-hosted servers treat a backslash as a separator.
-    private static func containsDotSegment(_ path: some StringProtocol) -> Bool {
-        let decoded = path.lowercased()
-            .replacingOccurrences(of: "%2e", with: ".")
-            .replacingOccurrences(of: "%2f", with: "/")
-            .replacingOccurrences(of: "%5c", with: "/")
-            .replacingOccurrences(of: "\\", with: "/")
-        guard decoded.contains(".") else { return false }
-        return decoded.split(separator: "/", omittingEmptySubsequences: false).contains {
-            $0 == "." || $0 == ".."
+    /// Anything else goes where it was going, without the site credential. The
+    /// cost is an alias this can't recognize — a site reached by LAN IP whose
+    /// `home_url()` says `localhost`, a mapped domain, a migration — where a
+    /// paginated `Link` target reaches the site without the credential.
+    func destination(of url: URL) -> Destination? {
+        guard let path = apiRoot.path(below: url) else {
+            return .otherHost(url)
         }
+        return apiRoot.url(forPath: path).map(Destination.siteAPI)
+    }
+
+    // MARK: - Authorization
+
+    /// The `Authorization` header to send upstream, or `nil` for none.
+    ///
+    /// The caller's own header is sent as it is. The site credential is added
+    /// to a request for the site's REST API that has none, and removed from a
+    /// request for any other host. The page can put it there: api-fetch's
+    /// `tokenAuthMiddleware` adds it to every request it makes, whatever the
+    /// host.
+    ///
+    /// It can arrive joined to the caller's own value. When a caller writes its
+    /// header as `authorization` and api-fetch adds `Authorization`, `Headers`
+    /// keeps both, joined with ", ". `Headers` also trims whitespace from each
+    /// value. So the site credential is looked for as a trimmed, comma-separated
+    /// part, and only that part is removed.
+    func authorization(sentByCaller callerValue: String?, toSiteAPI: Bool) -> String? {
+        if toSiteAPI {
+            return callerValue ?? (authHeader.isEmpty ? nil : authHeader)
+        }
+        let siteCredential = authHeader.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let callerValue, !siteCredential.isEmpty else { return callerValue }
+
+        let parts = callerValue.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let kept = parts.filter { $0 != siteCredential }
+        guard kept.count < parts.count else { return callerValue }
+        return kept.isEmpty ? nil : kept.joined(separator: ", ")
     }
 
     /// Refuses redirects that leave the site API root.
     ///
     /// `URLSession` follows 3xx responses automatically, so without this the
     /// containment check would only ever apply to the first hop: a site that
-    /// redirected `/wp-json/wp/v2/posts` elsewhere would have the request —
-    /// carrying the site credential — followed to that host, and its response
-    /// relayed back to the editor. Refusing hands the 3xx itself back instead.
+    /// redirected `/wp-json/wp/v2/posts` elsewhere would have the request
+    /// followed to that host, and its response relayed back to the editor.
+    /// Refusing hands the 3xx itself back instead.
     ///
-    /// The comparison is a prefix match on the whole URL, read through the
-    /// host spellings `relayUpstreamPath` tolerates — `www.` versus bare, the
-    /// loopback names — and an `http`→`https` upgrade. So another path on the
-    /// same site (`/wp-login.php`), another port, another host, and a scheme
-    /// downgrade are refused: the site credential follows the request only to
-    /// the API it was configured for. The cost is that a legitimate
+    /// A target is inside the root when ``SiteAPIRoot/contains(_:)`` says so,
+    /// the same check ``destination(of:)`` makes, so the two agree. Another
+    /// path on the same site (`/wp-login.php`), another port, and another host
+    /// are refused: a site API request reaches only the API it was configured
+    /// for. The site's other spellings of its own host, such as its `www.`
+    /// name, are followed. Otherwise a site whose canonical redirect names one
+    /// would have every relayed request refused. The cost is that a legitimate
     /// permalink-structure redirect is refused too, which the response says
     /// specifically enough to diagnose.
-    ///
-    /// The tolerances are the layer above's so that the two agree. A `Link`
-    /// target on the `www.` alias is relayed by `createRelayFetch`, and a site
-    /// whose canonical redirect names that alias — or whose `siteurl` is `http`
-    /// behind a TLS-terminating proxy — would otherwise have every relayed
-    /// request refused here. Containment holds: the same site under another
-    /// of its own names, and a strictly stronger scheme.
     ///
     /// A `307` or `308` it follows has `URLSession` resend the body, which it can:
     /// a scheme request's body is `Data`, held in memory.
     ///
-    /// `@unchecked Sendable`: the prefixes are `let`s set at init; the refusal is
-    /// recorded under a lock.
+    /// Without an API root it follows a redirect to any host. That is the
+    /// guard for a request to another host, which carries no site credential.
+    ///
+    /// Every request, with a root or without, follows a redirect only to an
+    /// `http` or `https` URL without a user name or password, and never from
+    /// `https` to `http`. `URLSession` would follow a redirect to a `data:` or
+    /// `ftp:` URL, and to `http` from `https`. A request for another host may go
+    /// over plain `http` only to the site's own host, so a chain of plain `http`
+    /// redirects can only start at the site.
+    ///
+    /// `URLSession` drops `Authorization` on every redirect it follows, even one to
+    /// the same server. Given the request's `Authorization` — the site credential
+    /// or the caller's own — the guard puts it back the way WebKit's `fetch` does:
+    /// on a redirect to the same scheme, host, and port. Once a redirect goes
+    /// anywhere else the guard removes the header, and it stays off even if a
+    /// later redirect comes back. So the `www.` alias and the `https` upgrade it
+    /// follows within the API root arrive without it, as they would from `fetch`.
+    ///
+    /// `@unchecked Sendable`: the root is a `let` set at init; the refusal
+    /// and the request's `Authorization` are kept under a lock.
     final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-        /// The API root, in the form ``normalized(_:)`` gives a target.
-        private let allowedPrefix: String
+        /// A redirect the guard refused.
+        struct Refusal: Equatable {
+            /// Where the redirect went, without any user name or password.
+            let target: String
 
-        /// `allowedPrefix` under `https`, when the configured root is `http`.
-        private let upgradedPrefix: String?
+            /// Why it was refused, worded to follow "which".
+            let reason: String
+        }
+
+        /// The site's API root, or `nil` to follow a redirect to any host.
+        private let apiRoot: SiteAPIRoot?
 
         /// Reports the task, which this delegate sees as the task's only one.
         private let reporter: NetworkTaskReporter?
 
         private let lock = NSLock()
-        private var _refusedTarget: String?
+        private var _refusal: Refusal?
 
-        /// The redirect target that was refused, or `nil` if none was.
-        var refusedTarget: String? {
-            lock.withLock { _refusedTarget }
+        /// The request's `Authorization`, until a redirect leaves its origin.
+        private var _authorization: String?
+
+        /// The redirect that was refused, or `nil` if none was.
+        var refusal: Refusal? {
+            lock.withLock { _refusal }
         }
 
-        init(allowedPrefix: String, reporter: NetworkTaskReporter? = nil) {
+        init(apiRoot: SiteAPIRoot?, authorization: String? = nil, reporter: NetworkTaskReporter? = nil) {
+            self.apiRoot = apiRoot
             self.reporter = reporter
-            let root = Self.normalized(allowedPrefix) ?? allowedPrefix
-            self.allowedPrefix = root
-            let insecureScheme = "http://"
-            self.upgradedPrefix = root.hasPrefix(insecureScheme)
-                ? "https://" + root.dropFirst(insecureScheme.count)
-                : nil
+            self._authorization = authorization
         }
 
         func urlSession(
@@ -332,11 +427,21 @@ struct RestRelay: Sendable {
             newRequest request: URLRequest,
             completionHandler: @escaping (URLRequest?) -> Void
         ) {
-            guard let url = request.url, contains(url.absoluteString) else {
-                lock.withLock { _refusedTarget = request.url?.absoluteString ?? "an unreadable URL" }
+            guard let url = request.url else {
+                lock.withLock { _refusal = Refusal(target: "an unreadable URL", reason: "the editor can't read") }
                 completionHandler(nil)
                 return
             }
+            if let reason = refusalReason(from: response.url, to: url) {
+                let target = url.removingCredentials()?.absoluteString ?? "a URL with a user name or password in it"
+                lock.withLock { _refusal = Refusal(target: target, reason: reason) }
+                completionHandler(nil)
+                return
+            }
+            var request = request
+            // Set either way: `nil` removes the header, rather than relying on
+            // `URLSession` having dropped it.
+            request.setValue(authorization(redirectingFrom: response.url, to: url), forHTTPHeaderField: "Authorization")
             completionHandler(request)
         }
 
@@ -348,51 +453,38 @@ struct RestRelay: Sendable {
             reporter?.urlSession(session, task: task, didFinishCollecting: metrics)
         }
 
-        /// Whether `target` is inside the API root, allowing only the host
-        /// spelling and a scheme upgrade to differ.
-        private func contains(_ target: String) -> Bool {
-            guard let target = Self.normalized(target) else { return false }
-            if target.hasPrefix(allowedPrefix) {
-                return true
+        /// Why a redirect from `source` to `target` can't be followed, worded to
+        /// follow "which", or `nil` if it can.
+        private func refusalReason(from source: URL?, to target: URL) -> String? {
+            switch target.scheme?.lowercased() {
+            case "https":
+                break
+            case "http":
+                if source?.scheme?.lowercased() == "https" {
+                    return "would leave https"
+                }
+            default:
+                return "isn't an http or https URL"
             }
-            guard let upgradedPrefix else { return false }
-            return target.hasPrefix(upgradedPrefix)
+            if target.hasCredentials {
+                return "has a user name or password in it"
+            }
+            if let apiRoot, !apiRoot.contains(target) {
+                return "is outside the site's configured REST API root"
+            }
+            return nil
         }
 
-        /// `url` with its host in the form its aliases share and a default
-        /// port dropped, so that a prefix comparison reads through the
-        /// spellings the layer above tolerates. `nil` for a URL without a host.
-        private static func normalized(_ url: String) -> String? {
-            guard var components = URLComponents(string: url), let host = components.host else {
-                return nil
+        /// The request's `Authorization` to send on a redirect from `source` to
+        /// `target`, or `nil` once a redirect has left the original origin.
+        private func authorization(redirectingFrom source: URL?, to target: URL) -> String? {
+            lock.withLock {
+                let sameOrigin = source?.origin.map { $0 == target.origin } ?? false
+                if !sameOrigin {
+                    _authorization = nil
+                }
+                return _authorization
             }
-            components.host = canonicalHost(host)
-            if let port = components.port, port == defaultPort(for: components.scheme) {
-                components.port = nil
-            }
-            return components.string
-        }
-
-        private static func defaultPort(for scheme: String?) -> Int? {
-            switch scheme?.lowercased() {
-            case "http": return 80
-            case "https": return 443
-            default: return nil
-            }
-        }
-
-        /// A host reduced to the form its aliases share: every loopback
-        /// spelling collapses to one, and a `www.` prefix is dropped.
-        ///
-        /// Mirrors `canonicalHost` in `fetch-relay.js`, and the two must stay
-        /// the same: a spelling the web view relays and this refuses fails
-        /// every request on a site whose canonical redirect uses it.
-        private static func canonicalHost(_ host: String) -> String {
-            let lowercased = host.lowercased()
-            if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(lowercased) {
-                return "localhost"
-            }
-            return lowercased.hasPrefix("www.") ? String(lowercased.dropFirst(4)) : lowercased
         }
     }
 
@@ -427,8 +519,8 @@ struct RestRelay: Sendable {
     /// `sec-fetch-*` describe the web view's fetch context and would leak the
     /// local page to the site (and WordPress rejects a `file://` origin — the
     /// exact problem the relay exists to solve); `cookie` is the page's, and
-    /// the relay carries the site credential itself; `authorization` is the
-    /// caller's, replaced by the natively held site credential.
+    /// the relay carries the site credential itself; `authorization` is set on
+    /// its own, by ``authorization(sentByCaller:toSiteAPI:)``.
     private static let requestHeadersToStrip: Set<String> = [
         "host", "connection", "content-length", "accept-encoding",
         "origin", "referer",

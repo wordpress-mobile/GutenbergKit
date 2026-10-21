@@ -246,14 +246,14 @@ export function onNetworkRequest( requestData ) {
  * @property {string}    [nativeUploadScheme]     iOS: the URL scheme native media uploads are sent over. Takes precedence over the loopback server.
  * @property {number}    [nativeUploadPort]       Android: port the local HTTP server is listening on. If absent, the native upload override is not activated.
  * @property {string}    [nativeUploadToken]      Android: per-session auth token for requests to the local upload server.
- * @property {RestRelay} [restRelay]              iOS: where native code relays the site's REST API. If absent, requests go straight to the site.
+ * @property {RestRelay} [restRelay]              iOS: where native code relays the page's requests. If absent, requests go straight from the page.
  */
 
 /**
  * Where the native REST relay is.
  *
  * @typedef {Object} RestRelay
- * @property {string}  baseURL           The URL a path below the site's REST API root is appended to, slash-terminated.
+ * @property {string}  endpoint          The URL each request to another origin is sent to, with that request's URL in the `url` query parameter.
  * @property {boolean} [reportsRequests] Whether native code reports each relayed request to the host itself, so the page leaves it out of its network log.
  */
 
