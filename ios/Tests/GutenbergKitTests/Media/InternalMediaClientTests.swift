@@ -1,5 +1,6 @@
 @preconcurrency import Darwin
 import Foundation
+import os
 import Testing
 
 @testable import GutenbergKit
@@ -255,6 +256,105 @@ struct MultipartBodyStreamTests {
     #expect(await wroteEverything == false)
   }
 
+  @Test("a writer whose stream can't take bytes doesn't hold up other writers")
+  func writerNeverHoldsUpTheSharedQueue() async throws {
+    // Let the writer fill the stream's buffer with nobody reading, then send it a
+    // `.hasSpaceAvailable` event anyway, as a real stream sometimes does. If the writer
+    // tries to write, it blocks `MultipartBodyWriter.queue`, which every writer shares, and
+    // the block queued after it can't run.
+    let (reader, output) = try boundStreams()
+    // `OutputStream` isn't `Sendable`. Once the writer starts, the test only touches it on
+    // the writer's queue, as the writer does.
+    nonisolated(unsafe) let stream = output
+    let writer = try fileWriter(fileSize: 1024 * 1024, output: stream)
+    writer.start()
+    defer {
+      // Open the reader and take what's buffered. If the writer did block the queue, that
+      // frees it for the tests that run after this one.
+      reader.open()
+      var buffer = [UInt8](repeating: 0, count: 65_536)
+      if reader.hasBytesAvailable {
+        _ = reader.read(&buffer, maxLength: buffer.count)
+      }
+      reader.close()
+      writer.cancel()
+    }
+    // Poll with `async`, not `queue.sync`, so a stuck queue fails this wait instead of
+    // hanging the run. Also require an open stream. A closed stream has no room either,
+    // so a writer that closed early would pass.
+    let bufferFull = OSAllocatedUnfairLock(initialState: false)
+    try await waitUntil {
+      MultipartBodyWriter.queue.async {
+        let full = stream.streamStatus == .open && !stream.hasSpaceAvailable
+        bufferFull.withLock { $0 = full }
+      }
+      return bufferFull.withLock { $0 }
+    }
+
+    MultipartBodyWriter.queue.async { writer.stream(stream, handle: .hasSpaceAvailable) }
+    let othersRan = OSAllocatedUnfairLock(initialState: false)
+    MultipartBodyWriter.queue.async { othersRan.withLock { $0 = true } }
+    // Times out if the writer blocked the queue.
+    try await waitUntil { othersRan.withLock { $0 } }
+  }
+
+  @Test("a writer opens its stream on the shared queue, not on the caller's thread")
+  func writerOpensOnTheQueue() async throws {
+    // Opened from another thread, a stream can deliver an event to the queue while `open`
+    // is still running, and the two threads' calls into it can leave it stuck opening.
+    // So call `start` from a block on the queue and read the status in the same block.
+    // The writer queues its own `open` behind this block, so if `start` opened the stream
+    // itself, it would already be open here.
+    let (reader, output) = try boundStreams()
+    // `OutputStream` isn't `Sendable`. The test only touches it on the writer's queue.
+    nonisolated(unsafe) let stream = output
+    let writer = try fileWriter(fileSize: 1024, output: stream)
+    let wroteEverything = OSAllocatedUnfairLock<Bool?>(initialState: nil)
+    let statusAfterStart = await withCheckedContinuation { continuation in
+      MultipartBodyWriter.queue.async {
+        writer.start { ok in wroteEverything.withLock { $0 = ok } }
+        continuation.resume(returning: stream.streamStatus)
+      }
+    }
+    defer {
+      reader.close()
+      writer.cancel()
+    }
+
+    #expect(statusAfterStart == .notOpen)
+    // The writer then opens the stream on the queue and writes the whole body, which fits
+    // in the stream's buffer.
+    try await waitUntil { wroteEverything.withLock { $0 } == true }
+  }
+
+  @Test("a writer writes when its stream finishes opening")
+  func writerWritesOnOpenCompleted() async throws {
+    // Some streams report room while still opening, and the writer skips that event, so
+    // `.openCompleted` has to write. The stream is opened without being scheduled, so the
+    // only event the writer gets is the one sent here.
+    let (reader, output) = try boundStreams()
+    // `OutputStream` isn't `Sendable`. The test only touches it on the writer's queue.
+    nonisolated(unsafe) let stream = output
+    let writer = try fileWriter(fileSize: 1024, output: stream)
+    reader.open()
+    stream.open()
+    defer {
+      reader.close()
+      writer.cancel()
+    }
+
+    await withCheckedContinuation { continuation in
+      MultipartBodyWriter.queue.async {
+        writer.stream(stream, handle: .openCompleted)
+        continuation.resume()
+      }
+    }
+
+    var buffer = [UInt8](repeating: 0, count: 64)
+    let read = reader.hasBytesAvailable ? reader.read(&buffer, maxLength: buffer.count) : 0
+    #expect(read == "PREAMBLE".utf8.count)
+  }
+
   @Test("bodies nobody is reading yet hold no threads")
   func unreadBodiesHoldNoThreads() async throws {
     let megabyte = 1024 * 1024
@@ -290,20 +390,31 @@ struct MultipartBodyStreamTests {
     }
   }
 
-  /// A writer for a file of `fileSize` zero bytes, and the stream its reader would read.
+  /// A writer for a file of `fileSize` zero bytes, and the input stream that reads what it
+  /// writes.
   private func pairedWriter(fileSize: Int) throws -> (InputStream, MultipartBodyWriter) {
+    let (input, output) = try boundStreams()
+    return (input, try fileWriter(fileSize: fileSize, output: output))
+  }
+
+  /// A bound stream pair with a 64 KB buffer, as uploads use.
+  private func boundStreams() throws -> (InputStream, OutputStream) {
+    var input: InputStream?
+    var output: OutputStream?
+    Stream.getBoundStreams(withBufferSize: 65_536, inputStream: &input, outputStream: &output)
+    return (try #require(input), try #require(output))
+  }
+
+  /// A writer for a file of `fileSize` zero bytes that writes to `output`.
+  private func fileWriter(fileSize: Int, output: OutputStream) throws -> MultipartBodyWriter {
     let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("wmb-pair-\(UUID().uuidString)")
     try Data(count: fileSize).write(to: tempFile)
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
-    var input: InputStream?
-    var output: OutputStream?
-    Stream.getBoundStreams(withBufferSize: 65_536, inputStream: &input, outputStream: &output)
-    let writer = MultipartBodyWriter(
+    return MultipartBodyWriter(
       fileHandle: try FileHandle(forReadingFrom: tempFile), fileSize: fileSize,
-      preamble: Data("PREAMBLE".utf8), epilogue: Data("EPILOGUE".utf8), output: try #require(output)
+      preamble: Data("PREAMBLE".utf8), epilogue: Data("EPILOGUE".utf8), output: output
     )
-    return (try #require(input), writer)
   }
 }
 
