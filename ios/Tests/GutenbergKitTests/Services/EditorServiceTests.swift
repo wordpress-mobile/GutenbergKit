@@ -396,6 +396,108 @@ struct EditorServiceTests: MakesTestFixtures {
     #expect(completed == completed.sorted())
   }
 
+  @Test("prepare() reports progress in order, and returns after the last report, when the host's callback is slow")
+  func prepareProgressArrivesInOrder() async throws {
+    // The first callback holds on while the other dependencies report progress. A callback
+    // awaited straight from the service lets those reach the host first.
+    //
+    // The last callback holds on too. It comes at the end of `prepare()`, so a `prepare()` that
+    // didn't wait for its callbacks would return before the last one reached the host.
+    let scripts = ["a", "b", "c", "d"]
+      .map { #"<script src=\"https://example.com/\#($0).js\"></script>"# }
+      .joined()
+    let site = TestSite(
+      configuration: makeConfiguration(),
+      manifest: #"{"scripts":"\#(scripts)","styles":"","allowed_block_types":[]}"#
+    )
+    let tracker = ProgressTracker()
+    let calls = ProgressTracker()
+    let cancelledCalls = ProgressTracker()
+
+    _ = try await site.service(cachePolicy: .always).prepare { progress in
+      let isFirst = calls.append(progress) == 1
+      if isFirst || progress.completed == progress.total {
+        try? await Task.sleep(for: .milliseconds(200))
+      }
+      if Task.isCancelled {
+        cancelledCalls.append(progress)
+      }
+      tracker.append(progress)
+    }
+
+    let completed = tracker.updates.map(\.completed)
+    #expect(completed.count > 1)
+    #expect(completed == completed.sorted())
+    #expect(tracker.updates.last?.completed == tracker.updates.last?.total)
+    // Nothing cancelled `prepare()`, so no call should see a cancellation
+    #expect(cancelledCalls.updates.isEmpty)
+  }
+
+  @Test("cancelling prepare() reaches the host's callback, and stops the calls", .timeLimit(.minutes(1)))
+  func cancellingPrepareReachesTheCallback() async throws {
+    let scripts = ["a", "b", "c", "d"]
+      .map { #"<script src=\"https://example.com/\#($0).js\"></script>"# }
+      .joined()
+    let site = TestSite(
+      configuration: makeConfiguration(),
+      manifest: #"{"scripts":"\#(scripts)","styles":"","allowed_block_types":[]}"#
+    )
+    let (entered, signalEntered) = AsyncStream.makeStream(of: Void.self)
+    let (gate, openGate) = AsyncStream.makeStream(of: Void.self)
+    let calls = ProgressTracker()
+    let cancelledCalls = ProgressTracker()
+
+    let preparing = Task {
+      try await site.service(cachePolicy: .always).prepare { progress in
+        if calls.append(progress) == 1 {
+          // Hold the first call until the test has cancelled `prepare()`
+          signalEntered.finish()
+          for await _ in gate {}
+        }
+        if Task.isCancelled {
+          cancelledCalls.append(progress)
+        }
+      }
+    }
+    for await _ in entered {}
+    preparing.cancel()
+    openGate.finish()
+    _ = await preparing.result
+
+    #expect(cancelledCalls.count == 1, "the call under way should see the cancellation")
+    #expect(calls.count == 1, "there should be no calls after the cancellation")
+  }
+
+  @Test(
+    "progress delivery makes no more calls after a cancellation, even with updates waiting",
+    .timeLimit(.minutes(1))
+  )
+  func progressDeliveryStopsAtCancellation() async {
+    let (updates, progressUpdates) = AsyncStream.makeStream(of: EditorProgress.self)
+    for completed in [11, 21, 31] {
+      progressUpdates.yield(EditorProgress(completed: completed, total: 100))
+    }
+    let (entered, signalEntered) = AsyncStream.makeStream(of: Void.self)
+    let (gate, openGate) = AsyncStream.makeStream(of: Void.self)
+    let calls = ProgressTracker()
+
+    let delivering = Task {
+      await EditorService.deliver(updates) { progress in
+        if calls.append(progress) == 1 {
+          // Hold the first call until the test has cancelled the delivery
+          signalEntered.finish()
+          for await _ in gate {}
+        }
+      }
+    }
+    for await _ in entered {}
+    delivering.cancel()
+    openGate.finish()
+    await delivering.value
+
+    #expect(calls.updates.map(\.completed) == [11])
+  }
+
   // MARK: - Test Helpers
 
   /// URL-based response handler for EditorService.prepare() tests.

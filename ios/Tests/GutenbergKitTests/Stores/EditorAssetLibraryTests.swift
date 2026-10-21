@@ -2460,8 +2460,14 @@ final class ProgressTracker: @unchecked Sendable {
         lock.withLock { _updates.count }
     }
 
-    func append(_ progress: EditorProgress) {
-        lock.withLock { _updates.append(progress) }
+    /// Returns how many updates there are, counting this one. Each caller gets its own count,
+    /// even when several append at once.
+    @discardableResult
+    func append(_ progress: EditorProgress) -> Int {
+        lock.withLock {
+            _updates.append(progress)
+            return _updates.count
+        }
     }
 }
 

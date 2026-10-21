@@ -22,7 +22,9 @@ public actor EditorService {
     private let assetLibrary: EditorAssetLibrary
 
     private var progress: EditorProgress?
-    private var progressCallback: EditorProgressCallback?
+
+    /// Takes each progress update to the task that calls the host's callback.
+    private var progressUpdates: AsyncStream<EditorProgress>.Continuation?
 
     /// How much of the asset bundle's weight has been counted toward `progress`.
     private var assetBundleProgress = 0
@@ -135,7 +137,10 @@ public actor EditorService {
     /// A failed asset download doesn't make this throw. The asset bundle is returned without that
     /// asset, or with a copy of it from an earlier bundle.
     ///
-    /// - Parameter progress: A callback invoked with progress updates during loading.
+    /// - Parameter progress: A callback invoked with progress updates during loading. It's called
+    ///   with one update at a time, in order, and this method returns only after the last call
+    ///   returns. If the task calling this method is cancelled, the call under way sees the
+    ///   cancellation, and there are no more calls.
     /// - Returns: The complete set of dependencies needed to initialize the editor.
     /// - Throws: An error if any required resource fails to download.
     @discardableResult
@@ -150,13 +155,43 @@ public actor EditorService {
         }
 
         self.progress = EditorProgress(completed: 1, total: 100)
-        self.progressCallback = progress
         self.assetBundleProgress = 0
-        defer {
-            self.progressCallback = nil
-            self.progress = nil
+        let (updates, progressUpdates) = AsyncStream.makeStream(of: EditorProgress.self)
+        self.progressUpdates = progressUpdates
+
+        // One child task calls the host with each update in turn, so the host hears progress in
+        // the order it was made. As a child of this task, it's cancelled when this task is.
+        async let delivered: Void = Self.deliver(updates, to: progress)
+
+        let result: Result<EditorDependencies, any Error>
+        do {
+            result = .success(try await self.fetchDependenciesOrFallback())
+        } catch {
+            result = .failure(error)
         }
 
+        progressUpdates.finish()
+        self.progressUpdates = nil
+        self.progress = nil
+
+        // Return only after the host has heard the last update
+        await delivered
+        return try result.get()
+    }
+
+    /// Calls `callback` with each update in turn, until there are no more or the task is cancelled.
+    static func deliver(_ updates: AsyncStream<EditorProgress>, to callback: EditorProgressCallback?) async {
+        guard let callback else { return }
+
+        for await update in updates {
+            // A cancelled task still receives the updates that were already waiting, so check for
+            // cancellation before each call
+            guard !Task.isCancelled else { return }
+            await callback(update)
+        }
+    }
+
+    private func fetchDependenciesOrFallback() async throws -> EditorDependencies {
         if self.configuration.networkFallbackMode == .automatic {
             do {
                 return try await fetchDependencies()
@@ -190,23 +225,23 @@ public actor EditorService {
         try self.restRepository.purge()
     }
 
-    private func incrementProgress(for weight: DependencyWeights) async {
-        await self.incrementProgress(by: Int(weight.rawValue))
+    private func incrementProgress(for weight: DependencyWeights) {
+        self.incrementProgress(by: Int(weight.rawValue))
     }
 
     /// Adds an asset bundle download's progress to the total. A download reports its progress so far,
     /// not the change since its last report, so only the increase is added.
-    private func incrementProgress(forAssetBundleDownload download: EditorProgress) async {
+    private func incrementProgress(forAssetBundleDownload download: EditorProgress) {
         let assetBundleProgress = Int(DependencyWeights.assetBundle.rawValue * download.fractionCompleted)
         let increase = assetBundleProgress - self.assetBundleProgress
         guard increase > 0 else { return }
 
         self.assetBundleProgress = assetBundleProgress
-        await self.incrementProgress(by: increase)
+        self.incrementProgress(by: increase)
     }
 
-    private func incrementProgress(by amount: Int) async {
-        // Progress can arrive after the `prepare()` it belongs to has returned and cleared it. A
+    private func incrementProgress(by amount: Int) {
+        // Progress can arrive after the `prepare()` it belongs to has finished and cleared it. A
         // bundle build shared with another service may already be calling in when this service
         // gives up on it, and an overlapping `prepare()` on this service is cleared by whichever
         // finishes first. There is nothing left to report to, so drop it.
@@ -218,7 +253,7 @@ public actor EditorService {
             completed: min(current.completed + amount, current.total),
             total: current.total)
         self.progress = progress
-        await self.progressCallback?(progress)
+        self.progressUpdates?.yield(progress)
     }
 
     private func fetchDependencies() async throws -> EditorDependencies {
@@ -254,12 +289,12 @@ public actor EditorService {
 
     private func prepareEditorSettings() async throws -> EditorSettings {
         if let settings = try restRepository.readEditorSettings() {
-            await self.incrementProgress(for: .editorSettings)
+            self.incrementProgress(for: .editorSettings)
             return settings
         }
 
         let settings = try await restRepository.fetchEditorSettings()
-        await self.incrementProgress(for: .editorSettings)
+        self.incrementProgress(for: .editorSettings)
         return settings
     }
 
@@ -271,7 +306,7 @@ public actor EditorService {
         // A trusted bundle with every asset is used as it is. If it's missing assets, check the
         // manifest and retry them.
         if let trusted, !trusted.isMissingAssets, let bundle = await self.assetLibrary.handOut(trusted.bundle) {
-            await self.incrementProgress(for: .assetBundle)
+            self.incrementProgress(for: .assetBundle)
             return bundle
         }
 
@@ -281,7 +316,7 @@ public actor EditorService {
             }
 
             // A caller that joined a build already in progress can miss the build's last report
-            await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
+            self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
             return assetBundle
         } catch {
             try Task.checkCancellation()
@@ -294,7 +329,7 @@ public actor EditorService {
             }
 
             log(.warn, "Failed to try the asset bundle's missing assets again: \(error.localizedDescription)")
-            await self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
+            self.incrementProgress(forAssetBundleDownload: EditorProgress(completed: 1, total: 1))
             return bundle
         }
     }
@@ -330,56 +365,56 @@ public actor EditorService {
 
     private func preparePost(id: Int) async throws -> EditorURLResponse {
         if let postData = try self.restRepository.readPost(id: id) {
-            await self.incrementProgress(for: .post)
+            self.incrementProgress(for: .post)
             return postData
         }
 
         let postData = try await self.restRepository.fetchPost(id: id)
-        await self.incrementProgress(for: .post)
+        self.incrementProgress(for: .post)
         return postData
     }
 
     private func preparePost(type: String) async throws -> EditorURLResponse {
         if let postType = try self.restRepository.readPostType(for: type) {
-            await self.incrementProgress(for: .postType)
+            self.incrementProgress(for: .postType)
             return postType
         }
 
         let response = try await self.restRepository.fetchPostType(for: type)
-        await self.incrementProgress(for: .postType)
+        self.incrementProgress(for: .postType)
         return response
     }
 
     private func prepareActiveTheme() async throws -> EditorURLResponse {
         if let activeTheme = try self.restRepository.readActiveTheme() {
-            await self.incrementProgress(for: .activeTheme)
+            self.incrementProgress(for: .activeTheme)
             return activeTheme
         }
 
         let response = try await self.restRepository.fetchActiveTheme()
-        await self.incrementProgress(for: .activeTheme)
+        self.incrementProgress(for: .activeTheme)
         return response
     }
 
     private func prepareSettingsOptions() async throws -> EditorURLResponse {
         if let settingsOptions = try self.restRepository.readSettingsOptions() {
-            await self.incrementProgress(for: .settingsOptions)
+            self.incrementProgress(for: .settingsOptions)
             return settingsOptions
         }
 
         let response = try await self.restRepository.fetchSettingsOptions()
-        await self.incrementProgress(for: .settingsOptions)
+        self.incrementProgress(for: .settingsOptions)
         return response
     }
 
     private func preparePostTypes() async throws -> EditorURLResponse {
         if let postTypes = try self.restRepository.readPostTypes() {
-            await self.incrementProgress(for: .postTypes)
+            self.incrementProgress(for: .postTypes)
             return postTypes
         }
 
         let response = try await self.restRepository.fetchPostTypes()
-        await self.incrementProgress(for: .postTypes)
+        self.incrementProgress(for: .postTypes)
         return response
     }
 }
