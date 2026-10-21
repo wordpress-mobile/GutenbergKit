@@ -69,6 +69,9 @@ GUTENBERG_EDITOR_URL=http://10.0.2.2:5173/
 >
 > To run the demo app on a physical device, see the [physical device setup guide](./physical-device-setup.md).
 
+> [!NOTE]
+> The development server serves only the translations fetched into `src/translations/`, so the editor renders in English until translations are fetched. To test translations, run `make fetch-translations`, then rebuild the app.
+
 ## Production Builds
 
 To build GutenbergKit for production run the following command in your terminal:
