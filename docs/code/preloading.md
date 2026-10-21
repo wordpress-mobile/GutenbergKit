@@ -84,6 +84,8 @@ The `EditorURLCache` provides disk-based caching for API responses, keyed by URL
 | `.maxAge(TimeInterval)` | Use cached responses younger than the specified age |
 | `.always`               | Always use cached responses regardless of age       |
 
+The same policy decides when an `EditorService` checks for new plugin and theme assets; see [Refreshing](#refreshing).
+
 Example:
 
 **Swift**
@@ -211,15 +213,19 @@ This filtering is performed by `EditorURLResponse.asPreloadResponse()`.
 
 ### Automatic Cleanup
 
-`EditorService` automatically cleans up old asset bundles once per day:
+`EditorService` automatically cleans up each site's old asset bundles once per day:
 
 **Swift**
 
 ```swift
-try await onceEvery(.seconds(86_400)) {
-    try await self.cleanup()
-}
+try await onceEvery(
+    .seconds(86_400),
+    { try await self.cleanup() },
+    handle: "asset-bundle-cleanup-\(self.configuration.siteId)"
+)
 ```
+
+A cleanup keeps the site's latest bundle, and any bundle handed out to the app since it launched, because an open editor, or dependencies the host still holds, may be reading it.
 
 **Kotlin**
 
@@ -244,6 +250,58 @@ try await service.purge()
 ```kotlin
 //tbd
 ```
+
+### Refreshing
+
+An `EditorService`'s cache policy applies to plugin and theme assets as well as API responses. For assets, it decides when to check the site's asset manifest again:
+
+| Policy                  | API responses                   | Asset bundle                                                         |
+| ----------------------- | ------------------------------- | -------------------------------------------------------------------- |
+| `.always` (default)     | Fetched only when not cached    | Manifest checked only when there's no bundle, or it's missing assets |
+| `.maxAge(TimeInterval)` | Fetched once older than the age | Manifest checked once the last check is older than the age           |
+| `.ignore`               | Always fetched                  | Manifest always checked, and every asset downloaded again            |
+
+Under `.always` and `.maxAge`, a check downloads only what has changed:
+
+-   If the manifest hasn't changed, the bundle on disk is kept, and its age starts over. Asset URLs carry their version (`?ver=`), so the same manifest means the same assets. Assets the bundle is missing are retried; see [When an asset fails to download](#when-an-asset-fails-to-download).
+-   If the manifest has changed, a new bundle is built beside the old one. Each asset with a `?ver=` that a bundle on disk already has is copied from it, and the rest are downloaded. Every service for the site uses the new bundle once it's complete.
+
+This trusts the site's versions. WordPress gives an asset registered without a version `?ver=<WordPress version>`, so that file can change while its URL, and the manifest, stay the same. Only `.ignore` picks up that change.
+
+Under `.ignore`, every asset is downloaded again, whether or not the manifest has changed. Use it to replace an asset that changed without its URL changing, or one that was stored wrong. The assets go into a new bundle beside the old one, which an editor may still be reading. If the manifest hasn't changed and every asset comes back identical, the old bundle is returned and the new one is discarded, so a host can compare dependencies to tell whether a refresh changed anything. A changed `Content-Type` counts as a change: the old bundle is returned with the new type, and isn't equal to the one the host held. Assets that didn't change share disk space with their old copies, so a refresh only takes space for what changed.
+
+An old bundle handed out to the app stays on disk while the app is running, because an open editor, or dependencies the host still holds, may be reading it. `cleanup()` removes it after the next launch.
+
+Which bundle is a site's latest depends on when the site's manifest last matched each one, by the device's clock. If the clock was ahead and has since been set back, a bundle built for a changed manifest sorts behind the earlier bundle, which stays the latest until the clock passes its date. `purge()` fixes this, by removing every bundle.
+
+A bundle stores every HTTP or HTTPS URL in the manifest's `<script src>` and `<link rel="stylesheet">` tags, including ones like `/_static/??a.js,b.js` and `css2?family=Inter`. The editor is served each asset with the `Content-Type` the site sent. Each asset is one file in the bundle's `assets` directory, named after its URL so that a bundle on disk can be read by eye: `example.com_wp-content_plugins_jetpack_blocks_editor.js_ver=15.2.<digest>.js`. Bundles stored by earlier versions of GutenbergKit keep their assets in a different layout, so they're downloaded again once.
+
+#### When an asset fails to download
+
+A download fails when its request fails, or when the site answers with an error or a web page (`text/html`, such as a login page). A failed download never makes a build or `prepare()` fail, under any policy:
+
+-   If a bundle on disk has a copy of the asset, the new bundle uses that copy. Nothing records the failure, so the asset isn't asked for again until it would be anyway: on an `.ignore` refresh, or, for an asset without a `?ver=`, when the manifest changes.
+-   Otherwise, the bundle goes without the asset, and the editor loads it from the site. Every prepare then checks the manifest and retries the asset, under any policy, until it downloads. If that check fails, the bundle is still returned without the asset, unless the cache policy requires a check.
+
+A retry goes into a new bundle beside the old one. A retry that changes nothing leaves no new bundle.
+
+#### Pull-to-refresh
+
+To refresh a site's editor data — on pull-to-refresh, for instance — prepare a separate service that ignores the cache, and give its dependencies to the next editor:
+
+**Swift**
+
+```swift
+let dependencies = try await EditorService(configuration: configuration, cachePolicy: .ignore).prepare()
+```
+
+Nothing is deleted first, so an editor opened during the refresh still loads from disk, and a refresh that fails leaves everything in place. An editor given no dependencies prepares its own with `.always`, so it uses whatever the last refresh left. To check for changes and download only those, use `.maxAge(0)` instead of `.ignore`.
+
+A refresh that fails throws, unless the configuration's `networkFallbackMode` is `.automatic`; see [Network Fallback Mode](#network-fallback-mode).
+
+**Kotlin**
+
+Not yet: Android's `EditorService` still checks the asset manifest only when no bundle is on disk, whatever its cache policy.
 
 ## Offline Mode
 
@@ -313,6 +371,28 @@ let dependencies = try await service.prepare { progress in
 }
 ```
 
+#### Sharing Work Between Services
+
+Every `EditorService` for a site reads and writes the same on-disk caches, so there's no need to hand a service from a
+prefetch to the editor — create one for each caller. Don't call `prepare()` on a service while an earlier call on it is
+still running: progress is tracked per service, so the later call takes over the progress callback, and whichever
+finishes first stops progress for both.
+
+Services for the same site also share work while it's in flight. A request identical to one already in flight joins it
+rather than going out again, and a build of an asset bundle joins the one already running. So an editor opened before a
+prefetch finishes fetches only its own post and the `editor-assets` manifest, even when the two are for different posts.
+Requests are shared only between clients with the same `URLSession` instance, credentials, and timeout, and never from a
+client with a delegate, which expects to see every request it makes. A bundle build is shared by every service for the
+site whatever its client, just as the bundle it produces is once it's on disk.
+
+The request for the post is never shared, even between two editors on the same post: one already in flight can predate
+an edit made since. It opts out through its cache policy — a request that asks to skip the cache
+(`.reloadIgnoringLocalCacheData` and its siblings) always goes out on its own — and a host's own requests through
+`EditorHTTPClient` can do the same.
+
+Cancelling a caller ends only that caller's wait; shared work stops once no caller is left waiting on it. `purge()`
+doesn't stop it, so work that began before a purge can still land after it.
+
 ### EditorViewController Loading Flows
 
 `EditorViewController` supports two loading flows based on whether dependencies are provided:
@@ -337,7 +417,9 @@ let editor = EditorViewController(
 )
 ```
 
-The editor displays a progress bar while fetching, then loads once complete.
+The editor displays a progress bar while fetching, then loads once complete. The fetch does not hold the
+editor: releasing it mid-fetch frees it immediately, and the fetch finishes in the background, warming the
+cache for the next editor.
 
 ### Best Practice: Prepare Early
 

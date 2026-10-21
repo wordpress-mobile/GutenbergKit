@@ -1,0 +1,519 @@
+import Foundation
+import Testing
+
+@testable import GutenbergKit
+
+#if canImport(UIKit)
+
+/// Pins that ``EditorViewController/stopMediaHandling()`` opens the ownership cycle a host
+/// can form, and that a host which doesn't form one needs nothing.
+///
+/// The editor holds `mediaProcessor` strongly so an in-flight upload can't lose it
+/// mid-request. The cost is that a host which holds the editor back closes a cycle ARC
+/// cannot break — and `deinit`, which does this work on every other path, is exactly what
+/// a cycle prevents. `stopMediaHandling()` is the way out, and it has to be the host's
+/// call: not because UIKit can't report a teardown, but because it can't report whether
+/// one is permanent. A host may re-present or re-attach the same editor, and the call is
+/// terminal, so guessing wrong disables media in an editor that survived.
+///
+/// Also runs the page side of the native upload protocol inside the editor's own web
+/// view, so the scheme handler is exercised by real WebKit.
+@Suite("EditorViewController media teardown")
+struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
+    static let testSiteURL = URL(string: "https://test.example.com")!
+    static let testApiRoot = URL(string: "https://test.example.com/wp-json/wp/v2")!
+
+    @MainActor
+    @Test("stopMediaHandling frees the editor and the host processor that owns it")
+    func stopMediaHandlingBreaksTheOwnershipCycle() async {
+        weak var weakEditor: EditorViewController?
+        weak var weakHost: EditorOwningProcessor?
+
+        do {
+            let host = EditorOwningProcessor(configuration: makeConfiguration())
+            weakEditor = host.editor
+            weakHost = host
+            host.editor.stopMediaHandling()
+        }
+
+        await waitForRelease { weakHost == nil && weakEditor == nil }
+
+        #expect(weakHost == nil, "host processor leaked — stopMediaHandling did not release it")
+        #expect(weakEditor == nil, "EditorViewController leaked — cycle through mediaProcessor")
+    }
+
+    @MainActor
+    @Test("a host that does not retain the editor is freed without stopMediaHandling")
+    func standaloneProcessorIsFreed() async {
+        weak var weakEditor: EditorViewController?
+
+        do {
+            let editor = EditorViewController(
+                configuration: makeConfiguration(),
+                mediaProcessor: StandaloneProcessor()
+            )
+            weakEditor = editor
+        }
+
+        await waitForRelease { weakEditor == nil }
+
+        #expect(weakEditor == nil, "EditorViewController leaked — nothing here retains it")
+    }
+
+    // MARK: - Which handlers enable native uploads
+
+    /// An uploader-only host once had its native upload path silently disabled on iOS, so
+    /// each combination is pinned. With neither, GutenbergKit's own client delivers: the
+    /// page's path holds the whole file in memory. Android differs here, starting its
+    /// loopback server only for a handler (`GutenbergViewUploadServerTest`): its page path
+    /// streams.
+    @MainActor
+    @Test(
+        "native uploads are enabled whichever handlers the host supplied, including none",
+        arguments: [
+            ("neither", false, false),
+            ("uploader only", false, true),
+            ("processor only", true, false),
+            ("both", true, true)
+        ]
+    )
+    func nativeUploadsEnabledForAnyHandler(_ label: String, processor: Bool, uploader: Bool) {
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: processor ? StandaloneProcessor() : nil,
+            mediaUploader: uploader ? InertUploader() : nil
+        )
+        defer { editor.stopMediaHandling() }
+
+        #expect(editor.mediaUploadSchemeHandler.isEnabled, "\(label): uploads would take the page's path")
+        #expect(editor.webView.configuration.urlSchemeHandler(forURLScheme: MediaUploadSchemeHandler.scheme) != nil)
+    }
+
+    @MainActor
+    @Test("without site credentials native uploads stay disabled", arguments: [false, true])
+    func noCredentialsLeavesNativeUploadsDisabled(processor: Bool) {
+        let configuration = makeConfigurationBuilder().setAuthHeader("").build()
+        let editor = EditorViewController(
+            configuration: configuration,
+            mediaProcessor: processor ? StandaloneProcessor() : nil
+        )
+
+        #expect(!editor.mediaUploadSchemeHandler.isEnabled)
+    }
+
+    @MainActor
+    @Test("stopMediaHandling disables native uploads")
+    func stopMediaHandlingDisablesNativeUploads() {
+        let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: InertUploader())
+
+        editor.stopMediaHandling()
+
+        #expect(!editor.mediaUploadSchemeHandler.isEnabled)
+        #expect(editor.mediaUploader == nil)
+    }
+
+    // MARK: - The configuration the page loads with
+
+    @MainActor
+    @Test("native uploads follow a configuration updated before the page loads")
+    func uploadsFollowUpdatedConfiguration() {
+        let editor = EditorViewController(
+            configuration: makeConfigurationBuilder().setAuthHeader("").build(),
+            mediaProcessor: StandaloneProcessor()
+        )
+        defer { editor.stopMediaHandling() }
+        #expect(!editor.mediaUploadSchemeHandler.isEnabled)
+
+        editor.updateConfiguration(makeConfiguration())
+        editor.prepareNativeHandlers()
+
+        #expect(editor.mediaUploadSchemeHandler.isEnabled)
+    }
+
+    @MainActor
+    @Test("stopMediaHandling stays terminal when the page loads again")
+    func stoppedUploadsStayStopped() {
+        let editor = EditorViewController(configuration: makeConfiguration(), mediaProcessor: StandaloneProcessor())
+        editor.stopMediaHandling()
+
+        editor.prepareNativeHandlers()
+
+        #expect(!editor.mediaUploadSchemeHandler.isEnabled)
+    }
+
+    @MainActor
+    @Test("the REST relay follows a configuration updated before the page loads")
+    func relayFollowsUpdatedConfiguration() throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+        defer { editor.stopMediaHandling() }
+        let updated = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://updated.example.com")!,
+            siteApiRoot: URL(string: "https://updated.example.com/wp-json/")!
+        )
+        .setAuthHeader("Bearer updated")
+        .build()
+
+        editor.updateConfiguration(updated)
+        editor.prepareNativeHandlers()
+
+        let relayURL = try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))
+        #expect(editor.restRelaySchemeHandler.relay.upstreamURL(for: relayURL)?.host() == "updated.example.com")
+    }
+
+    // MARK: - Network reporting
+
+    @MainActor
+    @Test("the host's HTTP delegate is told about a request the page sends through the relay")
+    func relayedRequestsAreReported() async throws {
+        // Nothing listens on port 1, so the relayed request fails at once, and a
+        // failed request is reported like any other.
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "http://127.0.0.1:1")!,
+            siteApiRoot: URL(string: "http://127.0.0.1:1/wp-json/")!
+        )
+        .setAuthHeader("Bearer test-token")
+        .build()
+        let recorder = TaskEventRecorder()
+        let editor = EditorViewController(
+            configuration: configuration,
+            httpClient: EditorHTTPClient(urlSession: URLSession.shared, authHeader: "Bearer test-token", delegate: recorder)
+        )
+        defer { editor.stopMediaHandling() }
+        try await loadBlankPage(in: editor)
+
+        _ = try await editor.webView.callAsyncJavaScript(
+            "try { await fetch('gbk-rest://relay/proxy/wp/v2/posts'); } catch {} return true;",
+            arguments: [:],
+            in: nil,
+            contentWorld: .page
+        )
+
+        #expect(recorder.events.first == "created")
+        #expect(recorder.events.last == "failed")
+    }
+
+    // MARK: - Uploads from the editor's own web view
+
+    @MainActor
+    @Test("the page uploads a file in chunks, and the host's uploader receives it intact")
+    func pageUploadsInChunks() async throws {
+        let uploader = RecordingUploader()
+        let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: uploader)
+        defer { editor.stopMediaHandling() }
+        try await loadBlankPage(in: editor)
+
+        // Larger than two chunks, so the offsets and the final short chunk are exercised.
+        let size = 9 * 1024 * 1024 + 123
+        let result = try await runUpload(in: editor, size: size)
+
+        #expect(result["status"] as? Int == 201)
+        let received = try #require(uploader.receivedContents)
+        #expect(received.count == size)
+        #expect(received.hasSameBytes(as: Self.pattern(count: size)), "the file was reassembled out of order or short")
+        #expect(uploader.received?.filename == "clip.bin")
+        #expect(uploader.received?.fields == [MediaUploadField(name: "post", value: "7")])
+        #expect(uploader.received?.query == "?_embed")
+    }
+
+    @MainActor
+    @Test("with no handler, the page's upload reaches the site through GutenbergKit's own client")
+    func pageUploadsWithoutHandler() async throws {
+        let session = RelayingURLSession(statusCode: 201, headers: [:])
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token")
+        )
+        defer { editor.stopMediaHandling() }
+        try await loadBlankPage(in: editor)
+
+        // Larger than one chunk, so the reassembled file is what reaches the site.
+        let size = 5 * 1024 * 1024 + 123
+        let result = try await runUpload(in: editor, size: size)
+
+        #expect(result["status"] as? Int == 201)
+        #expect(session.requestCount == 1)
+        let request = try #require(session.lastRequest)
+        #expect(request.url?.host() == Self.testApiRoot.host())
+        #expect(request.url?.path().hasSuffix("/wp/v2/media") == true)
+        #expect(request.url?.query() == "_embed")
+        let body = try #require(session.lastBody)
+        #expect(body.contains(Self.pattern(count: size)), "the file didn't reach the site intact")
+    }
+
+    @MainActor
+    @Test("the page can read the attachment ID off a failed upload, so core can recover it")
+    func attachmentIDIsExposedToThePage() async throws {
+        let session = RelayingURLSession(statusCode: 500, headers: ["x-wp-upload-attachment-id": "42"])
+        let editor = EditorViewController(
+            configuration: makeConfiguration(),
+            mediaProcessor: StandaloneProcessor(),
+            httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token")
+        )
+        defer { editor.stopMediaHandling() }
+        try await loadBlankPage(in: editor)
+
+        let result = try await runUpload(in: editor, size: 16)
+
+        #expect(result["status"] as? Int == 500)
+        #expect(result["attachmentId"] as? String == "42")
+        #expect(session.requestCount == 1)
+    }
+
+    @MainActor
+    @Test("after stopMediaHandling native code refuses uploads")
+    func stoppedEditorAnswers503() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration(), mediaUploader: InertUploader())
+        try await loadBlankPage(in: editor)
+        editor.stopMediaHandling()
+
+        let result = try await runUpload(in: editor, size: 16)
+
+        #expect(result["beginStatus"] as? Int == 503)
+    }
+
+    // MARK: - Media from the block inserter
+
+    @MainActor
+    @Test("an imported file is offered to the page as a file, and its item says so", .enabled(if: NativeFileInput.isSupported))
+    func importedFilesAreOffered() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+        let (media, fileURL) = try await importTestVideo()
+        defer { removeImport(fileURL) }
+
+        let (item, file) = try editor.javaScriptMediaItem(for: media)
+        let dictionary = try #require(item as? [String: Any])
+
+        #expect(file == fileURL)
+        #expect(dictionary["nativeFile"] as? Bool == true)
+        #expect(dictionary["type"] as? String == "video/quicktime")
+        #expect(dictionary["url"] as? String == media.url)
+    }
+
+    @MainActor
+    @Test("media the editor did not import goes to the page as it is")
+    func otherMediaIsNotOffered() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+
+        let library = try editor.javaScriptMediaItem(
+            for: MediaInfo(id: 42, url: "https://example.com/a.jpg", type: "image/jpeg")
+        )
+        let remote = try editor.javaScriptMediaItem(
+            for: MediaInfo(url: "https://example.com/a.jpg", type: "image/jpeg")
+        )
+        let missing = try editor.javaScriptMediaItem(
+            for: MediaInfo(url: "gbk-media-file:///Uploads/gone/IMG_0001.MOV", type: "video/quicktime")
+        )
+
+        for (item, file) in [library, remote, missing] {
+            #expect(file == nil)
+            #expect((item as? [String: Any])?["nativeFile"] == nil)
+        }
+    }
+
+    @MainActor
+    @Test("the page's file input gets the offered file, read from disk", .enabled(if: NativeFileInput.isSupported))
+    func pageReceivesOfferedFiles() async throws {
+        let editor = EditorViewController(configuration: makeConfiguration())
+        try await loadBlankPage(in: editor)
+        let (_, fileURL) = try await importTestVideo()
+        defer { removeImport(fileURL) }
+
+        let result = try await editor.nativeFileInput.offer([fileURL], to: editor.webView) {
+            try await editor.webView.callAsyncJavaScript(
+                """
+                const files = await new Promise((resolve, reject) => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.addEventListener('change', () => resolve(Array.from(input.files)));
+                    input.addEventListener('cancel', () => reject(new Error('cancelled')));
+                    document.body.appendChild(input);
+                    input.click();
+                });
+                const bytes = new Uint8Array(await files[0].slice(0, 4).arrayBuffer());
+                return { count: files.length, name: files[0].name, size: files[0].size, type: files[0].type, first: Array.from(bytes) };
+                """,
+                arguments: [:],
+                in: nil,
+                contentWorld: .page
+            )
+        }
+        let file = try #require(result as? [String: Any])
+
+        #expect(file["count"] as? Int == 1)
+        #expect(file["name"] as? String == fileURL.lastPathComponent)
+        #expect(file["size"] as? Int == 32)
+        #expect(file["type"] as? String == "video/quicktime")
+        #expect(file["first"] as? [Int] == [1, 1, 1, 1])
+        #expect(editor.webView.uiDelegate == nil, "the offer outlived the insertion")
+    }
+
+    /// Imports a small file the way the camera path does. It lands in the uploads directory
+    /// the app itself uses, so the caller removes it: `defer { removeImport(fileURL) }`.
+    private func importTestVideo() async throws -> (MediaInfo, URL) {
+        let source = try makeTemporaryFile(Data(repeating: 1, count: 32), named: "clip-\(UUID().uuidString).MOV")
+        defer { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) }
+        let media = try await MediaFileManager.shared.importFile(at: source)
+        let url = try #require(media.url.flatMap(URL.init(string:)))
+        return (media, try #require(MediaFileManager.fileURL(for: url)))
+    }
+
+    /// Deletes a file ``importTestVideo()`` imported, and the directory made for it.
+    private func removeImport(_ fileURL: URL) {
+        try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent())
+    }
+
+    /// Loads an empty `file://` page — the editor's own origin — into the editor's web view.
+    @MainActor
+    private func loadBlankPage(in editor: EditorViewController) async throws {
+        let directory = URL.randomTemporaryDirectory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let page = directory.appending(component: "index.html")
+        try Data("<!doctype html><title>upload test</title>".utf8).write(to: page)
+        editor.webView.loadFileURL(page, allowingReadAccessTo: directory)
+
+        // Longer than `patientTimeout`: on the CI machine a web view takes about a minute to load
+        // its first page, however small. Three runs there each had it answering 60 to 66 seconds in.
+        var isLoaded = false
+        let deadline = ContinuousClock.now + .seconds(180)
+        while !isLoaded && ContinuousClock.now < deadline {
+            let readyState = try? await editor.webView.evaluateJavaScript("document.readyState")
+            isLoaded = !editor.webView.isLoading && readyState as? String == "complete"
+            if !isLoaded {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        // The page is in memory once loaded, and needs nothing more from its directory.
+        try? FileManager.default.removeItem(at: directory)
+
+        // Stops the test here: carrying on in a page that never loaded fails it again, further
+        // on, with a JavaScript error that says nothing about why.
+        try #require(isLoaded, "the test page never finished loading")
+    }
+
+    /// Runs the page side of the upload protocol, as `nativeMediaUploadMiddleware` does.
+    @MainActor
+    private func runUpload(in editor: EditorViewController, size: Int) async throws -> [String: Any] {
+        let result = try await editor.webView.callAsyncJavaScript(
+            """
+            const base = 'gbk-upload://upload';
+            const bytes = new Uint8Array(size);
+            for (let i = 0; i < size; i++) bytes[i] = i % 251;
+            const file = new File([bytes], 'clip.bin', { type: 'application/octet-stream' });
+            const begin = await fetch(`${base}/sessions`, {
+                method: 'POST',
+                body: JSON.stringify({ filename: file.name, mimeType: file.type, size: file.size }),
+            });
+            if (!begin.ok) return { beginStatus: begin.status };
+            const { id } = await begin.json();
+            const chunkSize = 4 * 1024 * 1024;
+            for (let offset = 0; offset < file.size; offset += chunkSize) {
+                const chunk = await file.slice(offset, offset + chunkSize).arrayBuffer();
+                const response = await fetch(`${base}/sessions/${id}/chunks?offset=${offset}`, { method: 'POST', body: chunk });
+                if (!response.ok) return { chunkStatus: response.status, offset };
+            }
+            const finish = await fetch(`${base}/sessions/${id}/finish`, {
+                method: 'POST',
+                body: JSON.stringify({ fields: [{ name: 'post', value: '7' }], query: '?_embed' }),
+            });
+            return {
+                status: finish.status,
+                attachmentId: finish.headers.get('x-wp-upload-attachment-id'),
+            };
+            """,
+            arguments: ["size": size],
+            in: nil,
+            contentWorld: .page
+        )
+        return try #require(result as? [String: Any])
+    }
+
+    private static func pattern(count: Int) -> Data {
+        Data((0..<count).map { UInt8($0 % 251) })
+    }
+
+    /// Polls instead of asserting outright, because a `UIViewController` can sit in an
+    /// autorelease pool past the end of the scope that held it. Asserting synchronously
+    /// passes in isolation and fails in a full suite, where other tests keep the main
+    /// actor busy and the pool drains later. A real leak still fails this, a second later.
+    @MainActor
+    private func waitForRelease(_ isReleased: () -> Bool) async {
+        for _ in 0..<100 where !isReleased() {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+}
+
+/// The shape that cycles: owns the editor *and* is its processor. Hosts reach for this
+/// because the coordinator driving the editor already has the site context.
+@MainActor
+private final class EditorOwningProcessor: MediaProcessor {
+    /// Implicitly unwrapped so `self` can be passed as the editor's processor: every stored
+    /// property then has a value (nil) on entry to `init`, which is what makes `self`
+    /// available there. Taking the processor at `init` doesn't prevent this shape — it just
+    /// moves where the host writes it.
+    private(set) var editor: EditorViewController!
+
+    init(configuration: EditorConfiguration) {
+        editor = EditorViewController(configuration: configuration, mediaProcessor: self)
+    }
+
+    nonisolated func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
+
+    nonisolated func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+        .original
+    }
+}
+
+private final class StandaloneProcessor: MediaProcessor {
+    func handlesFile(ofType mimeType: String, named filename: String) -> Bool { false }
+
+    func processFile(at url: URL, mimeType: String, filename: String) async throws -> ProcessedProxyFile {
+        .original
+    }
+}
+
+#endif
+
+/// Supplied only to enable native uploads; never invoked by these tests.
+private struct InertUploader: MediaUploader {
+    func upload(_ upload: MediaUpload) async throws -> Data { Data() }
+}
+
+/// Answers every request with a canned status and headers, draining the body first as
+/// URLSession would, and keeps the last request and its body.
+private final class RelayingURLSession: URLSessionProtocol, @unchecked Sendable {
+    private let statusCode: Int
+    private let headers: [String: String]
+    private let lock = NSLock()
+    private var count = 0
+    private var _lastRequest: URLRequest?
+    private var _lastBody: Data?
+
+    var requestCount: Int { lock.withLock { count } }
+    var lastRequest: URLRequest? { lock.withLock { _lastRequest } }
+    var lastBody: Data? { lock.withLock { _lastBody } }
+
+    init(statusCode: Int, headers: [String: String]) {
+        self.statusCode = statusCode
+        self.headers = headers
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let body = request.httpBodyStream.map(readAllFromStream)
+        lock.withLock {
+            count += 1
+            _lastRequest = request
+            _lastBody = body
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headers)!
+        return (Data(#"{"code":"rest_upload_sideload_error"}"#.utf8), response)
+    }
+
+    func download(for request: URLRequest, delegate: (any URLSessionTaskDelegate)?) async throws -> (URL, URLResponse) {
+        throw URLError(.unsupportedURL)
+    }
+}

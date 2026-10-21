@@ -66,7 +66,10 @@ public struct RESTAPIRepository: Sendable {
     // MARK: Post
     @discardableResult
     public func fetchPost(id: Int) async throws -> EditorURLResponse {
-        let request = URLRequest(method: .GET, url: self.buildPostUrl(id: id))
+        var request = URLRequest(method: .GET, url: self.buildPostUrl(id: id))
+        // The post is never cached, and for the same reason never joins a request in flight:
+        // one started by an editor since closed can predate an edit made in between.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         let response = try await self.httpClient.perform(request)
         return EditorURLResponse(response)
     }

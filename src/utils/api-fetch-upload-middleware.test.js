@@ -9,6 +9,7 @@ vi.mock( './bridge', () => ( {
 
 vi.mock( './logger', () => ( {
 	info: vi.fn(),
+	warn: vi.fn(),
 	error: vi.fn(),
 } ) );
 
