@@ -302,30 +302,28 @@ struct MultipartBodyStreamTests {
   func writerOpensOnTheQueue() async throws {
     // Opened from another thread, a stream can deliver an event to the queue while `open`
     // is still running, and the two threads' calls into it can leave it stuck opening.
-    // Hold the queue, start a writer, and check that the stream isn't open yet.
+    // So call `start` from a block on the queue and read the status in the same block.
+    // The writer queues its own `open` behind this block, so if `start` opened the stream
+    // itself, it would already be open here.
     let (reader, output) = try boundStreams()
-    // `OutputStream` isn't `Sendable`. While the queue is held, nothing else touches it.
+    // `OutputStream` isn't `Sendable`. The test only touches it on the writer's queue.
     nonisolated(unsafe) let stream = output
     let writer = try fileWriter(fileSize: 1024, output: stream)
-    let release = DispatchSemaphore(value: 0)
-    await withCheckedContinuation { continuation in
+    let wroteEverything = OSAllocatedUnfairLock<Bool?>(initialState: nil)
+    let statusAfterStart = await withCheckedContinuation { continuation in
       MultipartBodyWriter.queue.async {
-        continuation.resume()
-        release.wait()
+        writer.start { ok in wroteEverything.withLock { $0 = ok } }
+        continuation.resume(returning: stream.streamStatus)
       }
     }
-    let wroteEverything = OSAllocatedUnfairLock<Bool?>(initialState: nil)
-    writer.start { ok in wroteEverything.withLock { $0 = ok } }
-    let statusWhileQueueHeld = stream.streamStatus
-    release.signal()
     defer {
       reader.close()
       writer.cancel()
     }
 
-    #expect(statusWhileQueueHeld == .notOpen)
-    // Once the queue is free, the writer opens the stream and writes the whole body, which
-    // fits in the stream's buffer.
+    #expect(statusAfterStart == .notOpen)
+    // The writer then opens the stream on the queue and writes the whole body, which fits
+    // in the stream's buffer.
     try await waitUntil { wroteEverything.withLock { $0 } == true }
   }
 
