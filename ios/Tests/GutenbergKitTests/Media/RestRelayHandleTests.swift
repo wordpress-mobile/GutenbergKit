@@ -580,6 +580,37 @@ struct RestRelaySchemeHandlerTests {
         #expect(task.failure == nil)
     }
 
+    /// The handler sends each chunk on the main actor. Here the test keeps the main actor
+    /// busy until the rest of the response has arrived, then stops the task. So the
+    /// second chunk has reached the handler, but hasn't been sent to the page yet.
+    @Test("doesn't send the page a chunk that was on its way when the page stopped the response")
+    func stopDropsAChunkOnItsWay() async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            rest: Data("data: two\n\n".utf8)
+        ))
+        defer { stubbed.finish() }
+        // The observer hears that the request completed only after every chunk has
+        // reached the handler.
+        let observer = TaskEventRecorder()
+        let handler = makeHandler(session: stubbed.session, observer: observer)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+        gate.open()
+        try holdMainActor { observer.events.contains("completed") }
+        handler.stop(task)
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(task.body == Data("data: one\n\n".utf8), "answered a stopped task, which WebKit raises on")
+        #expect(!task.finished)
+        #expect(task.failure == nil)
+    }
+
     @Test("fails the page's request when the response breaks off partway")
     func failsWhenTheResponseBreaksOff() async throws {
         let gate = StubURLProtocol.Gate()
@@ -630,7 +661,11 @@ struct RestRelaySchemeHandlerTests {
         #expect(task.finished)
     }
 
-    private func makeHandler(session: URLSession, siteApiRoot: String = "https://example.com/wp-json/") -> RestRelaySchemeHandler {
+    private func makeHandler(
+        session: URLSession,
+        siteApiRoot: String = "https://example.com/wp-json/",
+        observer: (any EditorHTTPClientDelegate)? = nil
+    ) -> RestRelaySchemeHandler {
         RestRelaySchemeHandler(relay: RestRelay(
             configuration: EditorConfigurationBuilder(
                 postType: .post,
@@ -638,7 +673,22 @@ struct RestRelaySchemeHandlerTests {
                 siteApiRoot: URL(string: siteApiRoot)!,
                 authHeader: "Bearer test-token"
             ).build(),
-            session: session
+            session: session,
+            observer: observer
         ))
+    }
+
+    /// Waits for `condition` without giving up the main actor, so nothing else runs on
+    /// it in the meantime. Fails the test if `condition` hasn't held within `timeout`.
+    private func holdMainActor(
+        timeout: Duration = patientTimeout,
+        sourceLocation: SourceLocation = #_sourceLocation,
+        until condition: () -> Bool
+    ) throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() && ContinuousClock.now < deadline {
+            Thread.sleep(forTimeInterval: 0.001)
+        }
+        try #require(condition(), "timed out waiting", sourceLocation: sourceLocation)
     }
 }
