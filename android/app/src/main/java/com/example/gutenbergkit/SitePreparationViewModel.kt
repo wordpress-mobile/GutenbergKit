@@ -29,6 +29,8 @@ data class SitePreparationUiState(
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */
     val postTypes: List<PostTypeDetails> = emptyList(),
+    /** The singular label of each post type, keyed by slug. Empty when not fetched from the site. */
+    val postTypeLabels: Map<String, String> = emptyMap(),
     /** The post type currently selected in the picker. Null until [postTypes] loads. */
     val selectedPostType: PostTypeDetails? = null,
     val cacheBundleCount: Int? = null,
@@ -274,11 +276,15 @@ class SitePreparationViewModel(
         // available (the typical case); otherwise pick the first type in the
         // list. Falls back to `PostTypeDetails.post` if the call fails so the
         // editor can still launch with a sensible default.
-        val postTypes = loadPostTypes(config) ?: listOf(PostTypeDetails.post)
+        val loadedPostTypes = loadPostTypes(config)
+        val postTypes = loadedPostTypes?.map { it.first } ?: listOf(PostTypeDetails.post)
         val defaultPostType = postTypes.firstOrNull { it.postType == "post" } ?: postTypes.first()
         _uiState.update {
             it.copy(
                 postTypes = postTypes,
+                postTypeLabels = loadedPostTypes
+                    ?.associate { (postType, label) -> postType.postType to label }
+                    .orEmpty(),
                 selectedPostType = defaultPostType
             )
         }
@@ -310,7 +316,7 @@ class SitePreparationViewModel(
 
     /**
      * Fetches the site's post types from the WordPress REST API and returns the
-     * subset relevant to the editor picker.
+     * subset relevant to the editor picker, each with its singular label.
      *
      * Mirrors the iOS [SitePreparationView.loadPostTypes] filter:
      * - always include the standard `post` and `page` types
@@ -322,7 +328,7 @@ class SitePreparationViewModel(
      */
     private suspend fun loadPostTypes(
         config: ConfigurationItem.ConfiguredEditor
-    ): List<PostTypeDetails>? {
+    ): List<Pair<PostTypeDetails, String>>? {
         val app = getApplication<GutenbergKitApplication>()
         val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
             ?: return null
@@ -346,9 +352,9 @@ class SitePreparationViewModel(
                     postType = details.slug,
                     restBase = details.restBase,
                     restNamespace = details.restNamespace
-                )
+                ) to details.labels.singularName
             }
-            .sortedBy { it.postType }
+            .sortedBy { it.first.postType }
     }
 
     /**

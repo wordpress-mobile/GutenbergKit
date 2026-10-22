@@ -332,6 +332,7 @@ private fun LoadedView(
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
+                postTypeLabels = uiState.postTypeLabels,
                 selectedPostType = uiState.selectedPostType,
                 onPostTypeChange = viewModel::setPostType,
                 showBrowseButton = accountId != null,
@@ -427,6 +428,7 @@ private fun FeatureConfigurationCard(
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
     postTypes: List<PostTypeDetails>,
+    postTypeLabels: Map<String, String>,
     selectedPostType: PostTypeDetails?,
     onPostTypeChange: (PostTypeDetails) -> Unit,
     showBrowseButton: Boolean = false,
@@ -566,7 +568,8 @@ private fun FeatureConfigurationCard(
                                 enabled = !isPreparing
                             )
                             Text(
-                                text = postType.postType.replaceFirstChar { it.uppercase() },
+                                text = postTypeLabels[postType.postType]
+                                    ?: postType.postType.replaceFirstChar { it.uppercase() },
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }

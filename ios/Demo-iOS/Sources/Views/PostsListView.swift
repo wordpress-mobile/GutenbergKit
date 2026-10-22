@@ -10,7 +10,16 @@ struct PostsListView: View {
     @State
     private var viewModel: PostsListViewModel
 
-    init(client: WordPressAPI, postTypeDetails: PostTypeDetails, editorConfiguration: EditorConfiguration, editorDependencies: EditorDependencies?) {
+    private let title: String
+
+    init(
+        client: WordPressAPI,
+        postTypeDetails: PostTypeDetails,
+        title: String,
+        editorConfiguration: EditorConfiguration,
+        editorDependencies: EditorDependencies?
+    ) {
+        self.title = title
         self.viewModel = PostsListViewModel(
             client: client,
             postTypeDetails: postTypeDetails,
@@ -37,7 +46,7 @@ struct PostsListView: View {
                 }
             } else if viewModel.posts.isEmpty {
                 ContentUnavailableView {
-                    Label("No Entires", systemImage: "doc.text")
+                    Label("No Entries", systemImage: "doc.text")
                 } description: {
                     Text("No entries found for this post type.")
                 }
@@ -63,7 +72,7 @@ struct PostsListView: View {
                 .listStyle(.plain)
             }
         }
-        .navigationTitle(viewModel.postTypeDetails.restBase.capitalized)
+        .navigationTitle(title)
         .task {
             await viewModel.loadPosts()
         }

@@ -76,7 +76,7 @@ struct SitePreparationView: View {
                 } else {
                     Picker("Post Type", selection: $viewModel.selectedPostTypeDetails) {
                         ForEach(viewModel.postTypes, id: \.self) { postType in
-                            Text(postType.name).tag(postType)
+                            Text(viewModel.label(for: postType)).tag(postType)
                         }
                     }
                     .disabled(viewModel.disableButtons)
@@ -87,6 +87,7 @@ struct SitePreparationView: View {
                             PostsListView(
                                 client: client,
                                 postTypeDetails: viewModel.selectedPostTypeDetails,
+                                title: viewModel.pluralLabel(for: viewModel.selectedPostTypeDetails),
                                 editorConfiguration: configuration,
                                 editorDependencies: viewModel.editorDependencies
                             )
@@ -244,6 +245,9 @@ class SitePreparationViewModel {
     }
 
     var postTypes: [PostTypeDetails] = []
+
+    /// The singular and plural names of each post type, keyed by slug.
+    var postTypeLabels: [String: (singular: String, plural: String)] = [:]
 
     var selectedPostTypeDetails: PostTypeDetails {
         get { editorConfiguration?.postType ?? .post }
@@ -532,7 +536,7 @@ class SitePreparationViewModel {
 
         let response = try await client.postTypes.listWithEditContext().data
 
-        self.postTypes = response.postTypes
+        let editablePostTypes = response.postTypes
             .filter { type, details in
                 switch type {
                 case .post, .page:
@@ -546,6 +550,13 @@ class SitePreparationViewModel {
                 return details.viewable && details.visibility.showUi
             }
             .values
+
+        self.postTypeLabels = Dictionary(
+            uniqueKeysWithValues: editablePostTypes.map {
+                ($0.slug, (singular: $0.labels.singularName, plural: $0.labels.name))
+            }
+        )
+        self.postTypes = editablePostTypes
             .map { postType in
                 PostTypeDetails(
                     postType: postType.slug,
@@ -558,6 +569,18 @@ class SitePreparationViewModel {
         if let firstType = postTypes.first {
             self.selectedPostTypeDetails = firstType
         }
+    }
+
+    /// The singular name of a post type, falling back to its slug when the post
+    /// types were not loaded from the site.
+    func label(for postType: PostTypeDetails) -> String {
+        postTypeLabels[postType.postType]?.singular ?? postType.postType.capitalized
+    }
+
+    /// The plural name of a post type, falling back to its REST base when the
+    /// post types were not loaded from the site.
+    func pluralLabel(for postType: PostTypeDetails) -> String {
+        postTypeLabels[postType.postType]?.plural ?? postType.restBase.capitalized
     }
 
     func buildAndLoadConfiguration(navigation: Navigation) {
@@ -610,12 +633,6 @@ struct KeyValueRow: View {
                     .foregroundStyle(bool ? Color.green : Color.red)
             }
         }
-    }
-}
-
-extension PostTypeDetails {
-    var name: String {
-        postType.capitalized
     }
 }
 
