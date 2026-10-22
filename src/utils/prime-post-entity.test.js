@@ -59,16 +59,23 @@ describe( 'primePostEntity', () => {
 		getGBKit.mockReturnValue( {} );
 	} );
 
-	it( 'loads the post type before seeding', async () => {
-		await primePostEntity( buildPost() );
+	it( 'loads the post type of a new post before seeding', async () => {
+		await primePostEntity( buildPost( { status: 'auto-draft' } ) );
 
 		expect( getPostType ).toHaveBeenCalledWith( 'post' );
+	} );
+
+	it( 'seeds other posts without waiting for the post type', async () => {
+		await primePostEntity( buildPost() );
+
+		expect( getPostType ).not.toHaveBeenCalled();
+		expect( coreDispatch.receiveEntityRecords ).toHaveBeenCalled();
 	} );
 
 	it( 'seeds the post when the post type fails to load', async () => {
 		getPostType.mockRejectedValue( new Error( 'Offline' ) );
 
-		await primePostEntity( buildPost() );
+		await primePostEntity( buildPost( { status: 'auto-draft' } ) );
 
 		expect( coreDispatch.receiveEntityRecords ).toHaveBeenCalled();
 	} );
