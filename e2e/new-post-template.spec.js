@@ -62,4 +62,17 @@ test.describe( 'New post template', () => {
 		] );
 		await expect( page.getByText( 'Local draft' ) ).toBeVisible();
 	} );
+
+	test( 'keeps the title of a new post that has one', async ( { page } ) => {
+		const editor = new EditorPage( page );
+		await editor.setup( {
+			post: { ...NEW_TEMPLATED_POST, title: 'Trip notes' },
+			preloadData: {},
+		} );
+
+		await expect(
+			page.getByRole( 'textbox', { name: 'Add title' } )
+		).toHaveText( 'Trip notes' );
+		expect( await editor.getBlocks() ).toEqual( [] );
+	} );
 } );

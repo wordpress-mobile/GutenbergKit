@@ -416,6 +416,46 @@ describe( 'getPost', () => {
 
 			expect( result.status ).toBe( 'auto-draft' );
 		} );
+
+		it( "should keep the host's status for a local draft with a title", async () => {
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi.fn().mockResolvedValue( {
+							title: 'Trip notes',
+							content: '',
+						} ),
+					},
+				},
+			};
+			window.GBKit = {
+				post: { id: -1, type: 'post', status: 'draft' },
+			};
+
+			const result = await getPost();
+
+			expect( result.status ).toBe( 'draft' );
+		} );
+
+		it( "should keep the host's status for a local draft with content", async () => {
+			window.webkit = {
+				messageHandlers: {
+					requestLatestContent: {
+						postMessage: vi.fn().mockResolvedValue( {
+							title: '',
+							content: '<p>Day 1</p>',
+						} ),
+					},
+				},
+			};
+			window.GBKit = {
+				post: { id: -1, type: 'post', status: 'draft' },
+			};
+
+			const result = await getPost();
+
+			expect( result.status ).toBe( 'draft' );
+		} );
 	} );
 
 	describe( 'fallback to GBKit', () => {
@@ -489,6 +529,22 @@ describe( 'getPost', () => {
 			const result = await getPost();
 
 			expect( result.id ).toBe( -1 );
+			expect( result.status ).toBe( 'draft' );
+		} );
+
+		it( 'should seed an empty post without a server ID as an auto-draft', async () => {
+			window.GBKit = {
+				post: {
+					id: -1,
+					type: 'post',
+					status: 'draft',
+					title: '',
+					content: '',
+				},
+			};
+
+			const result = await getPost();
+
 			expect( result.status ).toBe( 'auto-draft' );
 		} );
 	} );
@@ -530,7 +586,7 @@ describe( 'getPost', () => {
 			expect( result ).toEqual( {
 				id: -1,
 				type: 'post',
-				status: 'auto-draft',
+				status: 'draft',
 				title: { raw: 'Title' },
 				content: { raw: 'Content' },
 				restBase: 'posts',

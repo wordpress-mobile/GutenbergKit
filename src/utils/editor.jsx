@@ -48,13 +48,16 @@ export async function initializeEditor( {
 	// Like core's edit-post, set up the editor before the first render, so that
 	// hooks see the post on mount rather than a later change. `EditorProvider`
 	// then skips its own setup.
-	const { getEntityRecord, getPostType } = select( coreStore );
-	const record = getEntityRecord( 'postType', post.type, post.id );
+	const record = select( coreStore ).getEntityRecord(
+		'postType',
+		post.type,
+		post.id
+	);
 	if ( record ) {
 		dispatch( editorStore ).setupEditor(
 			record,
 			{},
-			getNewPostTemplate( record, getPostType( post.type )?.template )
+			getNewPostTemplate( record )
 		);
 	}
 
@@ -70,20 +73,20 @@ export async function initializeEditor( {
 }
 
 /**
- * Returns the post type's template to apply to the post, if any.
+ * Returns the post type's template to apply to a new post, if any.
  *
- * Core applies the template to every new post, replacing blocks that don't
- * match it. Unlike WP Admin's auto-drafts, a new post can hold content from the
- * host, such as a local draft, so the template applies only when it's empty.
+ * Only empty new posts are auto-drafts (see `getPost`), so a local draft keeps
+ * its blocks. Post types without a template have an empty one, which core would
+ * still apply as an edit.
  *
- * @param {Object} post       The post.
- * @param {Array}  [template] The post type's block template.
+ * @param {Object} post The post.
  * @return {Array|undefined} The template, or undefined to leave the post as is.
  */
-function getNewPostTemplate( post, template ) {
-	if ( ! template?.length || post.content?.raw?.trim() ) {
+function getNewPostTemplate( post ) {
+	if ( post.status !== 'auto-draft' ) {
 		return undefined;
 	}
 
-	return template;
+	const template = select( coreStore ).getPostType( post.type )?.template;
+	return template?.length ? template : undefined;
 }
