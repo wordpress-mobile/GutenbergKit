@@ -201,8 +201,13 @@ describe( 'initializeEditor', () => {
 		expect( render ).toHaveBeenCalled();
 	} );
 
-	it( "should set up an empty post with its type's template", async () => {
-		const record = { id: -1, type: 'post', content: { raw: '' } };
+	it( "should set up a new post with its type's template", async () => {
+		const record = {
+			id: -1,
+			type: 'post',
+			status: 'auto-draft',
+			content: { raw: '' },
+		};
 		const template = [ [ 'core/heading' ] ];
 		mockGetEntityRecord.mockReturnValue( record );
 		mockGetPostType.mockReturnValue( { template } );
@@ -217,16 +222,35 @@ describe( 'initializeEditor', () => {
 		);
 	} );
 
-	it( "should not apply the type's template to a post with content", async () => {
+	it( "should not apply the type's template to a local draft", async () => {
 		const record = {
 			id: -1,
 			type: 'post',
-			content: {
-				raw: '<!-- wp:paragraph --><p>Draft</p><!-- /wp:paragraph -->',
-			},
+			status: 'draft',
+			title: { raw: 'Trip notes' },
+			content: { raw: '' },
 		};
 		mockGetEntityRecord.mockReturnValue( record );
 		mockGetPostType.mockReturnValue( { template: [ [ 'core/heading' ] ] } );
+
+		await initializeEditor();
+
+		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
+			record,
+			{},
+			undefined
+		);
+	} );
+
+	it( "should not apply a post type's empty template", async () => {
+		const record = {
+			id: -1,
+			type: 'post',
+			status: 'auto-draft',
+			content: { raw: '' },
+		};
+		mockGetEntityRecord.mockReturnValue( record );
+		mockGetPostType.mockReturnValue( { template: [] } );
 
 		await initializeEditor();
 

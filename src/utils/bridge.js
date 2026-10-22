@@ -382,29 +382,32 @@ export async function getPost() {
 	if ( hostContent ) {
 		debug( 'Using content from native host' );
 		const reference = getPostReference( post );
+		const { title, content } = hostContent;
 		return {
 			...reference,
-			status: getPostStatus( reference.id, post?.status ),
-			title: { raw: hostContent.title },
-			content: { raw: hostContent.content },
+			status: getPostStatus( reference.id, post?.status, title, content ),
+			title: { raw: title },
+			content: { raw: content },
 		};
 	}
 
 	if ( post ) {
 		debug( 'Native bridge unavailable, using GBKit initial content' );
 		const reference = getPostReference( post );
+		const title = decodeURIComponent( post.title );
+		const content = decodeURIComponent( post.content );
 		return {
 			...reference,
-			status: getPostStatus( reference.id, post.status ),
-			title: { raw: decodeURIComponent( post.title ) },
-			content: { raw: decodeURIComponent( post.content ) },
+			status: getPostStatus( reference.id, post.status, title, content ),
+			title: { raw: title },
+			content: { raw: content },
 		};
 	}
 
 	// Fallback to default empty post
 	return {
 		...POST_FALLBACKS,
-		status: getPostStatus( POST_FALLBACKS.id ),
+		status: 'auto-draft',
 		title: { raw: '' },
 		content: { raw: '' },
 	};
@@ -413,16 +416,20 @@ export async function getPost() {
 /**
  * Returns the status to seed the post with.
  *
- * A post the server doesn't have yet is an auto-draft, as WP Admin seeds new
- * posts, so core treats it as new. The status stays local: the editor never
- * saves the post, and no bridge message sends it to the host.
+ * An empty post the server doesn't have yet is an auto-draft, as WP Admin seeds
+ * new posts, so core treats it as new. A local draft keeps the host's status,
+ * as core blanks the title of auto-drafts and applies the post type's template
+ * to them. The status stays local: the editor never saves the post, and no
+ * bridge message sends it to the host.
  *
  * @param {number} id       The post ID.
  * @param {string} [status] The status the host sent.
+ * @param {string} title    The post title.
+ * @param {string} content  The post content.
  * @return {string} The status.
  */
-function getPostStatus( id, status ) {
-	if ( id === POST_FALLBACKS.id ) {
+function getPostStatus( id, status, title, content ) {
+	if ( id === POST_FALLBACKS.id && ! title?.trim() && ! content?.trim() ) {
 		return 'auto-draft';
 	}
 
