@@ -267,7 +267,7 @@ fun SitePreparationScreen(
                     val selectedPostType = uiState.selectedPostType
                     if (selectedPostType != null) {
                         viewModel.buildConfiguration()?.let { config ->
-                            onBrowsePosts(config, uiState.editorDependencies, selectedPostType)
+                            onBrowsePosts(config, uiState.editorDependencies, selectedPostType.details)
                         }
                     }
                 },
@@ -332,7 +332,6 @@ private fun LoadedView(
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
-                postTypeLabels = uiState.postTypeLabels,
                 selectedPostType = uiState.selectedPostType,
                 onPostTypeChange = viewModel::setPostType,
                 showBrowseButton = accountId != null,
@@ -427,10 +426,9 @@ private fun FeatureConfigurationCard(
     isPreparing: Boolean,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
-    postTypes: List<PostTypeDetails>,
-    postTypeLabels: Map<String, String>,
-    selectedPostType: PostTypeDetails?,
-    onPostTypeChange: (PostTypeDetails) -> Unit,
+    postTypes: List<PostTypeOption>,
+    selectedPostType: PostTypeOption?,
+    onPostTypeChange: (PostTypeOption) -> Unit,
     showBrowseButton: Boolean = false,
     onBrowsePosts: () -> Unit = {}
 ) {
@@ -568,8 +566,7 @@ private fun FeatureConfigurationCard(
                                 enabled = !isPreparing
                             )
                             Text(
-                                text = postTypeLabels[postType.postType]
-                                    ?: postType.postType.replaceFirstChar { it.uppercase() },
+                                text = postType.label,
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }

@@ -28,11 +28,9 @@ data class SitePreparationUiState(
     val enableThirdPartyBlocks: Boolean = true,
     val enableNetworkLogging: Boolean = false,
     /** All viewable post types fetched from the site, or empty while loading. */
-    val postTypes: List<PostTypeDetails> = emptyList(),
-    /** The singular label of each post type, keyed by slug. Empty when not fetched from the site. */
-    val postTypeLabels: Map<String, String> = emptyMap(),
+    val postTypes: List<PostTypeOption> = emptyList(),
     /** The post type currently selected in the picker. Null until [postTypes] loads. */
-    val selectedPostType: PostTypeDetails? = null,
+    val selectedPostType: PostTypeOption? = null,
     val cacheBundleCount: Int? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -40,6 +38,17 @@ data class SitePreparationUiState(
     val editorDependencies: EditorDependencies? = null,
     val loadingProgress: Float? = null
 )
+
+/** A post type offered in the picker, with the name shown for it. */
+data class PostTypeOption(val details: PostTypeDetails, val label: String) {
+    companion object {
+        /** Falls back to the slug when the site's label is unavailable. */
+        fun from(details: PostTypeDetails, label: String? = null) = PostTypeOption(
+            details = details,
+            label = label ?: details.postType.replaceFirstChar { it.uppercase() }
+        )
+    }
+}
 
 class SitePreparationViewModel(
     application: Application,
@@ -115,7 +124,7 @@ class SitePreparationViewModel(
         _uiState.update { it.copy(enableNetworkLogging = enabled) }
     }
 
-    fun setPostType(postType: PostTypeDetails) {
+    fun setPostType(postType: PostTypeOption) {
         // Discard dependencies prepared for the previous post type.
         _uiState.update { it.copy(selectedPostType = postType, editorDependencies = null) }
     }
@@ -229,10 +238,11 @@ class SitePreparationViewModel(
 
     private fun createBundledConfiguration(): EditorConfiguration {
         // Bundled offline editor: only the standard `post` type is meaningful.
+        val post = PostTypeOption.from(PostTypeDetails.post)
         _uiState.update {
             it.copy(
-                postTypes = listOf(PostTypeDetails.post),
-                selectedPostType = PostTypeDetails.post
+                postTypes = listOf(post),
+                selectedPostType = post
             )
         }
         return EditorConfiguration.builder(
@@ -276,15 +286,11 @@ class SitePreparationViewModel(
         // available (the typical case); otherwise pick the first type in the
         // list. Falls back to `PostTypeDetails.post` if the call fails so the
         // editor can still launch with a sensible default.
-        val loadedPostTypes = loadPostTypes(config)
-        val postTypes = loadedPostTypes?.map { it.first } ?: listOf(PostTypeDetails.post)
-        val defaultPostType = postTypes.firstOrNull { it.postType == "post" } ?: postTypes.first()
+        val postTypes = loadPostTypes(config) ?: listOf(PostTypeOption.from(PostTypeDetails.post))
+        val defaultPostType = postTypes.firstOrNull { it.details.postType == "post" } ?: postTypes.first()
         _uiState.update {
             it.copy(
                 postTypes = postTypes,
-                postTypeLabels = loadedPostTypes
-                    ?.associate { (postType, label) -> postType.postType to label }
-                    .orEmpty(),
                 selectedPostType = defaultPostType
             )
         }
@@ -292,7 +298,7 @@ class SitePreparationViewModel(
         return EditorConfiguration.builder(
             siteURL = config.siteUrl,
             siteApiRoot = siteApiRoot,
-            postType = defaultPostType
+            postType = defaultPostType.details
         )
             .setPlugins(capabilities.supportsPlugins)
             .setThemeStyles(capabilities.supportsThemeStyles)
@@ -328,7 +334,7 @@ class SitePreparationViewModel(
      */
     private suspend fun loadPostTypes(
         config: ConfigurationItem.ConfiguredEditor
-    ): List<Pair<PostTypeDetails, String>>? {
+    ): List<PostTypeOption>? {
         val app = getApplication<GutenbergKitApplication>()
         val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
             ?: return null
@@ -348,13 +354,16 @@ class SitePreparationViewModel(
                 }
             }
             .map { (_, details) ->
-                PostTypeDetails(
-                    postType = details.slug,
-                    restBase = details.restBase,
-                    restNamespace = details.restNamespace
-                ) to details.labels.singularName
+                PostTypeOption.from(
+                    details = PostTypeDetails(
+                        postType = details.slug,
+                        restBase = details.restBase,
+                        restNamespace = details.restNamespace
+                    ),
+                    label = details.labels.singularName
+                )
             }
-            .sortedBy { it.first.postType }
+            .sortedBy { it.details.postType }
     }
 
     /**
@@ -378,7 +387,7 @@ class SitePreparationViewModel(
             .setEnableInserterMediaStrip(_uiState.value.enableInserterMediaStrip)
             .setThemeStyles(baseConfig.themeStyles && _uiState.value.enableThemeStyles)
             .setPlugins(baseConfig.plugins && _uiState.value.enableThirdPartyBlocks)
-            .setPostType(selectedPostType)
+            .setPostType(selectedPostType.details)
             .build()
     }
 }
