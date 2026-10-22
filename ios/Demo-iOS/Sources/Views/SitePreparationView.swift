@@ -565,10 +565,6 @@ class SitePreparationViewModel {
                 )
             }
             .sorted(using: KeyPathComparator(\.postType))
-
-        if let firstType = postTypes.first {
-            self.selectedPostTypeDetails = firstType
-        }
     }
 
     /// The singular name of a post type, falling back to its slug when the post
