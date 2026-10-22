@@ -589,11 +589,16 @@ struct PostTypeOption {
     let label: String
     let pluralLabel: String
 
-    /// Falls back to the slug and REST base when the site's labels are unavailable.
+    /// Falls back to the slug and REST base when the site's labels are missing or blank.
     init(details: PostTypeDetails, label: String? = nil, pluralLabel: String? = nil) {
         self.details = details
-        self.label = label ?? details.postType.capitalized
-        self.pluralLabel = pluralLabel ?? details.restBase.capitalized
+        self.label = Self.nonBlank(label) ?? details.postType.capitalized
+        self.pluralLabel = Self.nonBlank(pluralLabel) ?? details.restBase.capitalized
+    }
+
+    private static func nonBlank(_ value: String?) -> String? {
+        guard let value, !value.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return value
     }
 }
 

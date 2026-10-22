@@ -42,10 +42,10 @@ data class SitePreparationUiState(
 /** A post type offered in the picker, with the name shown for it. */
 data class PostTypeOption(val details: PostTypeDetails, val label: String) {
     companion object {
-        /** Falls back to the slug when the site's label is unavailable. */
+        /** Falls back to the slug when the site's label is missing or blank. */
         fun from(details: PostTypeDetails, label: String? = null) = PostTypeOption(
             details = details,
-            label = label ?: details.postType.replaceFirstChar { it.uppercase() }
+            label = label?.ifBlank { null } ?: details.postType.replaceFirstChar { it.uppercase() }
         )
     }
 }
