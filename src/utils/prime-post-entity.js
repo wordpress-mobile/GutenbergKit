@@ -23,7 +23,7 @@ import { warn } from './logger';
 export async function primePostEntity( post ) {
 	await Promise.all( [
 		resolvePostTypeEntity( post ),
-		resolvePostType( post ),
+		post.status === 'auto-draft' && resolvePostType( post ),
 	] );
 
 	const { receiveEntityRecords, finishResolution } = dispatch( coreStore );
@@ -51,7 +51,9 @@ async function resolvePostTypeEntity( post ) {
 /**
  * Loads the post's type, whose template the editor setup applies to new posts.
  *
- * A failure is logged rather than thrown, as the editor works without it.
+ * Only new posts wait for it, as hosts may not preload the type and other posts
+ * don't need it to render. A failure is logged rather than thrown, as the
+ * editor works without it.
  *
  * @param {Post} post The post from the host.
  * @return {Promise<void>} Resolves once the post type is loaded or failed.
