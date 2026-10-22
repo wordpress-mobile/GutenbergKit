@@ -70,7 +70,6 @@ import java.util.Locale
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
-import org.wordpress.gutenberg.model.PostTypeDetails
 
 class SitePreparationActivity : ComponentActivity() {
 
@@ -197,12 +196,19 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchPostsList(
         accountId: ULong,
-        postType: PostTypeDetails,
+        postType: PostTypeOption,
         configuration: EditorConfiguration,
         dependencies: EditorDependencies?
     ) {
         startActivity(
-            PostsListActivity.createIntent(this, accountId, postType, configuration, dependencies)
+            PostsListActivity.createIntent(
+                this,
+                accountId,
+                postType.details,
+                postType.pluralLabel,
+                configuration,
+                dependencies
+            )
         )
     }
 }
@@ -214,7 +220,7 @@ fun SitePreparationScreen(
     accountId: ULong?,
     onClose: () -> Unit,
     onStartEditor: (EditorConfiguration, EditorDependencies?, Boolean) -> Unit,
-    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
+    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeOption) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -267,7 +273,7 @@ fun SitePreparationScreen(
                     val selectedPostType = uiState.selectedPostType
                     if (selectedPostType != null) {
                         viewModel.buildConfiguration()?.let { config ->
-                            onBrowsePosts(config, uiState.editorDependencies, selectedPostType.details)
+                            onBrowsePosts(config, uiState.editorDependencies, selectedPostType)
                         }
                     }
                 },

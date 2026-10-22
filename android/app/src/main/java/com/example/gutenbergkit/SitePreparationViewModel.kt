@@ -39,13 +39,14 @@ data class SitePreparationUiState(
     val loadingProgress: Float? = null
 )
 
-/** A post type offered in the picker, with the name shown for it. */
-data class PostTypeOption(val details: PostTypeDetails, val label: String) {
+/** A post type offered in the picker, with the names shown for it. */
+data class PostTypeOption(val details: PostTypeDetails, val label: String, val pluralLabel: String) {
     companion object {
-        /** Falls back to the slug when the site's label is missing or blank. */
-        fun from(details: PostTypeDetails, label: String? = null) = PostTypeOption(
+        /** Falls back to the slug and REST base when the site's labels are missing or blank. */
+        fun from(details: PostTypeDetails, label: String? = null, pluralLabel: String? = null) = PostTypeOption(
             details = details,
-            label = label?.ifBlank { null } ?: details.postType.replaceFirstChar { it.uppercase() }
+            label = label?.ifBlank { null } ?: details.postType.replaceFirstChar { it.uppercase() },
+            pluralLabel = pluralLabel?.ifBlank { null } ?: details.restBase.replaceFirstChar { it.uppercase() }
         )
     }
 }
@@ -322,7 +323,7 @@ class SitePreparationViewModel(
 
     /**
      * Fetches the site's post types from the WordPress REST API and returns the
-     * subset relevant to the editor picker, each with its singular label.
+     * subset relevant to the editor picker, each with its singular and plural labels.
      *
      * Mirrors the iOS [SitePreparationView.loadPostTypes] filter:
      * - always include the standard `post` and `page` types
@@ -360,7 +361,8 @@ class SitePreparationViewModel(
                         restBase = details.restBase,
                         restNamespace = details.restNamespace
                     ),
-                    label = details.labels.singularName
+                    label = details.labels.singularName,
+                    pluralLabel = details.labels.name
                 )
             }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
