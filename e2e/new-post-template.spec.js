@@ -4,8 +4,8 @@ import EditorPage from './editor-page';
 /** A new post of the type `wp-env` registers with a block template. */
 const NEW_TEMPLATED_POST = {
 	id: -1,
-	type: 'gbk_templated',
-	restBase: 'gbk-templated',
+	type: 'templated_post',
+	restBase: 'templated-posts',
 	restNamespace: 'wp/v2',
 	status: 'draft',
 	title: '',
@@ -26,7 +26,12 @@ test.describe( 'New post template', () => {
 			'core/heading',
 			'core/paragraph',
 		] );
-		expect( blocks[ 0 ].attributes.content ).toBe( 'Template heading' );
+		expect( blocks[ 0 ].attributes.content ).toBe(
+			'Prefilled heading from the template'
+		);
+		expect( blocks[ 1 ].attributes.placeholder ).toBe(
+			'Placeholder paragraph from the template'
+		);
 
 		const state = await page.evaluate( () => {
 			const editorSelect = window.wp.data.select( 'core/editor' );

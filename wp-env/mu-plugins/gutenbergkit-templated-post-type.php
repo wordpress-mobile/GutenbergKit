@@ -5,15 +5,19 @@
  */
 
 add_action( 'init', function () {
-	register_post_type( 'gbk_templated', array(
-		'label'        => 'Templated Posts',
+	register_post_type( 'templated_post', array(
+		'labels'       => array(
+			'name'          => 'Templated Posts',
+			'singular_name' => 'Templated Post',
+		),
+		'description'  => 'For testing that new posts apply the post type template.',
 		'public'       => true,
 		'show_in_rest' => true,
-		'rest_base'    => 'gbk-templated',
+		'rest_base'    => 'templated-posts',
 		'supports'     => array( 'title', 'editor' ),
 		'template'     => array(
-			array( 'core/heading', array( 'content' => 'Template heading' ) ),
-			array( 'core/paragraph', array( 'placeholder' => 'Template paragraph' ) ),
+			array( 'core/heading', array( 'content' => 'Prefilled heading from the template' ) ),
+			array( 'core/paragraph', array( 'placeholder' => 'Placeholder paragraph from the template' ) ),
 		),
 	) );
 } );
