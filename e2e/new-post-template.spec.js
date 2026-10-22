@@ -43,6 +43,19 @@ test.describe( 'New post template', () => {
 		expect( state ).toEqual( { isNew: true, status: 'auto-draft' } );
 	} );
 
+	test( 'does not report an untouched template as a change', async ( {
+		page,
+	} ) => {
+		const editor = new EditorPage( page );
+		await editor.setup( { post: NEW_TEMPLATED_POST, preloadData: {} } );
+
+		const { content, changed } = await page.evaluate( () =>
+			window.editor.getTitleAndContent()
+		);
+		expect( content ).toContain( 'Prefilled heading from the template' );
+		expect( changed ).toBe( false );
+	} );
+
 	test( 'keeps the content of a new post that has some', async ( {
 		page,
 	} ) => {
