@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { dispatch } from '@wordpress/data';
+import { dispatch, select } from '@wordpress/data';
 import * as element from '@wordpress/element';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { initializeEditor } from './editor';
@@ -10,6 +10,8 @@ import { primePostEntity } from './prime-post-entity';
 
 vi.mock( '@wordpress/blocks' );
 vi.mock( '@wordpress/editor' );
+// Loading the real core-data store in vitest trips on its ESM dependencies.
+vi.mock( '@wordpress/core-data', () => ( { store: { name: 'core' } } ) );
 vi.mock( import( '@wordpress/data' ), { spy: true } );
 vi.mock( import( '@wordpress/element' ), { spy: true } );
 vi.mock( '@wordpress/block-library' );
@@ -25,6 +27,7 @@ describe( 'initializeEditor', () => {
 	let mockDispatch;
 	let mockPreferenceDispatch;
 	let mockEditorDispatch;
+	let mockGetEntityRecord;
 
 	beforeEach( () => {
 		vi.clearAllMocks();
@@ -50,6 +53,13 @@ describe( 'initializeEditor', () => {
 		} );
 
 		dispatch.mockImplementation( mockDispatch );
+
+		mockGetEntityRecord = vi.fn();
+		select.mockImplementation( ( store ) =>
+			store.name === 'core'
+				? { getEntityRecord: mockGetEntityRecord }
+				: {}
+		);
 
 		getGBKit.mockReturnValue( {
 			themeStyles: true,
@@ -164,7 +174,7 @@ describe( 'initializeEditor', () => {
 
 	it( 'should set up the editor with the seeded record before rendering', async () => {
 		const record = { id: 1, type: 'post', featured_media: 123 };
-		primePostEntity.mockResolvedValueOnce( record );
+		mockGetEntityRecord.mockReturnValue( record );
 		const render = vi.fn();
 		vi.spyOn( element, 'createRoot' ).mockReturnValueOnce( { render } );
 		mockEditorDispatch.setupEditor.mockImplementation( () =>
@@ -173,10 +183,25 @@ describe( 'initializeEditor', () => {
 
 		await initializeEditor();
 
+		expect( mockGetEntityRecord ).toHaveBeenCalledWith(
+			'postType',
+			'post',
+			1
+		);
 		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
 			record,
 			{}
 		);
+		expect( render ).toHaveBeenCalled();
+	} );
+
+	it( 'should leave the setup to the editor when the post was not seeded', async () => {
+		const render = vi.fn();
+		vi.spyOn( element, 'createRoot' ).mockReturnValueOnce( { render } );
+
+		await initializeEditor();
+
+		expect( mockEditorDispatch.setupEditor ).not.toHaveBeenCalled();
 		expect( render ).toHaveBeenCalled();
 	} );
 } );
