@@ -62,11 +62,12 @@ data class EditorConfiguration(
 
     /**
      * Whether the editor opens a new post with no title or content, the post
-     * WP Admin and the web editor focus on load. A missing or zero ID means the
-     * server doesn't have the post yet.
+     * WP Admin and the web editor focus on load. A missing or non-positive ID,
+     * read as [GBKitGlobal] sends it to the web editor, means the server
+     * doesn't have the post yet.
      */
     internal val isNewEmptyPost: Boolean
-        get() = (postId ?: 0u) == 0u && title.isBlank() && content.isBlank()
+        get() = (postId?.toInt() ?: 0) <= 0 && title.isBlank() && content.isBlank()
 
     companion object {
         @JvmStatic
