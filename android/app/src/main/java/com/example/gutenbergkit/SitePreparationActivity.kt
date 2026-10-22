@@ -155,7 +155,11 @@ class SitePreparationActivity : ComponentActivity() {
             SitePreparationViewModelFactory(application, configurationItem)
         )[SitePreparationViewModel::class.java]
 
-        val accountId = (configurationItem as? ConfigurationItem.ConfiguredEditor)?.accountId
+        val accountId = when (configurationItem) {
+            is ConfigurationItem.ConfiguredEditor -> configurationItem.accountId
+            is ConfigurationItem.LocalWordPress -> LocalWordPressCredentials.ACCOUNT_ID
+            is ConfigurationItem.BundledEditor -> null
+        }
 
         setContent {
             AppTheme {

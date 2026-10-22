@@ -464,8 +464,7 @@ private suspend fun persistPost(
         )
 
         val app = context.applicationContext as GutenbergKitApplication
-        val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
-            ?: error("Account not found")
+        val account = app.findAccount(accountId) ?: error("Account not found")
         val client = app.createApiClient(account)
 
         val endpointType = when (configuration.postType.postType) {

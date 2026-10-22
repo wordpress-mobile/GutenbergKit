@@ -38,6 +38,17 @@ class GutenbergKitApplication : Application() {
     }
 
     /**
+     * Returns the account with the given [id], including the local WordPress
+     * site's in-memory account, which isn't stored.
+     */
+    fun findAccount(id: ULong): Account? {
+        if (id == LocalWordPressCredentials.ACCOUNT_ID) {
+            return LocalWordPressCredentials.load()?.toAccount()
+        }
+        return accountRepository.all().firstOrNull { it.id() == id }
+    }
+
+    /**
      * Constructs a [WpApiClient] for the given [account]. Used by the demo app's posts
      * list and Save button to fetch/persist posts via the WordPress REST API.
      *

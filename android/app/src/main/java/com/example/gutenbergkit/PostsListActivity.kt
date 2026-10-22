@@ -176,8 +176,7 @@ class PostsListViewModel(
 
             try {
                 val app = application as GutenbergKitApplication
-                val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
-                    ?: error("Account not found")
+                val account = app.findAccount(accountId) ?: error("Account not found")
                 val client = app.createApiClient(account)
 
                 val endpointType = when (postType.postType) {

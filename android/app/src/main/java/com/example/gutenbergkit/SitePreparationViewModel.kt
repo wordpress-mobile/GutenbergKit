@@ -76,7 +76,7 @@ class SitePreparationViewModel(
                         try {
                             loadConfiguration(
                                 ConfigurationItem.ConfiguredEditor(
-                                    accountId = 0u,
+                                    accountId = LocalWordPressCredentials.ACCOUNT_ID,
                                     name = "Local WordPress",
                                     siteUrl = credentials.siteUrl,
                                     siteApiRoot = credentials.siteApiRoot,
@@ -337,8 +337,7 @@ class SitePreparationViewModel(
         config: ConfigurationItem.ConfiguredEditor
     ): List<PostTypeOption>? {
         val app = getApplication<GutenbergKitApplication>()
-        val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
-            ?: return null
+        val account = app.findAccount(config.accountId) ?: return null
         val client = app.createApiClient(account)
 
         val result = client.request { builder ->
