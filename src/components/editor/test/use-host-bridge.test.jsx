@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { getBlockType } from '@wordpress/blocks';
+import { getBlockType, parse, serialize } from '@wordpress/blocks';
 import { useHostBridge } from '../use-host-bridge';
 
 const mockGetEditedPostAttribute = vi.fn();
@@ -244,6 +244,47 @@ describe( 'useHostBridge', () => {
 
 		renderHook( () =>
 			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result.changed ).toBe( false );
+	} );
+
+	it( 'getTitleAndContent reports changed: false for an untouched template', () => {
+		const template =
+			'<!-- wp:heading -->\n<h2>From the template</h2>\n<!-- /wp:heading -->';
+		parse.mockImplementationOnce( ( content ) => content );
+		serialize.mockImplementationOnce( ( blocks ) => blocks );
+		mockGetEditedPostAttribute.mockReturnValue( '' );
+		mockGetEditedPostContent.mockReturnValue( template );
+
+		renderHook( () =>
+			useHostBridge( defaultPost, editorRef, markBridgeReady )
+		);
+
+		const result = window.editor.getTitleAndContent();
+		expect( result ).toEqual( {
+			title: '',
+			content: template,
+			changed: false,
+		} );
+	} );
+
+	it( "getTitleAndContent starts from the host's content when the editor has none", () => {
+		const content =
+			'<!-- wp:paragraph -->\n<p>Host</p>\n<!-- /wp:paragraph -->';
+		parse.mockImplementationOnce( ( value ) => value );
+		serialize.mockImplementationOnce( ( blocks ) => blocks );
+		mockGetEditedPostAttribute.mockReturnValue( '' );
+		mockGetEditedPostContent.mockReturnValueOnce( '' );
+		mockGetEditedPostContent.mockReturnValue( content );
+
+		renderHook( () =>
+			useHostBridge(
+				{ ...defaultPost, content: { raw: content } },
+				editorRef,
+				markBridgeReady
+			)
 		);
 
 		const result = window.editor.getTitleAndContent();

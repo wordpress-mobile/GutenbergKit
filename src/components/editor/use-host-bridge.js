@@ -32,8 +32,12 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 	const postTitleRef = useRef( normalizeAttribute( post.title ) );
 	const postContentRef = useRef( null );
 	if ( postContentRef.current === null ) {
+		// Start from the content the editor set up, which includes the template
+		// applied to a new post, so an untouched post doesn't report a change.
 		postContentRef.current = serialize(
-			parse( normalizeAttribute( post.content ) )
+			parse(
+				normalizeAttribute( getEditedPostContent() || post.content )
+			)
 		);
 	}
 
