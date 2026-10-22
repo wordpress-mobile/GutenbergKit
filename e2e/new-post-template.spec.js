@@ -56,6 +56,33 @@ test.describe( 'New post template', () => {
 		expect( changed ).toBe( false );
 	} );
 
+	test( "locks the post type's template", async ( { page } ) => {
+		await page.route(
+			/\/wp\/v2\/types\/templated_post\b/,
+			async ( route ) => {
+				const response = await route.fetch();
+				const body = await response.json();
+				await route.fulfill( {
+					response,
+					json: { ...body, template_lock: 'all' },
+				} );
+			}
+		);
+
+		const editor = new EditorPage( page );
+		await editor.setup( { post: NEW_TEMPLATED_POST, preloadData: {} } );
+
+		await expect
+			.poll( () =>
+				page.evaluate( () =>
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getTemplateLock()
+				)
+			)
+			.toBe( 'all' );
+	} );
+
 	test( 'keeps the content of a new post that has some', async ( {
 		page,
 	} ) => {
