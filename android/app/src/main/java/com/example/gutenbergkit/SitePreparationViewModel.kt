@@ -363,7 +363,7 @@ class SitePreparationViewModel(
                     label = details.labels.singularName
                 )
             }
-            .sortedBy { it.details.postType }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
     }
 
     /**
