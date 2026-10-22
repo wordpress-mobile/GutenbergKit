@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { dispatch, select } from '@wordpress/data';
+import { dispatch, resolveSelect, select } from '@wordpress/data';
 import * as element from '@wordpress/element';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { initializeEditor } from './editor';
@@ -18,6 +18,7 @@ vi.mock( '@wordpress/block-library' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );
+vi.mock( './logger' );
 vi.mock( './prime-post-entity', () => ( { primePostEntity: vi.fn() } ) );
 vi.mock( '../components/layout', () => ( {
 	default: () => null,
@@ -29,6 +30,7 @@ describe( 'initializeEditor', () => {
 	let mockEditorDispatch;
 	let mockGetEntityRecord;
 	let mockGetPostType;
+	let mockResolvePostType;
 
 	beforeEach( () => {
 		vi.clearAllMocks();
@@ -65,6 +67,11 @@ describe( 'initializeEditor', () => {
 				  }
 				: {}
 		);
+
+		mockResolvePostType = vi.fn().mockResolvedValue( undefined );
+		resolveSelect.mockImplementation( () => ( {
+			getPostType: mockResolvePostType,
+		} ) );
 
 		getGBKit.mockReturnValue( {
 			themeStyles: true,
@@ -259,6 +266,51 @@ describe( 'initializeEditor', () => {
 			{},
 			undefined
 		);
+	} );
+
+	it( "should lock the post type's template as WP Admin does", async () => {
+		const template = [ [ 'core/heading' ] ];
+		mockResolvePostType.mockResolvedValue( {
+			template,
+			template_lock: 'all',
+		} );
+
+		await initializeEditor();
+
+		expect( mockResolvePostType ).toHaveBeenCalledWith( 'post' );
+		await vi.waitFor( () =>
+			expect(
+				mockEditorDispatch.updateEditorSettings
+			).toHaveBeenCalledWith( { template, templateLock: 'all' } )
+		);
+	} );
+
+	it( 'should leave a post type without a template unlocked', async () => {
+		mockResolvePostType.mockResolvedValue( {
+			template: [],
+			template_lock: false,
+		} );
+
+		await initializeEditor();
+		await vi.waitFor( () =>
+			expect( mockResolvePostType ).toHaveBeenCalled()
+		);
+
+		expect(
+			mockEditorDispatch.updateEditorSettings
+		).not.toHaveBeenCalledWith(
+			expect.objectContaining( { templateLock: expect.anything() } )
+		);
+	} );
+
+	it( 'should render when the post type fails to load', async () => {
+		const render = vi.fn();
+		vi.spyOn( element, 'createRoot' ).mockReturnValueOnce( { render } );
+		mockResolvePostType.mockRejectedValue( new Error( 'Offline' ) );
+
+		await initializeEditor();
+
+		expect( render ).toHaveBeenCalled();
 	} );
 
 	it( 'should leave the setup to the editor when the post was not seeded', async () => {

@@ -1,5 +1,5 @@
 import { createRoot, StrictMode } from '@wordpress/element';
-import { dispatch, select } from '@wordpress/data';
+import { dispatch, resolveSelect, select } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
@@ -8,6 +8,7 @@ import Layout from '../components/layout';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
+import { warn } from './logger';
 import { primePostEntity } from './prime-post-entity';
 
 /**
@@ -61,6 +62,8 @@ export async function initializeEditor( {
 		);
 	}
 
+	applyPostTypeTemplateSettings( post.type );
+
 	createRoot( document.getElementById( 'root' ) ).render(
 		<StrictMode>
 			<Layout
@@ -89,4 +92,34 @@ function getNewPostTemplate( post ) {
 
 	const template = select( coreStore ).getPostType( post.type )?.template;
 	return template?.length ? template : undefined;
+}
+
+/**
+ * Adds the post type's template and its lock to the editor settings, as WP
+ * Admin does for every post of the type, so the editor enforces a locked
+ * template.
+ *
+ * Only new posts wait for the post type before rendering (see
+ * `primePostEntity`), so other posts get the lock once it loads.
+ *
+ * @param {string} postType The post type.
+ * @return {Promise<void>} Resolves once the settings are updated or skipped.
+ */
+async function applyPostTypeTemplateSettings( postType ) {
+	let type;
+	try {
+		type = await resolveSelect( coreStore ).getPostType( postType );
+	} catch ( err ) {
+		warn( `Failed to load post type "${ postType }"`, err );
+		return;
+	}
+
+	if ( ! type?.template?.length ) {
+		return;
+	}
+
+	dispatch( editorStore ).updateEditorSettings( {
+		template: type.template,
+		templateLock: type.template_lock || false,
+	} );
 }
