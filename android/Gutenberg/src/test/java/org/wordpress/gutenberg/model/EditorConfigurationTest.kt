@@ -1007,4 +1007,23 @@ class EditorConfigurationTest {
         assertTrue(config.enableNativeBlockInserter)
         assertTrue(config.enableInserterMediaStrip)
     }
+
+    // MARK: - isNewEmptyPost Tests
+
+    @Test
+    fun `isNewEmptyPost is true for a post without an ID, title, or content`() {
+        assertTrue(builder().build().isNewEmptyPost)
+        assertTrue(builder().setTitle(" ").setContent("\n").build().isNewEmptyPost)
+    }
+
+    @Test
+    fun `isNewEmptyPost is false for a post the server has`() {
+        assertFalse(builder().setPostId(123u).build().isNewEmptyPost)
+    }
+
+    @Test
+    fun `isNewEmptyPost is false for a local draft with a title or content`() {
+        assertFalse(builder().setTitle("Trip notes").build().isNewEmptyPost)
+        assertFalse(builder().setContent("<p>Day 1</p>").build().isNewEmptyPost)
+    }
 }

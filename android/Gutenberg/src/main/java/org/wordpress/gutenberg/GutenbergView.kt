@@ -104,7 +104,7 @@ class GutenbergView : FrameLayout {
      * Whether opening the editor has already placed the caret in its content.
      *
      * Unlike [didFireEditorLoaded], this survives a reload. Autofocus decides
-     * from the content the editor was opened with, which a reload can replace
+     * from the post the editor was opened with, which a reload can replace
      * with newer content from the host, so repeating it would pop the keyboard
      * over a restored post.
      */
@@ -1071,7 +1071,7 @@ class GutenbergView : FrameLayout {
                 this.didFireEditorLoaded = true
                 showReadyPhase()
 
-                if (!hasAutofocused && configuration.content.isEmpty()) {
+                if (!hasAutofocused && configuration.isNewEmptyPost) {
                     hasAutofocused = true
 
                     // Focus the editor content

@@ -155,6 +155,15 @@ public struct EditorConfiguration: Sendable, Hashable, Equatable {
   var escapedContent: String {
     content.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
   }
+
+  /// Whether the editor opens a new post with no title or content, the post
+  /// WP Admin and the web editor focus on load. A missing or non-positive ID
+  /// means the server doesn't have the post yet.
+  var isNewEmptyPost: Bool {
+    (postID ?? 0) <= 0
+      && title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 }
 
 /// A builder for constructing `EditorConfiguration` instances.

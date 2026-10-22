@@ -59,6 +59,15 @@ data class EditorConfiguration(
             UUID.randomUUID().toString()
         }
     }
+
+    /**
+     * Whether the editor opens a new post with no title or content, the post
+     * WP Admin and the web editor focus on load. A missing or zero ID means the
+     * server doesn't have the post yet.
+     */
+    internal val isNewEmptyPost: Boolean
+        get() = (postId ?: 0u) == 0u && title.isBlank() && content.isBlank()
+
     companion object {
         @JvmStatic
         fun builder(siteURL: String, siteApiRoot: String, postType: PostTypeDetails = PostTypeDetails.post): Builder = Builder(siteURL, siteApiRoot, postType = postType)

@@ -375,6 +375,25 @@ struct EditorConfigurationTests: MakesTestFixtures {
   static let testSiteURL = URL(string: "https://example.com")!
   static let testApiRoot = URL(string: "https://example.com/wp-json")!
 
+  // MARK: - isNewEmptyPost Tests
+  @Test("isNewEmptyPost is true for a post without an ID, title, or content")
+  func isNewEmptyPostForNewPost() {
+    #expect(makeConfigurationBuilder().build().isNewEmptyPost)
+    #expect(makeConfigurationBuilder().setPostID(-1).build().isNewEmptyPost)
+    #expect(makeConfigurationBuilder().setTitle(" ").setContent("\n").build().isNewEmptyPost)
+  }
+
+  @Test("isNewEmptyPost is false for a post the server has")
+  func isNewEmptyPostForServerPost() {
+    #expect(!makeConfigurationBuilder().setPostID(123).build().isNewEmptyPost)
+  }
+
+  @Test("isNewEmptyPost is false for a local draft with a title or content")
+  func isNewEmptyPostForLocalDraft() {
+    #expect(!makeConfigurationBuilder().setTitle("Trip notes").build().isNewEmptyPost)
+    #expect(!makeConfigurationBuilder().setContent("<p>Day 1</p>").build().isNewEmptyPost)
+  }
+
   // MARK: - siteId Derivation Tests
   @Test("siteId extracts host from siteURL")
   func siteIdExtractsHost() {
