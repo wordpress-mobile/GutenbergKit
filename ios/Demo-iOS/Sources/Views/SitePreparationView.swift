@@ -75,8 +75,8 @@ struct SitePreparationView: View {
                     }
                 } else {
                     Picker("Post Type", selection: $viewModel.selectedPostTypeDetails) {
-                        ForEach(viewModel.postTypes, id: \.self) { postType in
-                            Text(postType.name).tag(postType)
+                        ForEach(viewModel.postTypes, id: \.details) { option in
+                            Text(option.label).tag(option.details)
                         }
                     }
                     .disabled(viewModel.disableButtons)
@@ -87,6 +87,7 @@ struct SitePreparationView: View {
                             PostsListView(
                                 client: client,
                                 postTypeDetails: viewModel.selectedPostTypeDetails,
+                                title: viewModel.selectedPostType.pluralLabel,
                                 editorConfiguration: configuration,
                                 editorDependencies: viewModel.editorDependencies
                             )
@@ -243,7 +244,12 @@ class SitePreparationViewModel {
         }
     }
 
-    var postTypes: [PostTypeDetails] = []
+    var postTypes: [PostTypeOption] = []
+
+    var selectedPostType: PostTypeOption {
+        postTypes.first { $0.details == selectedPostTypeDetails }
+            ?? PostTypeOption(details: selectedPostTypeDetails)
+    }
 
     var selectedPostTypeDetails: PostTypeDetails {
         get { editorConfiguration?.postType ?? .post }
@@ -288,7 +294,7 @@ class SitePreparationViewModel {
                 switch configurationItem {
                 case .bundledEditor:
                     self.editorConfiguration = Self.applyDemoAppDefaults(to: .bundled)
-                    self.postTypes = [.post, .page]
+                    self.postTypes = PostTypeOption.builtIn
                 case .localWordPress:
                     guard let credentials = LocalWordPressCredentials.load() else {
                         throw AppError(errorDescription: "Local WordPress not configured.\n\nRun 'make wp-env-start' from the project root to set up a local WordPress environment.")
@@ -345,7 +351,7 @@ class SitePreparationViewModel {
                         let newConfiguration = try await self.loadConfiguration(for: account)
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
                     } catch let error as WpApiError where error.isDeviceOffline {
-                        self.postTypes = [.post, .page]
+                        self.postTypes = PostTypeOption.builtIn
                         let fallback = Self.buildOfflineConfiguration(for: account)
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: fallback)
                     }
@@ -524,7 +530,7 @@ class SitePreparationViewModel {
     @MainActor
     private func loadPostTypes() async throws {
         guard let client = self.client else {
-            self.postTypes = [.post, .page]
+            self.postTypes = PostTypeOption.builtIn
             return
         }
 
@@ -547,17 +553,20 @@ class SitePreparationViewModel {
             }
             .values
             .map { postType in
-                PostTypeDetails(
-                    postType: postType.slug,
-                    restBase: postType.restBase,
-                    restNamespace: postType.restNamespace
+                PostTypeOption(
+                    details: PostTypeDetails(
+                        postType: postType.slug,
+                        restBase: postType.restBase,
+                        restNamespace: postType.restNamespace
+                    ),
+                    label: postType.labels.singularName,
+                    pluralLabel: postType.labels.name
                 )
             }
-            .sorted(using: KeyPathComparator(\.postType))
-
-        if let firstType = postTypes.first {
-            self.selectedPostTypeDetails = firstType
-        }
+            .sorted(using: [
+                KeyPathComparator(\.label, comparator: .localizedStandard),
+                KeyPathComparator(\.details.postType),
+            ])
     }
 
     func buildAndLoadConfiguration(navigation: Navigation) {
@@ -572,6 +581,27 @@ class SitePreparationViewModel {
         )
 
         navigation.present(editor)
+    }
+}
+
+/// A post type offered in the picker, with the names shown for it.
+struct PostTypeOption {
+    static let builtIn = [PostTypeOption(details: .post), PostTypeOption(details: .page)]
+
+    let details: PostTypeDetails
+    let label: String
+    let pluralLabel: String
+
+    /// Falls back to the slug and REST base when the site's labels are missing or blank.
+    init(details: PostTypeDetails, label: String? = nil, pluralLabel: String? = nil) {
+        self.details = details
+        self.label = Self.nonBlank(label) ?? details.postType.capitalized
+        self.pluralLabel = Self.nonBlank(pluralLabel) ?? details.restBase.capitalized
+    }
+
+    private static func nonBlank(_ value: String?) -> String? {
+        guard let value, !value.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return value
     }
 }
 
@@ -610,12 +640,6 @@ struct KeyValueRow: View {
                     .foregroundStyle(bool ? Color.green : Color.red)
             }
         }
-    }
-}
-
-extension PostTypeDetails {
-    var name: String {
-        postType.capitalized
     }
 }
 

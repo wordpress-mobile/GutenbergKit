@@ -70,7 +70,6 @@ import java.util.Locale
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
-import org.wordpress.gutenberg.model.PostTypeDetails
 
 class SitePreparationActivity : ComponentActivity() {
 
@@ -197,12 +196,19 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchPostsList(
         accountId: ULong,
-        postType: PostTypeDetails,
+        postType: PostTypeOption,
         configuration: EditorConfiguration,
         dependencies: EditorDependencies?
     ) {
         startActivity(
-            PostsListActivity.createIntent(this, accountId, postType, configuration, dependencies)
+            PostsListActivity.createIntent(
+                this,
+                accountId,
+                postType.details,
+                postType.pluralLabel,
+                configuration,
+                dependencies
+            )
         )
     }
 }
@@ -214,7 +220,7 @@ fun SitePreparationScreen(
     accountId: ULong?,
     onClose: () -> Unit,
     onStartEditor: (EditorConfiguration, EditorDependencies?, Boolean) -> Unit,
-    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
+    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeOption) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -426,9 +432,9 @@ private fun FeatureConfigurationCard(
     isPreparing: Boolean,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
-    postTypes: List<PostTypeDetails>,
-    selectedPostType: PostTypeDetails?,
-    onPostTypeChange: (PostTypeDetails) -> Unit,
+    postTypes: List<PostTypeOption>,
+    selectedPostType: PostTypeOption?,
+    onPostTypeChange: (PostTypeOption) -> Unit,
     showBrowseButton: Boolean = false,
     onBrowsePosts: () -> Unit = {}
 ) {
@@ -566,7 +572,7 @@ private fun FeatureConfigurationCard(
                                 enabled = !isPreparing
                             )
                             Text(
-                                text = postType.postType.replaceFirstChar { it.uppercase() },
+                                text = postType.label,
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }
