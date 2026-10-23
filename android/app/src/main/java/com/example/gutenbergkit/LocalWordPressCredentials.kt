@@ -5,7 +5,6 @@ import uniffi.wp_mobile.Account
 data class LocalWordPressCredentials(
     val siteUrl: String,
     val siteApiRoot: String,
-    val authHeader: String,
     val username: String,
     val appPassword: String
 ) {
@@ -37,7 +36,6 @@ data class LocalWordPressCredentials(
             return LocalWordPressCredentials(
                 siteUrl = remapLocalhost(siteUrl),
                 siteApiRoot = remapLocalhost(BuildConfig.WP_ENV_SITE_API_ROOT),
-                authHeader = BuildConfig.WP_ENV_AUTH_HEADER,
                 username = BuildConfig.WP_ENV_USERNAME,
                 appPassword = BuildConfig.WP_ENV_APP_PASSWORD
             )

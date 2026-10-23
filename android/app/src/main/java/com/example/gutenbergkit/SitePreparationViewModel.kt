@@ -75,13 +75,9 @@ class SitePreparationViewModel(
                             )
                         try {
                             loadConfiguration(
-                                ConfigurationItem.ConfiguredEditor(
-                                    accountId = LocalWordPressCredentials.ACCOUNT_ID,
-                                    name = "Local WordPress",
-                                    siteUrl = credentials.siteUrl,
-                                    siteApiRoot = credentials.siteApiRoot,
-                                    authHeader = credentials.authHeader
-                                )
+                                ConfigurationItem.ConfiguredEditor
+                                    .fromAccount(credentials.toAccount())
+                                    .copy(name = "Local WordPress")
                             )
                         } catch (e: java.net.ConnectException) {
                             throw IllegalStateException(
