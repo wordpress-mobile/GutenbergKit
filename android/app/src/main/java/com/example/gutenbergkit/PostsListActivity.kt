@@ -176,14 +176,13 @@ class PostsListViewModel(
 
             try {
                 val app = application as GutenbergKitApplication
-                val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
-                    ?: error("Account not found")
+                val account = app.findAccount(accountId) ?: error("Account not found")
                 val client = app.createApiClient(account)
 
                 val endpointType = when (postType.postType) {
                     "page" -> PostEndpointType.Pages
                     "post" -> PostEndpointType.Posts
-                    else -> PostEndpointType.Custom(postType.postType)
+                    else -> PostEndpointType.Custom(postType.restBase)
                 }
 
                 // Single page only — matches the iOS demo, which doesn't paginate either.

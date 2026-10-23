@@ -75,13 +75,9 @@ class SitePreparationViewModel(
                             )
                         try {
                             loadConfiguration(
-                                ConfigurationItem.ConfiguredEditor(
-                                    accountId = 0u,
-                                    name = "Local WordPress",
-                                    siteUrl = credentials.siteUrl,
-                                    siteApiRoot = credentials.siteApiRoot,
-                                    authHeader = credentials.authHeader
-                                )
+                                ConfigurationItem.ConfiguredEditor
+                                    .fromAccount(credentials.toAccount())
+                                    .copy(name = "Local WordPress")
                             )
                         } catch (e: java.net.ConnectException) {
                             throw IllegalStateException(
@@ -337,8 +333,7 @@ class SitePreparationViewModel(
         config: ConfigurationItem.ConfiguredEditor
     ): List<PostTypeOption>? {
         val app = getApplication<GutenbergKitApplication>()
-        val account = app.accountRepository.all().firstOrNull { it.id() == config.accountId }
-            ?: return null
+        val account = app.findAccount(config.accountId) ?: return null
         val client = app.createApiClient(account)
 
         val result = client.request { builder ->

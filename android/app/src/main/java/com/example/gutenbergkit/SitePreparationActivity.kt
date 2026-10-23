@@ -127,7 +127,7 @@ class SitePreparationActivity : ComponentActivity() {
                     TYPE_LOCAL_WORDPRESS -> ConfigurationItem.LocalWordPress
                     TYPE_CONFIGURED -> {
                         ConfigurationItem.ConfiguredEditor(
-                            accountId = json.optLong(KEY_ACCOUNT_ID, 0).toULong(),
+                            accountId = json.getLong(KEY_ACCOUNT_ID).toULong(),
                             name = json.getString(KEY_NAME),
                             siteUrl = json.getString(KEY_SITE_URL),
                             siteApiRoot = json.getString(KEY_SITE_API_ROOT),
@@ -155,7 +155,11 @@ class SitePreparationActivity : ComponentActivity() {
             SitePreparationViewModelFactory(application, configurationItem)
         )[SitePreparationViewModel::class.java]
 
-        val accountId = (configurationItem as? ConfigurationItem.ConfiguredEditor)?.accountId
+        val accountId = when (configurationItem) {
+            is ConfigurationItem.ConfiguredEditor -> configurationItem.accountId
+            is ConfigurationItem.LocalWordPress -> LocalWordPressCredentials.ACCOUNT_ID
+            is ConfigurationItem.BundledEditor -> null
+        }
 
         setContent {
             AppTheme {
