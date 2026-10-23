@@ -244,6 +244,13 @@ class GBKitGlobalTest {
     }
 
     @Test
+    fun `maps negative postID converted to UInt to negative one`() {
+        val configuration = makeConfiguration(postId = (-5L).toUInt())
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+        assertEquals(-1, global.post.id)
+    }
+
+    @Test
     fun `maps title with percent encoding`() {
         val configuration = makeConfiguration(title = "Hello World")
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())

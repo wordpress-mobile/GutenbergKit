@@ -1018,7 +1018,7 @@ class EditorConfigurationTest {
 
     @Test
     fun `isNewEmptyPost is true for a negative ID converted to UInt`() {
-        // GBKitGlobal sends the web editor `postId.toInt()`, which reads this as -1.
+        // `toInt()` reads this as -1, which the web editor treats as a new post.
         assertTrue(builder().setPostId((-1L).toUInt()).build().isNewEmptyPost)
     }
 

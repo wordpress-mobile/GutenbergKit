@@ -61,13 +61,19 @@ data class EditorConfiguration(
     }
 
     /**
+     * The post's server ID as the web editor reads it, or null for a new post
+     * the server doesn't have yet. A negative ID a host converted with
+     * `toUInt()` reads as new.
+     */
+    internal val serverPostId: Int?
+        get() = postId?.toInt()?.takeIf { it > 0 }
+
+    /**
      * Whether the editor opens a new post with no title or content, the post
-     * WP Admin and the web editor focus on load. A missing or non-positive ID,
-     * read as [GBKitGlobal] sends it to the web editor, means the server
-     * doesn't have the post yet.
+     * WP Admin and the web editor focus on load.
      */
     internal val isNewEmptyPost: Boolean
-        get() = (postId?.toInt() ?: 0) <= 0 && title.isBlank() && content.isBlank()
+        get() = serverPostId == null && title.isBlank() && content.isBlank()
 
     companion object {
         @JvmStatic
