@@ -45,7 +45,7 @@ class GutenbergKitApplication : Application() {
         if (id == LocalWordPressCredentials.ACCOUNT_ID) {
             return LocalWordPressCredentials.load()?.toAccount()
         }
-        return accountRepository.all().firstOrNull { it.id() == id }
+        return accountRepository.get(id)
     }
 
     /**
