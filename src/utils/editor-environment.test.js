@@ -228,6 +228,20 @@ describe( 'setUpEditorEnvironment', () => {
 		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	it( 'handles asynchronous errors during editor initialization', async () => {
+		const testError = new Error( 'Post retrieval failed' );
+		initializeEditor.mockRejectedValue( testError );
+
+		await setUpEditorEnvironment();
+
+		expect( logException ).toHaveBeenCalledWith( testError, {
+			isHandled: true,
+			handledBy: 'setUpEditorEnvironment',
+		} );
+		expect( document.body.innerHTML ).toBe( '<div>Error</div>' );
+		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'handles errors during plugin loading', async () => {
 		getGBKit.mockReturnValue( { plugins: true } );
 
