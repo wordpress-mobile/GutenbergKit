@@ -59,6 +59,22 @@ data class EditorConfiguration(
             UUID.randomUUID().toString()
         }
     }
+
+    /**
+     * The post's server ID as the web editor reads it, or null for a new post
+     * the server doesn't have yet. A negative ID a host converted with
+     * `toUInt()` reads as new.
+     */
+    internal val serverPostId: Int?
+        get() = postId?.toInt()?.takeIf { it > 0 }
+
+    /**
+     * Whether the editor opens a new post with a blank title and content, the
+     * only post autofocus targets.
+     */
+    internal val isNewEmptyPost: Boolean
+        get() = serverPostId == null && title.isBlank() && content.isBlank()
+
     companion object {
         @JvmStatic
         fun builder(siteURL: String, siteApiRoot: String, postType: PostTypeDetails = PostTypeDetails.post): Builder = Builder(siteURL, siteApiRoot, postType = postType)
