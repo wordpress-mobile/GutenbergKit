@@ -118,15 +118,20 @@ struct RestRelay: Sendable {
     /// are decoded before the slash is added so it lands inside the route
     /// value. Appended after `%2F`, it would make a root no path can extend:
     /// WordPress reads `rest_route=%2F/wp/v2/posts` as the route
-    /// `//wp/v2/posts` and answers `rest_no_route`. `createRelayFetch`
-    /// normalizes the same way, so both sides agree on what the root is.
+    /// `//wp/v2/posts` and answers `rest_no_route`. A doubled trailing slash
+    /// collapses to one, matching the root api-fetch builds its requests from.
+    /// `createRelayFetch` normalizes the same way, so both sides agree on what
+    /// the root is.
     private static func normalizedRoot(_ configured: String) -> String {
         var root = configured
         if let query = root.firstIndex(of: "?") {
             let decoded = root[query...].replacingOccurrences(of: "%2f", with: "/", options: .caseInsensitive)
             root = String(root[..<query]) + decoded
         }
-        return root.hasSuffix("/") ? root : root + "/"
+        while root.hasSuffix("/") {
+            root.removeLast()
+        }
+        return root + "/"
     }
 
     /// Forwards a relayed request to the site's REST API and returns the
