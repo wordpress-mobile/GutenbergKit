@@ -1,6 +1,8 @@
 import apiFetch from '@wordpress/api-fetch';
+import { store as coreStore } from '@wordpress/core-data';
+import { select } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
-import { getGBKit, POST_FALLBACKS } from './bridge';
+import { getGBKit, getPostPath, getPostReference } from './bridge';
 import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
@@ -12,8 +14,11 @@ import { ensureTrailingSlash, stripTrailingSlash } from './url';
 /** Matches `/wp/v2/media` but not sub-paths like `/wp/v2/media/123`. */
 const MEDIA_UPLOAD_PATH = /^\/wp\/v2\/media(\?|$)/;
 
-/** Methods safe to repeat because they do not change server state. */
-const RETRYABLE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
+/** The response core-data builds post type entity configurations from. */
+const POST_TYPES_PATH = '/wp/v2/types?context=view';
+
+/** Methods that do not change server state, so are safe to repeat. */
+const SAFE_METHODS = [ 'GET', 'HEAD', 'OPTIONS' ];
 
 /** Base delay before each retry; jitter of up to the same amount is added. */
 const RETRY_DELAYS_MS = [ 500, 2000 ];
@@ -38,18 +43,63 @@ export function configureApiFetch() {
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
-	apiFetch.use( filterEndpointsMiddleware );
+	apiFetch.use( blockPostWritesMiddleware );
 	apiFetch.use( nativeMediaUploadMiddleware );
 	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( mediaPermissionsMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
 	apiFetch.use( siteIndexMiddleware );
+	apiFetch.use( postTypesFallbackMiddleware );
 	apiFetch.use(
-		apiFetch.createPreloadingMiddleware( preloadData ?? defaultPreloadData )
+		apiFetch.createPreloadingMiddleware(
+			withEditedPostType( preloadData ?? defaultPreloadData )
+		)
 	);
+	// Registered last so it runs first, covering preloaded responses too.
+	apiFetch.use( persistedPostOverlayMiddleware );
 	apiFetch.setFetchHandler(
 		withRateLimitRetry( apiFetch.defaultFetchHandler )
 	);
+}
+
+/**
+ * Adds the edited post's type to the preloaded post types when missing.
+ *
+ * Core-data builds post type entity configurations from this response, so a
+ * missing type, e.g. a custom post type in offline mode, would leave the post
+ * without a configuration.
+ *
+ * Exported for testing only.
+ *
+ * @param {Object} preloadData The preloaded responses, keyed by path.
+ * @return {Object} The preloaded responses.
+ */
+export function withEditedPostType( preloadData ) {
+	const postTypes = preloadData[ POST_TYPES_PATH ]?.body;
+	const { type, restBase, restNamespace } = getPostReference(
+		getGBKit().post
+	);
+
+	if ( ! postTypes || postTypes[ type ] ) {
+		return preloadData;
+	}
+
+	return {
+		...preloadData,
+		[ POST_TYPES_PATH ]: {
+			...preloadData[ POST_TYPES_PATH ],
+			body: {
+				...postTypes,
+				[ type ]: {
+					name: type,
+					slug: type,
+					taxonomies: [],
+					rest_base: restBase,
+					rest_namespace: restNamespace,
+				},
+			},
+		},
+	};
 }
 
 /**
@@ -128,42 +178,51 @@ function tokenAuthMiddleware( options, next ) {
 }
 
 /**
- * Middleware to filter out requests to specific endpoints.
+ * Middleware rejecting writes to the post being edited, including autosaves.
+ *
+ * The host app saves the post, so a save from the editor, e.g. a plugin calling
+ * `savePost()`, would race the host's. Rejecting it, rather than resolving an
+ * empty response, keeps core from treating the post as saved and clearing its
+ * edits.
  *
  * @type {APIFetchMiddleware}
  *
- * @todo Properly seed the post entity and remove this middleware.
- *
- * This was added to prevent re-fetching entity content provided by the native
- * host app, which can lead to content loss. However, we can likely avoid the
- * need for this middleware by ensuring we properly seed the entity content into
- * the store on initialization.
- *
- * This requires hoisting the relevant logic from `useEditorSetup` to occur
- * before we render the editor, and invoking `finishResolution`.
- *
- * See: https://github.com/wordpress-mobile/GutenbergKit/commit/c9b4fc9978a3760ba97f3f5d4359c2bc2155bb80
+ * @todo Remove once the editor saves posts.
  */
-function filterEndpointsMiddleware( options, next ) {
-	const { post } = getGBKit();
+function blockPostWritesMiddleware( options, next ) {
+	const method = ( options.method ?? 'GET' ).toUpperCase();
 
-	if ( ! post || post.id === undefined ) {
+	if ( SAFE_METHODS.includes( method ) || ! isPostPath( options.path ) ) {
 		return next( options );
 	}
 
-	// Apply the same fallback contract as `getPost()` so the filter still
-	// engages on hosts whose payload omits restBase/restNamespace.
-	const restNamespace = post.restNamespace || POST_FALLBACKS.restNamespace;
-	const restBase = post.restBase || POST_FALLBACKS.restBase;
-	const disabledPath = `/${ restNamespace }/${ restBase }/${ post.id }`;
+	warn(
+		`Blocked ${ method } ${ options.path }: the host app saves the post`
+	);
+	return Promise.reject( {
+		code: 'gutenberg_kit_post_write_blocked',
+		message: 'The host app saves the post.',
+	} );
+}
 
-	if (
-		options.path === disabledPath ||
-		options.path?.startsWith( `${ disabledPath }?` )
-	) {
-		return Promise.resolve( [] );
+/**
+ * Whether a request path targets the post being edited or one of its
+ * sub-resources, such as autosaves.
+ *
+ * @param {string} [path] The request path, e.g. `/wp/v2/posts/1/autosaves`.
+ * @return {boolean} True for the post's paths.
+ */
+function isPostPath( path ) {
+	const { post } = getGBKit();
+
+	if ( typeof path !== 'string' || ! post ) {
+		return false;
 	}
-	return next( options );
+
+	const postPath = getPostPath( getPostReference( post ) );
+	const pathname = path.split( '?' )[ 0 ];
+
+	return pathname === postPath || pathname.startsWith( `${ postPath }/` );
 }
 
 /**
@@ -537,6 +596,171 @@ function isRestIndexPath( path ) {
 }
 
 /**
+ * Middleware answering a failed post types request with the built-in types.
+ *
+ * Core-data builds post type entity configurations from this response, and the
+ * editor cannot render the post without one, e.g. offline when the host did not
+ * preload it.
+ *
+ * Exported for testing only.
+ *
+ * @type {APIFetchMiddleware}
+ */
+export function postTypesFallbackMiddleware( options, next ) {
+	if ( options.path !== POST_TYPES_PATH || options.parse === false ) {
+		return next( options );
+	}
+
+	return next( options ).catch( ( err ) => {
+		warn( 'Failed to load post types; using the built-in ones', err );
+		return withEditedPostType( defaultPreloadData )[ POST_TYPES_PATH ].body;
+	} );
+}
+
+/**
+ * Middleware keeping the persisted title and content of the post being edited
+ * in fetched copies of it.
+ *
+ * The post is seeded with the host's title and content, which may hold edits
+ * not yet uploaded. Core-data stores a fetched copy over the seeded record,
+ * e.g. from `getEntityRecord()` with a query or a list including the post, so
+ * the server's values would replace the host's. Other fields, such as embeds,
+ * are kept.
+ *
+ * Exported for testing only.
+ *
+ * @type {APIFetchMiddleware}
+ */
+export async function persistedPostOverlayMiddleware( options, next ) {
+	const method = ( options.method ?? 'GET' ).toUpperCase();
+
+	if ( method !== 'GET' || ! isPostReadPath( options.path ) ) {
+		return next( options );
+	}
+
+	const response = await next( options );
+	const persisted = getPersistedPost();
+
+	if ( ! persisted ) {
+		return response;
+	}
+
+	if ( options.parse !== false ) {
+		return overlayPersistedPost( response, persisted );
+	}
+
+	let body;
+	try {
+		body = await response.clone().json();
+	} catch {
+		return response;
+	}
+
+	const overlaid = overlayPersistedPost( body, persisted );
+
+	if ( overlaid === body ) {
+		return response;
+	}
+
+	return new Response( JSON.stringify( overlaid ), {
+		status: response.status,
+		statusText: response.statusText,
+		headers: response.headers,
+	} );
+}
+
+/**
+ * Whether a request path reads the post being edited, alone or in a list of
+ * its type.
+ *
+ * @param {string} [path] The request path, e.g. `/wp/v2/posts/1?_embed=1`.
+ * @return {boolean} True for the post's path and its type's collection path.
+ */
+function isPostReadPath( path ) {
+	if ( typeof path !== 'string' ) {
+		return false;
+	}
+
+	const postPath = getPostPath( getPostReference( getGBKit().post ) );
+	const collectionPath = postPath.slice( 0, postPath.lastIndexOf( '/' ) );
+	const pathname = path.split( '?' )[ 0 ];
+
+	return pathname === postPath || pathname === collectionPath;
+}
+
+/**
+ * Returns the persisted record of the post being edited once it is seeded.
+ *
+ * Checking the resolution first avoids triggering a fetch of the post.
+ *
+ * @return {Object|null} The record, or null before seeding.
+ */
+function getPersistedPost() {
+	const { id, type } = getPostReference( getGBKit().post );
+	const args = [ 'postType', type, id ];
+	const { hasFinishedResolution, getEntityRecord } = select( coreStore );
+
+	if ( ! hasFinishedResolution( 'getEntityRecord', args ) ) {
+		return null;
+	}
+
+	return getEntityRecord( ...args ) ?? null;
+}
+
+/**
+ * Applies the persisted title and content to copies of the post in a response.
+ *
+ * @param {Object|Object[]} body      A record or list of records.
+ * @param {Object}          persisted The post's persisted record.
+ * @return {Object|Object[]} The body, unchanged when it holds no stale copy.
+ */
+function overlayPersistedPost( body, persisted ) {
+	if ( ! Array.isArray( body ) ) {
+		return overlayRecord( body, persisted );
+	}
+
+	const records = body.map( ( record ) =>
+		overlayRecord( record, persisted )
+	);
+
+	return records.some( ( record, index ) => record !== body[ index ] )
+		? records
+		: body;
+}
+
+/**
+ * Applies the persisted title and content to a record of the post.
+ *
+ * Only raw values are replaced; rendered values stay the server's.
+ *
+ * @param {Object} record    A record from the response.
+ * @param {Object} persisted The post's persisted record.
+ * @return {Object} The record, unchanged when it isn't a stale copy.
+ */
+function overlayRecord( record, persisted ) {
+	if ( record?.id !== persisted.id ) {
+		return record;
+	}
+
+	let result = record;
+
+	for ( const field of [ 'title', 'content' ] ) {
+		const raw = persisted[ field ]?.raw;
+		const value = record[ field ];
+
+		if (
+			raw !== undefined &&
+			value?.raw !== undefined &&
+			value.raw !== raw
+		) {
+			result = { ...result, [ field ]: { ...value, raw } };
+		}
+	}
+
+	return result;
+}
+
+/**
  * Wraps a fetch handler to retry read-only requests the site rate-limits.
  *
  * core-data caches some failed resolutions for the session, so one throttled
@@ -551,7 +775,7 @@ function isRestIndexPath( path ) {
 export function withRateLimitRetry( fetchHandler ) {
 	return async ( options ) => {
 		const method = ( options.method ?? 'GET' ).toUpperCase();
-		if ( ! RETRYABLE_METHODS.includes( method ) ) {
+		if ( ! SAFE_METHODS.includes( method ) ) {
 			return fetchHandler( options );
 		}
 
@@ -677,7 +901,7 @@ async function parseResponse( response, isOk ) {
 }
 
 const defaultPreloadData = {
-	'/wp/v2/types?context=view': {
+	[ POST_TYPES_PATH ]: {
 		body: {
 			post: {
 				description: '',
@@ -700,6 +924,32 @@ const defaultPreloadData = {
 				slug: 'page',
 				taxonomies: [],
 				rest_base: 'pages',
+				rest_namespace: 'wp/v2',
+				template: [],
+				template_lock: false,
+				_links: {},
+			},
+			attachment: {
+				description: '',
+				hierarchical: false,
+				has_archive: false,
+				name: 'Media',
+				slug: 'attachment',
+				taxonomies: [],
+				rest_base: 'media',
+				rest_namespace: 'wp/v2',
+				template: [],
+				template_lock: false,
+				_links: {},
+			},
+			wp_block: {
+				description: '',
+				hierarchical: false,
+				has_archive: false,
+				name: 'Patterns',
+				slug: 'wp_block',
+				taxonomies: [ 'wp_pattern_category' ],
+				rest_base: 'blocks',
 				rest_namespace: 'wp/v2',
 				template: [],
 				template_lock: false,

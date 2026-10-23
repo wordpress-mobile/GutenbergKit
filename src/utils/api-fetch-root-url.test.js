@@ -10,6 +10,8 @@ vi.mock( './bridge', async ( importOriginal ) => {
 		getGBKit: vi.fn(),
 	};
 } );
+// Loading the real core-data store in vitest trips on its ESM dependencies.
+vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
 
 /**
  * The root is captured when the middleware is created, so it is asserted where
