@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { dispatch, select } from '@wordpress/data';
+import { dispatch, resolveSelect, select } from '@wordpress/data';
 import * as element from '@wordpress/element';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { initializeEditor } from './editor';
@@ -18,6 +18,7 @@ vi.mock( '@wordpress/block-library' );
 vi.mock( './blocks' );
 vi.mock( './bridge' );
 vi.mock( './editor-settings' );
+vi.mock( './logger' );
 vi.mock( './prime-post-entity', () => ( { primePostEntity: vi.fn() } ) );
 vi.mock( '../components/layout', () => ( {
 	default: () => null,
@@ -28,6 +29,8 @@ describe( 'initializeEditor', () => {
 	let mockPreferenceDispatch;
 	let mockEditorDispatch;
 	let mockGetEntityRecord;
+	let mockGetPostType;
+	let mockResolvePostType;
 
 	beforeEach( () => {
 		vi.clearAllMocks();
@@ -55,11 +58,20 @@ describe( 'initializeEditor', () => {
 		dispatch.mockImplementation( mockDispatch );
 
 		mockGetEntityRecord = vi.fn();
+		mockGetPostType = vi.fn();
 		select.mockImplementation( ( store ) =>
 			store.name === 'core'
-				? { getEntityRecord: mockGetEntityRecord }
+				? {
+						getEntityRecord: mockGetEntityRecord,
+						getPostType: mockGetPostType,
+				  }
 				: {}
 		);
+
+		mockResolvePostType = vi.fn().mockResolvedValue( undefined );
+		resolveSelect.mockImplementation( () => ( {
+			getPostType: mockResolvePostType,
+		} ) );
 
 		getGBKit.mockReturnValue( {
 			themeStyles: true,
@@ -190,8 +202,114 @@ describe( 'initializeEditor', () => {
 		);
 		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
 			record,
-			{}
+			{},
+			undefined
 		);
+		expect( render ).toHaveBeenCalled();
+	} );
+
+	it( "should set up a new post with its type's template", async () => {
+		const record = {
+			id: -1,
+			type: 'post',
+			status: 'auto-draft',
+			content: { raw: '' },
+		};
+		const template = [ [ 'core/heading' ] ];
+		mockGetEntityRecord.mockReturnValue( record );
+		mockGetPostType.mockReturnValue( { template } );
+
+		await initializeEditor();
+
+		expect( mockGetPostType ).toHaveBeenCalledWith( 'post' );
+		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
+			record,
+			{},
+			template
+		);
+	} );
+
+	it( "should not apply the type's template to a local draft", async () => {
+		const record = {
+			id: -1,
+			type: 'post',
+			status: 'draft',
+			title: { raw: 'Trip notes' },
+			content: { raw: '' },
+		};
+		mockGetEntityRecord.mockReturnValue( record );
+		mockGetPostType.mockReturnValue( { template: [ [ 'core/heading' ] ] } );
+
+		await initializeEditor();
+
+		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
+			record,
+			{},
+			undefined
+		);
+	} );
+
+	it( "should not apply a post type's empty template", async () => {
+		const record = {
+			id: -1,
+			type: 'post',
+			status: 'auto-draft',
+			content: { raw: '' },
+		};
+		mockGetEntityRecord.mockReturnValue( record );
+		mockGetPostType.mockReturnValue( { template: [] } );
+
+		await initializeEditor();
+
+		expect( mockEditorDispatch.setupEditor ).toHaveBeenCalledWith(
+			record,
+			{},
+			undefined
+		);
+	} );
+
+	it( "should lock the post type's template as WP Admin does", async () => {
+		const template = [ [ 'core/heading' ] ];
+		mockResolvePostType.mockResolvedValue( {
+			template,
+			template_lock: 'all',
+		} );
+
+		await initializeEditor();
+
+		expect( mockResolvePostType ).toHaveBeenCalledWith( 'post' );
+		await vi.waitFor( () =>
+			expect(
+				mockEditorDispatch.updateEditorSettings
+			).toHaveBeenCalledWith( { template, templateLock: 'all' } )
+		);
+	} );
+
+	it( 'should leave a post type without a template unlocked', async () => {
+		mockResolvePostType.mockResolvedValue( {
+			template: [],
+			template_lock: false,
+		} );
+
+		await initializeEditor();
+		await vi.waitFor( () =>
+			expect( mockResolvePostType ).toHaveBeenCalled()
+		);
+
+		expect(
+			mockEditorDispatch.updateEditorSettings
+		).not.toHaveBeenCalledWith(
+			expect.objectContaining( { templateLock: expect.anything() } )
+		);
+	} );
+
+	it( 'should render when the post type fails to load', async () => {
+		const render = vi.fn();
+		vi.spyOn( element, 'createRoot' ).mockReturnValueOnce( { render } );
+		mockResolvePostType.mockRejectedValue( new Error( 'Offline' ) );
+
+		await initializeEditor();
+
 		expect( render ).toHaveBeenCalled();
 	} );
 

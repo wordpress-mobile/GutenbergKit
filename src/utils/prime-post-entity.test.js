@@ -40,6 +40,7 @@ describe( 'primePostEntity', () => {
 	let coreDispatch;
 	let getEntityConfig;
 	let getEntitiesConfig;
+	let getPostType;
 
 	beforeEach( () => {
 		vi.clearAllMocks();
@@ -50,11 +51,33 @@ describe( 'primePostEntity', () => {
 		};
 		getEntityConfig = vi.fn( () => ( { name: 'post' } ) );
 		getEntitiesConfig = vi.fn( () => Promise.resolve( [] ) );
+		getPostType = vi.fn( () => Promise.resolve( {} ) );
 
 		dispatch.mockReturnValue( coreDispatch );
 		select.mockReturnValue( { getEntityConfig } );
-		resolveSelect.mockReturnValue( { getEntitiesConfig } );
+		resolveSelect.mockReturnValue( { getEntitiesConfig, getPostType } );
 		getGBKit.mockReturnValue( {} );
+	} );
+
+	it( 'loads the post type of a new post before seeding', async () => {
+		await primePostEntity( buildPost( { status: 'auto-draft' } ) );
+
+		expect( getPostType ).toHaveBeenCalledWith( 'post' );
+	} );
+
+	it( 'seeds other posts without waiting for the post type', async () => {
+		await primePostEntity( buildPost() );
+
+		expect( getPostType ).not.toHaveBeenCalled();
+		expect( coreDispatch.receiveEntityRecords ).toHaveBeenCalled();
+	} );
+
+	it( 'seeds the post when the post type fails to load', async () => {
+		getPostType.mockRejectedValue( new Error( 'Offline' ) );
+
+		await primePostEntity( buildPost( { status: 'auto-draft' } ) );
+
+		expect( coreDispatch.receiveEntityRecords ).toHaveBeenCalled();
 	} );
 
 	it( "loads core's post type entities before seeding", async () => {
