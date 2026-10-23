@@ -11,3 +11,57 @@ index 4177018..9287e1b 100644
    const isUploading = !!temporaryURL || isSideloading;
    const imageSizeOptions = imageSizes.filter(
      ({ slug }) => image?.media_details?.sizes?.[slug]?.source_url
+diff --git a/node_modules/@wordpress/block-library/build-module/list-item/index.mjs b/node_modules/@wordpress/block-library/build-module/list-item/index.mjs
+index 0ee4362..595b19a 100644
+--- a/node_modules/@wordpress/block-library/build-module/list-item/index.mjs
++++ b/node_modules/@wordpress/block-library/build-module/list-item/index.mjs
+@@ -12,8 +12,6 @@ var { editableRootKey } = unlock(blocksPrivateApis);
+ var { name } = metadata;
+ var settings = {
+   icon,
+-  // Opt into the editing host behaviour privately, like the paragraph.
+-  [editableRootKey]: true,
+   edit,
+   save,
+   merge(attributes, attributesToMerge) {
+diff --git a/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs b/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs
+index 23504e5..82333a7 100644
+--- a/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs
++++ b/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs
+@@ -13,9 +13,6 @@ var { editableRootKey } = unlock(blocksPrivateApis);
+ var { name } = metadata;
+ var settings = {
+   icon,
+-  // Opt into the editing host behaviour privately. It's a Symbol setting
+-  // rather than a public `supports` key so it stays an internal detail.
+-  [editableRootKey]: true,
+   example: {
+     attributes: {
+       content: __(
+diff --git a/node_modules/@wordpress/block-library/build/list-item/index.cjs b/node_modules/@wordpress/block-library/build/list-item/index.cjs
+index 7f76602..2483320 100644
+--- a/node_modules/@wordpress/block-library/build/list-item/index.cjs
++++ b/node_modules/@wordpress/block-library/build/list-item/index.cjs
+@@ -49,8 +49,6 @@ var { editableRootKey } = (0, import_lock_unlock.unlock)(import_blocks.privateAp
+ var { name } = import_block.default;
+ var settings = {
+   icon: import_icons.listItem,
+-  // Opt into the editing host behaviour privately, like the paragraph.
+-  [editableRootKey]: true,
+   edit: import_edit.default,
+   save: import_save.default,
+   merge(attributes, attributesToMerge) {
+diff --git a/node_modules/@wordpress/block-library/build/paragraph/index.cjs b/node_modules/@wordpress/block-library/build/paragraph/index.cjs
+index 5913a33..104eff9 100644
+--- a/node_modules/@wordpress/block-library/build/paragraph/index.cjs
++++ b/node_modules/@wordpress/block-library/build/paragraph/index.cjs
+@@ -50,9 +50,6 @@ var { editableRootKey } = (0, import_lock_unlock.unlock)(import_blocks.privateAp
+ var { name } = import_block.default;
+ var settings = {
+   icon: import_icons.paragraph,
+-  // Opt into the editing host behaviour privately. It's a Symbol setting
+-  // rather than a public `supports` key so it stays an internal detail.
+-  [editableRootKey]: true,
+   example: {
+     attributes: {
+       content: (0, import_i18n.__)(
