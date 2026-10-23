@@ -365,7 +365,10 @@ class SitePreparationViewModel(
                     pluralLabel = details.labels.name
                 )
             }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+            .sortedWith(
+                compareBy<PostTypeOption, String>(String.CASE_INSENSITIVE_ORDER) { it.label }
+                    .thenBy { it.details.postType }
+            )
     }
 
     /**

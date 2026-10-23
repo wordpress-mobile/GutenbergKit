@@ -563,7 +563,10 @@ class SitePreparationViewModel {
                     pluralLabel: postType.labels.name
                 )
             }
-            .sorted(using: KeyPathComparator(\.label, comparator: .localizedStandard))
+            .sorted(using: [
+                KeyPathComparator(\.label, comparator: .localizedStandard),
+                KeyPathComparator(\.details.postType),
+            ])
     }
 
     func buildAndLoadConfiguration(navigation: Navigation) {
