@@ -470,7 +470,7 @@ private suspend fun persistPost(
         val endpointType = when (configuration.postType.postType) {
             "page" -> PostEndpointType.Pages
             "post" -> PostEndpointType.Posts
-            else -> PostEndpointType.Custom(configuration.postType.postType)
+            else -> PostEndpointType.Custom(configuration.postType.restBase)
         }
 
         val params = PostUpdateParams(

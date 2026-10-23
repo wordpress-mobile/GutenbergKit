@@ -182,7 +182,7 @@ class PostsListViewModel(
                 val endpointType = when (postType.postType) {
                     "page" -> PostEndpointType.Pages
                     "post" -> PostEndpointType.Posts
-                    else -> PostEndpointType.Custom(postType.postType)
+                    else -> PostEndpointType.Custom(postType.restBase)
                 }
 
                 // Single page only — matches the iOS demo, which doesn't paginate either.
