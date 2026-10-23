@@ -42,6 +42,8 @@ data class GBKitGlobal(
     val namespaceExcludedPaths: List<String>,
     /** The authorization header value for authenticated API requests. */
     val authHeader: String,
+    /** Domains that [authHeader] may be sent to, besides the site and its API. */
+    val authHeaderDomains: List<String>,
     /** Whether to apply theme styles to the editor. */
     val themeStyles: Boolean,
     /** Whether to load plugin assets. */
@@ -115,6 +117,7 @@ data class GBKitGlobal(
                 siteApiNamespace = configuration.siteApiNamespace.toList(),
                 namespaceExcludedPaths = configuration.namespaceExcludedPaths.toList(),
                 authHeader = configuration.authHeader,
+                authHeaderDomains = configuration.authHeaderDomains.toList(),
                 themeStyles = configuration.themeStyles,
                 plugins = configuration.plugins,
                 enableNativeBlockInserter = configuration.enableNativeBlockInserter,
