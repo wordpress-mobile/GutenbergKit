@@ -69,8 +69,8 @@ data class EditorConfiguration(
         get() = postId?.toInt()?.takeIf { it > 0 }
 
     /**
-     * Whether the editor opens a new post with no title or content, the post
-     * WP Admin and the web editor focus on load.
+     * Whether the editor opens a new post with a blank title and content, the
+     * only post autofocus targets.
      */
     internal val isNewEmptyPost: Boolean
         get() = serverPostId == null && title.isBlank() && content.isBlank()

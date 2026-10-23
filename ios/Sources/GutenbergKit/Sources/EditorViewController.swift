@@ -789,8 +789,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Sets focus to the editor if it opened a new, empty post.
     ///
     /// This method programmatically focuses the editor, placing the cursor in the content area
-    /// so the user can begin typing immediately. Like WP Admin, focus is only applied to a new post
-    /// with no title or content, to avoid disrupting existing posts and local drafts.
+    /// so the user can begin typing immediately. Focus is only applied to a new post with a blank
+    /// title and content, to avoid disrupting existing posts and local drafts.
     ///
     /// Use the `force` parameter to apply focus to any post.
     ///
