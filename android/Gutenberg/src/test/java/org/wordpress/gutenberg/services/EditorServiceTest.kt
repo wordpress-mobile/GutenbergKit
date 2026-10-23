@@ -150,6 +150,42 @@ class EditorServiceTest {
     }
 
     @Test
+    fun `prepare does not fetch post when postID is zero`() = runBlocking {
+        val mockClient = EditorServiceMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId(0u)
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        val postRequests = mockClient.requestedURLs.filter { it.matches(Regex(".*/posts/\\d+.*")) }
+        assertEquals(
+            "Should not request any post for a zero post ID",
+            emptyList<String>(),
+            postRequests
+        )
+    }
+
+    @Test
+    fun `prepare does not fetch post when postID is negative`() = runBlocking {
+        val mockClient = EditorServiceMockHTTPClient()
+        val configuration = testConfiguration.toBuilder()
+            .setPostId((-1L).toUInt())
+            .build()
+
+        val service = makeService(configuration = configuration, httpClient = mockClient)
+        service.prepare()
+
+        val postRequests = mockClient.requestedURLs.filter { it.matches(Regex(".*/posts/-?\\d+.*")) }
+        assertEquals(
+            "Should not request any post for a negative post ID",
+            emptyList<String>(),
+            postRequests
+        )
+    }
+
+    @Test
     fun `prepare fetches post when postID is positive`() = runBlocking {
         val mockClient = EditorServiceMockHTTPClient()
         val configuration = testConfiguration.toBuilder()
