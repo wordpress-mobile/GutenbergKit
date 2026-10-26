@@ -667,10 +667,19 @@ async function parseResponse( response, isOk ) {
 		throw {
 			code: 'invalid_json',
 			message: __( 'The response is not a valid JSON response.' ),
+			data: { status: response.status },
 		};
 	}
 
 	if ( ! isOk ) {
+		if (
+			body &&
+			typeof body === 'object' &&
+			! Array.isArray( body ) &&
+			body.data === undefined
+		) {
+			throw { ...body, data: { status: response.status } };
+		}
 		throw body;
 	}
 	return body;
