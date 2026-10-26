@@ -34,7 +34,7 @@ androidComponents.onVariants { variant ->
 
 android {
     namespace = "org.wordpress.gutenberg"
-    compileSdk = 36
+    compileSdk = 37
     resourcePrefix = "gbk_"
 
     // Declared here rather than left to `publish-to-s3`, which looks the

@@ -37,7 +37,7 @@ if (oauthCredentialsFile.exists()) {
 
 android {
     namespace = "com.example.gutenbergkit"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
