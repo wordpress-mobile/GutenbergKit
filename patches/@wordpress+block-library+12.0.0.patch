@@ -1,5 +1,5 @@
 diff --git a/node_modules/@wordpress/block-library/build-module/image/image.mjs b/node_modules/@wordpress/block-library/build-module/image/image.mjs
-index 4177018..9287e1b 100644
+index dbb246b..cf8de3d 100644
 --- a/node_modules/@wordpress/block-library/build-module/image/image.mjs
 +++ b/node_modules/@wordpress/block-library/build-module/image/image.mjs
 @@ -371,7 +371,7 @@ function Image({

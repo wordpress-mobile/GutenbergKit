@@ -1,8 +1,8 @@
 diff --git a/node_modules/@wordpress/format-library/package.json b/node_modules/@wordpress/format-library/package.json
-index 6bcf811..3dc1b91 100644
+index 2953742..b933419 100644
 --- a/node_modules/@wordpress/format-library/package.json
 +++ b/node_modules/@wordpress/format-library/package.json
-@@ -37,7 +37,8 @@
+@@ -36,7 +36,8 @@
  			"import": "./build-module/index.mjs",
  			"require": "./build/index.cjs"
  		},
