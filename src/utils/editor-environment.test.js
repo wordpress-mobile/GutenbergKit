@@ -209,59 +209,41 @@ describe( 'setUpEditorEnvironment', () => {
 		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'handles errors during editor initialization', async () => {
-		const testError = new Error( 'Editor initialization failed' );
-		initializeEditor.mockImplementation( () => {
-			throw testError;
-		} );
+	it.each( [
+		[
+			'synchronous',
+			( testError ) =>
+				initializeEditor.mockImplementation( () => {
+					throw testError;
+				} ),
+		],
+		[
+			'asynchronous',
+			( testError ) => initializeEditor.mockRejectedValue( testError ),
+		],
+	] )(
+		'handles %s errors during editor initialization',
+		async ( _, mockFailure ) => {
+			const testError = new Error( 'Editor initialization failed' );
+			mockFailure( testError );
 
-		await setUpEditorEnvironment();
+			await setUpEditorEnvironment();
 
-		expect( logException ).toHaveBeenCalledWith( testError, {
-			isHandled: true,
-			handledBy: 'setUpEditorEnvironment',
-		} );
-		expect( error ).toHaveBeenCalledWith(
-			'Error initializing editor',
-			testError
-		);
-		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
-	} );
-
-	it( 'handles asynchronous errors during editor initialization', async () => {
-		const testError = new Error( 'Post retrieval failed' );
-		initializeEditor.mockRejectedValue( testError );
-
-		await setUpEditorEnvironment();
-
-		expect( logException ).toHaveBeenCalledWith( testError, {
-			isHandled: true,
-			handledBy: 'setUpEditorEnvironment',
-		} );
-		expect( document.body.innerHTML ).toBe( '<div>Error</div>' );
-		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
-	} );
-
-	it( 'handles errors during plugin loading', async () => {
-		getGBKit.mockReturnValue( { plugins: true } );
-
-		const testError = new Error( 'Plugin loading failed' );
-		initializeEditor.mockImplementation( () => {
-			throw testError;
-		} );
-
-		await setUpEditorEnvironment();
-
-		expect( logException ).toHaveBeenCalledWith( testError, {
-			isHandled: true,
-			handledBy: 'setUpEditorEnvironment',
-		} );
-		expect( error ).toHaveBeenCalledWith(
-			'Error initializing editor',
-			testError
-		);
-		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
-	} );
+			expect( logException ).toHaveBeenCalledWith( testError, {
+				isHandled: true,
+				handledBy: 'setUpEditorEnvironment',
+			} );
+			expect( error ).toHaveBeenCalledWith(
+				'Error initializing editor',
+				testError
+			);
+			expect( EditorLoadError ).toHaveBeenCalledWith( {
+				error: testError,
+			} );
+			expect( document.body.innerHTML ).toBe( '<div>Error</div>' );
+			expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
+		}
+	);
 
 	it( 'initializes VideoPress bridge when videopress/video is not in allowed block types', async () => {
 		getGBKit.mockReturnValue( { plugins: true } );
