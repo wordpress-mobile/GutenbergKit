@@ -154,11 +154,11 @@
 	},
 	"allowScripts": {
 		"electron@23.3.13": true,
-		"fs-ext-extra-prebuilt@2.2.7": true,
 		"unrs-resolver@1.11.1": true,
 		"@parcel/watcher@2.5.0": true,
 		"core-js": false,
 		"fsevents@2.3.3": true,
-		"fsevents@2.3.2": true
+		"fsevents@2.3.2": true,
+		"fs-ext-extra-prebuilt@2.2.16": true
 	}
 }
