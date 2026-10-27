@@ -143,7 +143,7 @@ const VisualEditor = forwardRef( function UnforwardedVisualEditor(
 						</>
 					) }
 				{ ! hideTitle && (
-					<div className={ titleClasses }>
+					<div className={ titleClasses } contentEditable={ false }>
 						<PostTitle ref={ editorPostTitleRef } />
 					</div>
 				) }
