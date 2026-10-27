@@ -120,6 +120,36 @@ class GutenbergViewRenderProcessGoneTest {
         assertEquals("the blank web view has no page to reload", editorUrl, shadowOf(view.editorWebView).lastLoadedUrl)
     }
 
+    @Test
+    fun `a renderer death after an automatic recovery offers a reload instead of looping`() {
+        val view = loadedSiteView()
+        killRenderer(view)
+        view.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        killRenderer(view)
+
+        assertNull("content that kills the renderer once loaded would reload forever", shadowOf(view.editorWebView).lastLoadedUrl)
+        assertEquals("the crash notice covers the editor", View.INVISIBLE, view.editorWebView.visibility)
+    }
+
+    @Test
+    fun `reloading from the crash notice allows another automatic recovery`() {
+        val view = loadedSiteView()
+        killRenderer(view)
+        view.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+        killRenderer(view)
+
+        view.reloadEditor()
+        shadowOf(Looper.getMainLooper()).idle()
+        view.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+        killRenderer(view)
+
+        assertEquals(editorUrl, shadowOf(view.editorWebView).lastLoadedUrl)
+    }
+
     private class RecordingTitleAndContentCallback : GutenbergView.TitleAndContentCallback {
         val errors = mutableListOf<Throwable>()
 

@@ -103,6 +103,14 @@ class GutenbergView : FrameLayout {
 
     /** Whether [webView] replaced one whose renderer died and has yet to load the editor. */
     private var isWebViewBlank = false
+
+    /**
+     * Whether the editor reloaded on its own after a renderer death, since
+     * the user last chose to reload it. The editor reports itself loaded
+     * before its content finishes rendering, so content that kills the
+     * renderer would otherwise reload forever.
+     */
+    private var hasRecoveredAutomatically = false
     @Volatile private var isEditorLoaded = false
     private var didFireEditorLoaded = false
 
@@ -1199,6 +1207,7 @@ class GutenbergView : FrameLayout {
      */
     internal fun reloadEditor() {
         isEditorLoaded = false
+        hasRecoveredAutomatically = false
         // The reload replaces the page these reads were sent to, so their results
         // may never arrive.
         failPendingTitleAndContentReads()
@@ -1217,9 +1226,9 @@ class GutenbergView : FrameLayout {
      *
      * Android can't use a web view again once its renderer dies, so it is
      * replaced, and the editor loads in the new one from the content
-     * [LatestContentProvider] returns. A renderer that died before the editor
-     * loaded may die again on every load, so the crash notice offers a reload
-     * instead of looping.
+     * [LatestContentProvider] returns. That happens once: a renderer that dies
+     * before the editor loads, or again after an automatic recovery, may die
+     * on every load, so the crash notice offers a reload instead of looping.
      */
     private fun onEditorRenderProcessGone(didCrash: Boolean) {
         Log.e(TAG, if (didCrash) "The editor's renderer crashed" else "The system killed the editor's renderer")
@@ -1230,7 +1239,8 @@ class GutenbergView : FrameLayout {
         replaceWebView()
         blockInserterDialog?.dismiss()
         editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
-        if (wasEditorLoaded) {
+        if (wasEditorLoaded && !hasRecoveredAutomatically) {
+            hasRecoveredAutomatically = true
             loadEditor(dependencies)
         } else {
             showEditorCrashPhase()
