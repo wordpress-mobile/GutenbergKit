@@ -47,10 +47,10 @@ index de88961..2b48deb 100644
        headerTitle: __("Add a block"),
        renderToggle,
 diff --git a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
-index 1565602..5d01963 100644
+index 5ac8b2e..e2bae27 100644
 --- a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
 +++ b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
-@@ -259,7 +259,7 @@ var ExperimentalBlockEditorProvider = withRegistryProvider(
+@@ -263,7 +263,7 @@ var ExperimentalBlockEditorProvider = withRegistryProvider(
    }
  );
  var BlockEditorProvider = (props) => {
@@ -60,10 +60,10 @@ index 1565602..5d01963 100644
  var provider_default = BlockEditorProvider;
  export {
 diff --git a/node_modules/@wordpress/block-editor/package.json b/node_modules/@wordpress/block-editor/package.json
-index 29cfb06..9227d87 100644
+index cd12371..9c26c1e 100644
 --- a/node_modules/@wordpress/block-editor/package.json
 +++ b/node_modules/@wordpress/block-editor/package.json
-@@ -38,7 +38,9 @@
+@@ -37,7 +37,9 @@
  			"require": "./build/index.cjs"
  		},
  		"./package.json": "./package.json",

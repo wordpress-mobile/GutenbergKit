@@ -1,8 +1,8 @@
 diff --git a/node_modules/@wordpress/editor/package.json b/node_modules/@wordpress/editor/package.json
-index 4e24fdf..2246644 100644
+index 3655e4a..11490f1 100644
 --- a/node_modules/@wordpress/editor/package.json
 +++ b/node_modules/@wordpress/editor/package.json
-@@ -37,7 +37,8 @@
+@@ -36,7 +36,8 @@
  			"import": "./build-module/index.mjs",
  			"require": "./build/index.cjs"
  		},

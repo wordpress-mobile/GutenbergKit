@@ -342,8 +342,9 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		} );
 
 		// The native server relays WordPress's error status + JSON body; the
-		// middleware rejects with that body as-is (like @wordpress/api-fetch) so
-		// media-utils surfaces WordPress's real message.
+		// middleware rejects with that body (like @wordpress/api-fetch, adding
+		// the status when it has no `data`) so media-utils surfaces WordPress's
+		// real message.
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
 				ok: false,
@@ -362,10 +363,38 @@ describe( 'nativeMediaUploadMiddleware', () => {
 				makePostMediaOptions( makeFile() ),
 				makeNext()
 			)
-		).rejects.toMatchObject( {
+		).rejects.toEqual( {
 			code: 'rest_cannot_create',
-			message: expect.stringContaining( 'not allowed' ),
+			message: 'Sorry, you are not allowed to upload this file type.',
+			data: { status: 403 },
 		} );
+	} );
+
+	it( 'keeps the data of a WordPress error body', async () => {
+		getGBKit.mockReturnValue( {
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'token',
+		} );
+
+		const body = {
+			code: 'rest_upload_file_too_big',
+			message: 'This file is too big.',
+			data: { status: 413, max: 1024 },
+		};
+		global.fetch = vi.fn( () =>
+			Promise.resolve( {
+				ok: false,
+				status: 413,
+				json: () => Promise.resolve( body ),
+			} )
+		);
+
+		await expect(
+			nativeMediaUploadMiddleware(
+				makePostMediaOptions( makeFile() ),
+				makeNext()
+			)
+		).rejects.toBe( body );
 	} );
 
 	it( 'rejects with invalid_json when the error body is not JSON', async () => {
@@ -388,7 +417,10 @@ describe( 'nativeMediaUploadMiddleware', () => {
 				makePostMediaOptions( makeFile() ),
 				makeNext()
 			)
-		).rejects.toMatchObject( { code: 'invalid_json' } );
+		).rejects.toMatchObject( {
+			code: 'invalid_json',
+			data: { status: 502 },
+		} );
 	} );
 
 	it( 'rejects with invalid_json when a 2xx response body is not JSON', async () => {
@@ -403,6 +435,7 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
 				ok: true,
+				status: 200,
 				json: () =>
 					Promise.reject( new SyntaxError( 'Unexpected token' ) ),
 			} )
@@ -413,7 +446,10 @@ describe( 'nativeMediaUploadMiddleware', () => {
 				makePostMediaOptions( makeFile() ),
 				makeNext()
 			)
-		).rejects.toMatchObject( { code: 'invalid_json' } );
+		).rejects.toMatchObject( {
+			code: 'invalid_json',
+			data: { status: 200 },
+		} );
 	} );
 
 	it( 'propagates an abort during the 2xx response body read instead of invalid_json', async () => {
