@@ -256,17 +256,15 @@ export function nativeMediaUploadMiddleware( options, next ) {
 						if ( options.signal?.aborted ) {
 							throw uploadAbortError( options.signal );
 						}
-						return invalidUploadResponseError();
+						return invalidUploadResponseError( response.status );
 					} )
 					.then( ( body ) => {
 						logError( 'Native upload failed', body );
-						// Throw the parsed body verbatim, even if it isn't the usual
-						// WordPress `{ code, message, data }` shape. This is
-						// deliberate: it mirrors `@wordpress/api-fetch`'s
-						// `parseAndThrowError`, so a native-relayed error reaches
-						// consumers identically to a direct upload's. We intentionally
-						// don't reshape or second-guess a non-standard error body.
-						throw body;
+						// Mirror `@wordpress/api-fetch`'s `parseAndThrowError` so a
+						// native-relayed error reaches consumers identically to a
+						// direct upload's: only a missing `data` gains the status, and
+						// a non-standard body is otherwise thrown as is.
+						throw withResponseStatus( body, response.status );
 					} );
 			}
 			// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
@@ -278,7 +276,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
 				if ( options.signal?.aborted ) {
 					throw uploadAbortError( options.signal );
 				}
-				const error = invalidUploadResponseError();
+				const error = invalidUploadResponseError( response.status );
 				logError( 'Native upload returned an invalid response', error );
 				throw error;
 			} );
@@ -363,13 +361,36 @@ function requestQuery( path ) {
  * JSON. Shaped like a WordPress REST error so `@wordpress/media-utils` surfaces
  * it the same way as a real one, on both the non-2xx and 2xx paths.
  *
- * @return {{ code: string, message: string }} The normalized error.
+ * @param {number} status The response's HTTP status.
+ * @return {{ code: string, message: string, data: { status: number } }} The normalized error.
  */
-function invalidUploadResponseError() {
+function invalidUploadResponseError( status ) {
 	return {
 		code: 'invalid_json',
 		message: 'The upload server returned an invalid response.',
+		data: { status },
 	};
+}
+
+/**
+ * Adds the response's status to an error body that has no `data`, as
+ * `@wordpress/api-fetch`'s `parseAndThrowError` does. Any other body is
+ * returned unchanged.
+ *
+ * @param {unknown} body   The parsed error body.
+ * @param {number}  status The response's HTTP status.
+ * @return {unknown} The error to reject with.
+ */
+function withResponseStatus( body, status ) {
+	if (
+		body &&
+		typeof body === 'object' &&
+		! Array.isArray( body ) &&
+		body.data === undefined
+	) {
+		return { ...body, data: { status } };
+	}
+	return body;
 }
 
 /**
@@ -672,15 +693,7 @@ async function parseResponse( response, isOk ) {
 	}
 
 	if ( ! isOk ) {
-		if (
-			body &&
-			typeof body === 'object' &&
-			! Array.isArray( body ) &&
-			body.data === undefined
-		) {
-			throw { ...body, data: { status: response.status } };
-		}
-		throw body;
+		throw withResponseStatus( body, response.status );
 	}
 	return body;
 }
