@@ -19,6 +19,7 @@ import android.view.inputmethod.InputMethodManager
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -96,7 +97,10 @@ const val ASSET_PATH_INDEX = "/assets/index.html"
  * - If `dependencies` is null, dependencies are fetched asynchronously before loading
  */
 class GutenbergView : FrameLayout {
-    private val webView: WebView
+    private var webView: WebView
+
+    /** Whether [webView] replaced one whose renderer died and has yet to load the editor. */
+    private var isWebViewBlank = false
     @Volatile private var isEditorLoaded = false
     private var didFireEditorLoaded = false
 
@@ -254,6 +258,9 @@ class GutenbergView : FrameLayout {
 
     /**
      * Provides access to the internal WebView for tests and advanced use cases.
+     *
+     * The instance is replaced when its renderer process dies, so read this
+     * each time rather than holding on to it.
      */
     val editorWebView: WebView get() = webView
 
@@ -349,10 +356,7 @@ class GutenbergView : FrameLayout {
             .build()
 
         // Create the internal WebView as first child (behind overlays)
-        webView = WebView(context).apply {
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-            alpha = 0f
-        }
+        webView = createWebView()
         addView(webView)
 
         // Create loading overlay views
@@ -387,6 +391,11 @@ class GutenbergView : FrameLayout {
             showProgressPhase()
             prepareAndLoadEditor()
         }
+    }
+
+    private fun createWebView(): WebView = WebView(context).apply {
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        alpha = 0f
     }
 
     /**
@@ -512,6 +521,12 @@ class GutenbergView : FrameLayout {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 onEditorPageStarted(url)
+            }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                if (view === webView) onEditorRenderProcessGone(detail?.didCrash() == true)
+                // Unhandled, Android kills the app along with the renderer.
+                return true
             }
 
             override fun shouldInterceptRequest(
@@ -695,6 +710,7 @@ class GutenbergView : FrameLayout {
      */
     private fun loadEditor(dependencies: EditorDependencies) {
         this.dependencies = dependencies
+        isWebViewBlank = false
 
         // Derive the asset loader authority from the site URL so that the editor
         // document shares the site's origin, making REST API and AJAX requests
@@ -1183,9 +1199,51 @@ class GutenbergView : FrameLayout {
         // may never arrive.
         failPendingTitleAndContentReads()
         handler.post {
-            showSpinnerPhase()
-            webView.reload()
+            if (isWebViewBlank) {
+                loadEditor(dependencies)
+            } else {
+                showSpinnerPhase()
+                webView.reload()
+            }
         }
+    }
+
+    /**
+     * The web view's renderer process died, taking the editor with it.
+     *
+     * Android can't use a web view again once its renderer dies, so it is
+     * replaced, and the editor loads in the new one from the content
+     * [LatestContentProvider] returns. A renderer that died before the editor
+     * loaded may die again on every load, so the crash notice offers a reload
+     * instead of looping.
+     */
+    private fun onEditorRenderProcessGone(didCrash: Boolean) {
+        Log.e(TAG, if (didCrash) "The editor's renderer crashed" else "The system killed the editor's renderer")
+        val wasEditorLoaded = isEditorLoaded
+        isEditorLoaded = false
+        // The dead renderer can never answer these reads.
+        failPendingTitleAndContentReads()
+        replaceWebView()
+        blockInserterDialog?.dismiss()
+        editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
+        if (wasEditorLoaded) {
+            loadEditor(dependencies)
+        } else {
+            showEditorCrashPhase()
+        }
+    }
+
+    private fun replaceWebView() {
+        val deadWebView = webView
+        deadWebView.animate().cancel()
+        removeView(deadWebView)
+        deadWebView.destroy()
+        // A file pick still open would answer the dead web view.
+        filePathCallback = null
+
+        webView = createWebView()
+        addView(webView, 0)
+        isWebViewBlank = true
     }
 
     @JavascriptInterface
