@@ -2,6 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { store as coreStore } from '@wordpress/core-data';
 import { select } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
+import { addQueryArgs } from '@wordpress/url';
 import { getGBKit, getPostPath, getPostReference } from './bridge';
 import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
@@ -36,6 +37,9 @@ const RETRY_DELAYS_MS = [ 500, 2000 ];
 
 /** Longest `Retry-After` delay worth waiting for; longer ones fail at once. */
 const MAX_RETRY_AFTER_MS = 10_000;
+
+/** Header api-fetch's `httpV1Middleware` sets when sending a write as POST. */
+const METHOD_OVERRIDE_HEADER = 'X-HTTP-Method-Override';
 
 /**
  * Initializes the API fetch configuration and middleware.
@@ -93,7 +97,9 @@ export function configureApiFetch() {
 	// Registered last so it runs first, covering preloaded responses too.
 	apiFetch.use( persistedPostOverlayMiddleware );
 	apiFetch.setFetchHandler(
-		withRateLimitRetry( apiFetch.defaultFetchHandler )
+		withRateLimitRetry(
+			withCrossOriginMethodOverride( apiFetch.defaultFetchHandler )
+		)
 	);
 }
 
@@ -1311,6 +1317,63 @@ async function parseResponse( response, isOk ) {
 		throw withResponseStatus( body, response.status );
 	}
 	return body;
+}
+
+/**
+ * Wraps a fetch handler to move the method override of cross-origin requests
+ * from a header to the `_method` query parameter.
+ *
+ * api-fetch sends PUT, PATCH and DELETE as POST with an override header, for
+ * servers that block those methods. WordPress's CORS preflight response does
+ * not allow that header, so a cross-origin write would fail before it is sent.
+ * WordPress reads `_method` as the same override, and a query parameter needs
+ * no preflight approval. Same-origin requests keep the header, as in WP Admin.
+ *
+ * As a fetch handler, it sees the final URL, after every middleware has run,
+ * including api-fetch's own `httpV1Middleware`.
+ *
+ * Exported for testing only.
+ *
+ * @param {FetchHandler} fetchHandler The handler performing the request.
+ * @return {FetchHandler} The handler with cross-origin overrides moved.
+ */
+export function withCrossOriginMethodOverride( fetchHandler ) {
+	return ( options ) => {
+		const method = options.headers?.[ METHOD_OVERRIDE_HEADER ];
+		if ( ! method || ! options.url || ! isPreflighted( options.url ) ) {
+			return fetchHandler( options );
+		}
+
+		const { [ METHOD_OVERRIDE_HEADER ]: _header, ...headers } =
+			options.headers;
+		return fetchHandler( {
+			...options,
+			url: addQueryArgs( options.url, { _method: method } ),
+			headers,
+		} );
+	};
+}
+
+/**
+ * Whether the browser sends a CORS preflight for a request to the given URL.
+ *
+ * Only pages served over HTTP(S) are subject to CORS here: the iOS editor is a
+ * `file:` page with universal access, and its requests are never preflighted.
+ *
+ * @param {string} url The request URL.
+ * @return {boolean} True when the page is HTTP(S) and the URL is cross-origin.
+ */
+function isPreflighted( url ) {
+	const { protocol, origin, href } = window.location;
+	if ( protocol !== 'http:' && protocol !== 'https:' ) {
+		return false;
+	}
+
+	try {
+		return new URL( url, href ).origin !== origin;
+	} catch {
+		return false;
+	}
 }
 
 const defaultPreloadData = {
