@@ -97,6 +97,14 @@ const val ASSET_PATH_INDEX = "/assets/index.html"
  *
  * - If `dependencies` is provided, the editor loads immediately (fast path)
  * - If `dependencies` is null, dependencies are fetched asynchronously before loading
+ *
+ * ## Renderer Crashes
+ *
+ * The view recovers when its WebView's renderer process dies, rather than
+ * letting Android kill the app. An app's WebViews usually share one renderer,
+ * though, and Android still kills the app if any WebView alive at the time
+ * leaves `WebViewClient.onRenderProcessGone` unhandled. Hosts must handle it
+ * in their own WebViews for the app to survive.
  */
 class GutenbergView : FrameLayout {
     private var webView: WebView
