@@ -699,6 +699,29 @@ struct RestRelaySchemeHandlerTests {
         #expect(task.failure == nil)
     }
 
+    @Test("fails the page's request, rather than finishing it, when its work is cancelled partway")
+    func cancellingFailsAPartialResponse() async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            rest: Data("data: two\n\n".utf8)
+        ))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+        handler.cancelAll()
+        await task.waitUntilAnswered()
+
+        #expect(task.failure != nil)
+        #expect(!task.finished, "finished the page's request with part of the body")
+        #expect(task.body == Data("data: one\n\n".utf8))
+    }
+
     @Test("fails the page's request when the response breaks off partway")
     func failsWhenTheResponseBreaksOff() async throws {
         let gate = StubURLProtocol.Gate()

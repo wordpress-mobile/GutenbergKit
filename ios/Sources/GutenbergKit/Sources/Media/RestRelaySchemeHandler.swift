@@ -56,6 +56,12 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
 
     var activeRequestCount: Int { active.count }
 
+    /// Cancels the work answering every request, as a teardown would. Each request
+    /// still gets an answer.
+    func cancelAll() {
+        active.cancelAll()
+    }
+
     /// Answers the task under `key` with the relay's response, sending each chunk of the
     /// body as it arrives. WebKit passes each chunk to the page's `fetch` straight away,
     /// with Lockdown Mode on or off (measured in the iOS 27.0 Simulator).
@@ -71,6 +77,9 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
                 guard active.task(for: key) != nil else { return }
                 task.didReceive(chunk)
             }
+            // Cancelling this task ends the body early without an error. Fail the
+            // page's request rather than finish it with part of the body.
+            try Task.checkCancellation()
             active.finish(key)
         } catch {
             active.fail(key, with: error)
