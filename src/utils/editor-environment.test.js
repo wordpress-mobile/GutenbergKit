@@ -312,7 +312,7 @@ describe( 'installFetchLayers', () => {
 	// outermost and sees a request first.
 	it( 'puts the network log outside the relay, so it records the request the editor made', () => {
 		getGBKit.mockReturnValue( {
-			restRelay: { baseURL: 'gbk-rest://relay/proxy/' },
+			restRelay: { endpoint: 'gbk-rest://relay/fetch' },
 		} );
 
 		installFetchLayers();
@@ -323,7 +323,7 @@ describe( 'installFetchLayers', () => {
 	it( 'puts the network log inside the relay when native code reports relayed requests', () => {
 		getGBKit.mockReturnValue( {
 			restRelay: {
-				baseURL: 'gbk-rest://relay/proxy/',
+				endpoint: 'gbk-rest://relay/fetch',
 				reportsRequests: true,
 			},
 		} );

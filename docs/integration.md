@@ -135,8 +135,9 @@ The editor reports its network requests in two places:
     the request ends.
 -   **Requests native code sends**: give the editor an `EditorHTTPClient` with an
     `EditorHTTPClientDelegate`. That covers loading the editor and its assets, media
-    uploads and deletes, and the page's REST API requests, which native code relays to the
-    site.
+    uploads and deletes, and the page's `fetch` requests, which native code relays. Those
+    go to the site's REST API and to any other host the page calls, such as a plugin's own
+    service, so don't assume a request is for the site.
 
 The delegate's task callbacks take `URLSession`'s own types, and arrive for every request,
 whatever becomes of it: `didCreateTask(_:)` when it starts, `task(_:didFinishCollecting:)`
@@ -177,8 +178,12 @@ With a delegate set, the page leaves the requests it relays through native code 
 delegate is called from `URLSession`'s delegate queue and from the client's actor, so it
 must be thread-safe.
 
-Each request the delegate sees carries the site's `Authorization` header, as sent. Redact
-it before storing requests anywhere it shouldn't be kept.
+Each request the delegate sees carries its `Authorization` header, as sent. That is usually
+the site's credential, but a caller's own token is sent as it is — Jetpack AI sends one to
+WordPress.com. Native code never adds the site's credential to a request for another host,
+but it doesn't remove one the page sent either, so a request to another host can carry it.
+Redact the header on every request before storing requests anywhere it shouldn't be kept,
+not only where it matches the site credential.
 
 ## Android Integration
 

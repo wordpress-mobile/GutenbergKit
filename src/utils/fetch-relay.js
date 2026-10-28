@@ -1,8 +1,5 @@
 import { getGBKit } from './bridge';
-import { debug, warn } from './logger';
-
-/** Hostnames that name the loopback interface. */
-const LOOPBACK_HOSTNAMES = new Set( [ 'localhost', '127.0.0.1', '[::1]' ] );
+import { debug } from './logger';
 
 /**
  * The relay wrapper for the host's configuration, or `null` when the host is
@@ -11,39 +8,34 @@ const LOOPBACK_HOSTNAMES = new Set( [ 'localhost', '127.0.0.1', '[::1]' ] );
  * @return {import('./fetch-chain').FetchWrapper|null} The wrapper.
  */
 export function createRelayFetchWrapper() {
-	const { restRelay, siteApiRoot } = getGBKit();
+	const { restRelay } = getGBKit();
 
-	if ( ! restRelay || ! siteApiRoot ) {
+	if ( ! restRelay ) {
 		return null;
 	}
 
-	// The wrapper parses the root when it is installed, inside the editor's
-	// boot sequence, so a root that is not a URL is caught here — costing the
-	// editor its relay rather than the boot.
-	try {
-		new URL( siteApiRoot );
-	} catch {
-		warn(
-			`Not relaying site REST requests: the site API root ${ siteApiRoot } is not a URL`
-		);
-		return null;
-	}
-
-	debug( `Relaying site REST requests through ${ restRelay.baseURL }` );
-	return ( next ) => createRelayFetch( next, { restRelay, siteApiRoot } );
+	debug( `Relaying requests through ${ restRelay.endpoint }` );
+	return ( next ) => createRelayFetch( next, { restRelay } );
 }
 
 /**
- * Wraps `fetch` so requests for the site's REST API go through the native
- * relay.
+ * Wraps `fetch` so requests to other origins go through the native relay.
  *
  * Under iOS Lockdown Mode the editor's `file://` page loses its CORS exemption
  * and WordPress sanitizes its `Origin: file://` into an empty
  * `Access-Control-Allow-Origin`, so every direct REST request rejects. The
  * native host serves a URL scheme in the editor's own web view and advertises
- * it as `GBKit.restRelay`; it forwards each request to the site's REST API
- * natively and responds with CORS headers the web view accepts. Every request
- * takes this path, Lockdown Mode or not, so there is one path to keep working.
+ * it as `GBKit.restRelay`; it sends each request on natively and responds with
+ * CORS headers the web view accepts. Every request takes this path, Lockdown
+ * Mode or not, so there is one path to keep working.
+ *
+ * Each request goes to `restRelay.endpoint`, with the URL it was for in the
+ * `url` query parameter. Native code decides how to send it: a request for the
+ * site's REST API gets the site credential if it has no `Authorization` of its
+ * own, and native code never adds it to a request for any other host. An
+ * `Authorization` the request already has is sent on as it is, wherever the
+ * request goes, so which hosts get the site credential is decided here, on the
+ * page.
  *
  * The relay wraps `fetch` rather than registering an api-fetch middleware or
  * fetch handler, either of which would replace api-fetch's own request building
@@ -51,17 +43,12 @@ export function createRelayFetchWrapper() {
  * every parsing rule — and leave us reimplementing a package we do not control.
  * Below `fetch`, this layer only changes where the request goes.
  *
- * @param {typeof fetch}                 next               The fetch to delegate to.
- * @param {Object}                       config             Relay configuration.
- * @param {import('./bridge').RestRelay} config.restRelay   Where the relay is.
- * @param {string}                       config.siteApiRoot The site's REST API root.
+ * @param {typeof fetch}                 next             The fetch to delegate to.
+ * @param {Object}                       config           Relay configuration.
+ * @param {import('./bridge').RestRelay} config.restRelay Where the relay is.
  * @return {typeof fetch} The wrapped fetch.
  */
-export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
-	const apiRoot = normalizedApiRoot( siteApiRoot );
-	const relayRoot = restRelay.baseURL;
-	const apiRootHost = canonicalHost( apiRoot.hostname );
-
+export function createRelayFetch( next, { restRelay } ) {
 	// `async` so that a throw becomes a rejection, as it would from the `fetch`
 	// this stands in for. `new Headers()` rejects a malformed name or value by
 	// throwing, and api-fetch's middleware chain calls its `next` synchronously
@@ -73,30 +60,38 @@ export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
 		// what it asks: the connectivity probe in `offline-indicator` would
 		// report the site reachable whenever native code answered, which is
 		// always.
-		if ( init?.mode === 'no-cors' ) {
+		const isRequest = input instanceof Request;
+		const mode = init?.mode ?? ( isRequest ? input.mode : undefined );
+		if ( mode === 'no-cors' ) {
 			return next( input, init );
 		}
 
 		const target = requestURL( input );
-		const upstreamPath = target
-			? relayUpstreamPath( target, apiRoot, apiRootHost )
-			: null;
-
-		// Not a site REST request: native uploads over `gbk-upload:`,
-		// `blob:`/`data:`/`gbk-media-file:` reads, a third party's own API.
-		// Those keep the network path they had before a relay existed.
-		if ( upstreamPath === null ) {
+		if ( target === null || ! isRelayed( target ) ) {
 			return next( input, init );
 		}
 
-		const headers = new Headers( init?.headers );
-		// The site credential is injected natively; the page's copy is dropped
-		// so there is one source for it.
-		headers.delete( 'Authorization' );
-		const body = await bufferedBody( init?.body, headers );
+		// A `Request` is rebuilt with `init` over it, as `fetch` would. Only
+		// once it is relayed: the rebuilt one takes over its body, so one
+		// passed on as it is would arrive with its body already used.
+		const request = isRequest ? new Request( input, init ) : null;
+		const headers = new Headers(
+			request ? request.headers : init?.headers
+		);
+		// A `Request`'s body is read whole into an `ArrayBuffer`, the form
+		// WebKit delivers to a scheme handler; see `bufferedBody`.
+		const body = request
+			? request.body && ( await request.arrayBuffer() )
+			: await bufferedBody( init?.body, headers );
+		const url = encodeURIComponent( target.href );
 
-		return next( relayRoot + upstreamPath, {
+		return next( `${ restRelay.endpoint }?url=${ url }`, {
 			...init,
+			...( request && {
+				method: request.method,
+				mode: request.mode,
+				signal: request.signal,
+			} ),
 			headers,
 			body,
 			// The relay answers `Access-Control-Allow-Origin: *`, which a
@@ -109,208 +104,47 @@ export function createRelayFetch( next, { restRelay, siteApiRoot } ) {
 }
 
 /**
- * The site API root as a `URL`, slash-terminated, with the route value of a
- * plain-permalink root decoded.
- *
- * Slash-terminated so a sibling cannot match the root as a prefix
- * (`https://site/wp-json` would otherwise match `https://site/wp-jsonx/…`),
- * and parsed so both sides of every comparison normalize the same way —
- * default ports collapsed, host lowercased.
- *
- * A plain-permalink root carries its route in the query, and WordPress
- * advertises it percent-encoded — `index.php?rest_route=%2F` — because it
- * builds the URL through `add_query_arg`. The separators are decoded before
- * the slash is added so it lands inside the route value: appended after
- * `%2F`, it would make a root that no path can extend, since WordPress reads
- * `rest_route=%2F/wp/v2/posts` as the route `//wp/v2/posts`. `RestRelay`
- * normalizes the same way, so both sides agree on what the root is.
- *
- * @param {string} siteApiRoot The site's REST API root as configured.
- * @return {URL} The normalized root.
- */
-function normalizedApiRoot( siteApiRoot ) {
-	const separator = siteApiRoot.indexOf( '?' );
-	const root =
-		separator === -1
-			? siteApiRoot
-			: siteApiRoot.slice( 0, separator ) +
-			  decodeSlashes( siteApiRoot.slice( separator ) );
-	return new URL( root.endsWith( '/' ) ? root : `${ root }/` );
-}
-
-/**
- * A URL component with its percent-encoded slashes decoded, and nothing else.
- *
- * Only the separators are decoded so any other encoded byte reaches the site
- * exactly as it was sent, rather than decoded once here and once more by PHP.
- *
- * @param {string} component A URL component.
- * @return {string} The component with `%2F` spelled `/`.
- */
-function decodeSlashes( component ) {
-	return component.replace( /%2f/gi, '/' );
-}
-
-/**
- * A hostname reduced to the form its aliases share: every loopback spelling
- * collapses to one, and a `www.` prefix is dropped.
- *
- * The native relay's redirect guard reads redirect targets through the same
- * spellings (`RestRelay.RedirectGuard.canonicalHost`), and the two must stay
- * the same: a spelling relayed here and refused there fails every request on
- * a site whose canonical redirect uses it.
- *
- * @param {string} hostname A URL hostname.
- * @return {string} The canonical form.
- */
-function canonicalHost( hostname ) {
-	if ( LOOPBACK_HOSTNAMES.has( hostname ) ) {
-		return 'localhost';
-	}
-	return hostname.replace( /^www\./, '' );
-}
-
-/**
  * The URL a `fetch` call addresses, or `null` when it cannot be determined.
- *
- * A `Request` object returns `null` rather than being relayed: rewriting one
- * means rebuilding it, and nothing in the editor's REST path constructs one —
- * api-fetch always calls `fetch( url, init )`. Such a request keeps the direct
- * path it had before a relay existed.
  *
  * @param {string|URL|Request} input The first argument to `fetch`.
  * @return {URL|null} The target URL.
  */
 function requestURL( input ) {
-	if ( typeof input !== 'string' && ! ( input instanceof URL ) ) {
-		return null;
-	}
 	try {
-		// Resolved against the document so a relative URL becomes a `file://`
-		// (or dev-server) URL, which cannot match the API root and so is never
-		// mistaken for a site request.
-		return new URL( input, document.baseURI );
+		// Resolved against the document, so a relative URL becomes a `file://`
+		// (or dev-server) URL, which `isRelayed` leaves alone. A `Request`'s
+		// URL is already absolute.
+		return new URL(
+			input instanceof Request ? input.url : input,
+			document.baseURI
+		);
 	} catch {
 		return null;
 	}
 }
 
 /**
- * The upstream path for a relayed request: the part of its target below the
- * site API root, without a leading slash. `null` for anything else.
+ * Whether a request goes through the relay: an `http` or `https` request to
+ * another origin.
  *
- * **Host aliases are tolerated; other hosts and path differences are not.**
- * WordPress builds `Link` headers and `_links` hrefs from `home_url()`, which
- * need not spell the host the app was configured with — `www.` versus bare, or
- * wp-env's `localhost` versus the `127.0.0.1` its runtime writes into
- * `WP_SITEURL` (the e2e fixtures work around the same thing by matching uploads
- * on path rather than hostname, see `e2e/wp-env-fixtures.js`). Only the scheme
- * may differ beyond that — an `http` `siteurl` behind a TLS-terminating proxy.
- * The port has to match: another port on the same host is another server, and
- * answering its request with the site's response is a different bug from the
- * one this tolerance exists to fix. A *path* difference is likewise a different
- * resource: in a subdirectory multisite `https://site/a/wp-json/` and
- * `https://site/b/wp-json/` are separate sites.
+ * Left on their own path: anything that isn't `http` or `https` — native
+ * uploads over `gbk-upload:`, `blob:`/`data:`/`gbk-media-file:` reads, the
+ * relay itself — and a request to the page's own origin, which CORS doesn't
+ * apply to. That origin is a dev server's when the editor is loaded from one.
  *
- * Anything else keeps the direct path it had before a relay existed, because
- * rewriting it would send a third party's request to the user's own site with
- * the site credential attached. The cost is an alias this cannot recognize —
- * a site reached by LAN IP whose `home_url()` says `localhost`, a mapped
- * domain, a migration — where a paginated `Link` target goes direct and fails
- * under Lockdown Mode. Growing the list of spellings cannot close that: the
- * fix is for the relay to canonicalize the URLs the site emits, since it knows
- * the response came from the configured root and this layer can only guess.
+ * A URL with a user name or password is left alone too, so `fetch` refuses it
+ * as it would without the relay. Native code refuses one as well.
  *
- * @param {URL}    target      The request's target.
- * @param {URL}    apiRoot     The site's REST API root, normalized and slash-terminated.
- * @param {string} apiRootHost `apiRoot`'s hostname in canonical form.
- * @return {string|null} The upstream path, or `null` when it is not a site request.
+ * @param {URL} target The request's target.
+ * @return {boolean} Whether to relay it.
  */
-function relayUpstreamPath( target, apiRoot, apiRootHost ) {
-	if (
-		canonicalHost( target.hostname ) !== apiRootHost ||
-		target.port !== apiRoot.port
-	) {
-		return null;
-	}
-
-	if ( apiRoot.search ) {
-		return queryRoutedPath( target, apiRoot );
-	}
-
-	const aliased = new URL( target );
-	// Only the scheme and the host spelling are left to reconcile; the port
-	// matched above, and assigning `hostname` leaves it in place.
-	aliased.protocol = apiRoot.protocol;
-	aliased.hostname = apiRoot.hostname;
-
-	if ( ! aliased.href.startsWith( apiRoot.href ) ) {
-		return null;
-	}
-	return aliased.href.slice( apiRoot.href.length );
-}
-
-/**
- * The upstream path for a request to a root that carries its route in the
- * query — plain permalinks, `https://site/index.php?rest_route=/`.
- *
- * A prefix match on the href cannot decide this shape: the root spells the
- * route `/`, and every request that reaches here spells it `%2F`. api-fetch's
- * locale middleware rebuilds the query through `addQueryArgs`, and WordPress
- * builds pagination `Link` URLs through `add_query_arg`; both percent-encode
- * every value. So the route is read out of the query by name, its separators
- * decoded, and the other parameters are carried verbatim after a `?` — the
- * relay merges them into the root's query, as `createRootURLMiddleware` did.
- *
- * The host and port were matched by the caller. The scheme is not compared,
- * for the same reason it is not for a pretty-permalink root: an `http`
- * `siteurl` behind a TLS-terminating proxy.
- *
- * @param {URL} target  The request's target.
- * @param {URL} apiRoot The site's REST API root, whose query names the route.
- * @return {string|null} The upstream path, or `null` when it is not a site request.
- */
-function queryRoutedPath( target, apiRoot ) {
-	if ( target.pathname !== apiRoot.pathname ) {
-		return null;
-	}
-
-	// The root's query is the single `rest_route=/` pair `get_rest_url()`
-	// emits; on a namespaced site the value is longer (`/sites/1/`), but it
-	// is still the one parameter every request continues.
-	const rootRoute = splitQueryPair( apiRoot.search.slice( 1 ) );
-	const pairs = target.search.slice( 1 ).split( '&' );
-	const index = pairs.findIndex(
-		( pair ) => splitQueryPair( pair ).name === rootRoute.name
+function isRelayed( target ) {
+	return (
+		[ 'http:', 'https:' ].includes( target.protocol ) &&
+		target.origin !== window.location.origin &&
+		! target.username &&
+		! target.password
 	);
-	if ( index === -1 ) {
-		return null;
-	}
-
-	const route = decodeSlashes( splitQueryPair( pairs[ index ] ).value );
-	if ( ! route.startsWith( rootRoute.value ) ) {
-		return null;
-	}
-
-	const path = route.slice( rootRoute.value.length );
-	const query = pairs.filter( ( _, i ) => i !== index ).join( '&' );
-	return query ? `${ path }?${ query }` : path;
-}
-
-/**
- * A `name=value` query pair split at its first `=`, verbatim.
- *
- * @param {string} pair One pair of a query string.
- * @return {{name: string, value: string}} The name and the value, the latter `''` if absent.
- */
-function splitQueryPair( pair ) {
-	const separator = pair.indexOf( '=' );
-	return separator === -1
-		? { name: pair, value: '' }
-		: {
-				name: pair.slice( 0, separator ),
-				value: pair.slice( separator + 1 ),
-		  };
 }
 
 /**
@@ -319,12 +153,13 @@ function splitQueryPair( pair ) {
  * WebKit hands a scheme handler a string or an `ArrayBuffer` body, and drops a
  * `Blob` — or a `FormData` holding one — without an error: the request arrives
  * empty and still succeeds. So every body that is not a string is read into an
- * `ArrayBuffer` first, which costs the body's size in memory. That suits what
- * reaches here: JSON, and the few-megabyte chunks a block's own uploader
- * sends. Core's media uploads reach here only from an editor without site
- * credentials, which doesn't offer native uploads. Otherwise
- * `nativeMediaUploadMiddleware` sends them to native code in chunks before they
- * become a request.
+ * `ArrayBuffer` first, which costs the body's size in memory, and native code
+ * holds it whole again to send it. Most bodies are small: JSON, and the
+ * few-megabyte chunks a block's own uploader sends. Core's media uploads reach
+ * here only from an editor without site credentials, which doesn't offer native
+ * uploads; otherwise `nativeMediaUploadMiddleware` sends them to native code in
+ * chunks before they become a request. A large upload to another host, such as
+ * a file a plugin sends straight to its own storage, is held whole too.
  *
  * Every body, rather than those that are an `instanceof Blob` or `FormData`:
  * one made in another window — an iframe's — is an instance of that window's

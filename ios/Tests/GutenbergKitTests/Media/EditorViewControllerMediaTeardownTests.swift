@@ -157,8 +157,8 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         editor.updateConfiguration(updated)
         editor.prepareNativeHandlers()
 
-        let relayURL = try #require(URL(string: "gbk-rest://relay/proxy/wp/v2/posts"))
-        #expect(editor.restRelaySchemeHandler.relay.upstreamURL(for: relayURL)?.host() == "updated.example.com")
+        let request = try #require(URL(string: "https://updated.example.com/wp-json/wp/v2/posts"))
+        #expect(editor.restRelaySchemeHandler.relay.destination(of: request) == .siteAPI(request))
     }
 
     // MARK: - Network reporting
@@ -184,8 +184,8 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         try await loadBlankPage(in: editor)
 
         _ = try await editor.webView.callAsyncJavaScript(
-            "try { await fetch('gbk-rest://relay/proxy/wp/v2/posts'); } catch {} return true;",
-            arguments: [:],
+            "try { await fetch(url); } catch {} return true;",
+            arguments: ["url": RestRelayHandleTests.relayURL(for: "http://127.0.0.1:1/wp-json/wp/v2/posts").absoluteString],
             in: nil,
             contentWorld: .page
         )

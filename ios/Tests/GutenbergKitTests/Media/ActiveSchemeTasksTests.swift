@@ -12,7 +12,7 @@ struct ActiveSchemeTasksTests {
     @Test("work for a stopped request can't reach a new one at the same address")
     func staleWorkMissesANewRequest() throws {
         var active = ActiveSchemeTasks()
-        let task = FakeSchemeTask(request: URLRequest(url: URL(string: "gbk-rest://relay/proxy/wp/v2/posts")!))
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
 
         var stoppedKey: ActiveSchemeTasks.Key?
         active.start(task) { key in
