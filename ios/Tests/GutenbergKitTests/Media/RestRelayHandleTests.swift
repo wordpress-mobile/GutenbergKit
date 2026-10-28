@@ -791,8 +791,15 @@ struct RestRelaySchemeHandlerTests {
 
     /// Waits for `condition` without giving up the main actor, so nothing else runs on
     /// it in the meantime. Fails the test if `condition` hasn't held within `timeout`.
+    ///
+    /// `condition` has to become true without the main thread. Otherwise this can only
+    /// time out.
+    ///
+    /// The timeout is shorter than `patientTimeout`, because waiting here blocks every
+    /// other main-actor test. Call it only once the response has started arriving, so
+    /// a slow CI machine's start-up delay is already over.
     private func holdMainActor(
-        timeout: Duration = patientTimeout,
+        timeout: Duration = .seconds(10),
         sourceLocation: SourceLocation = #_sourceLocation,
         until condition: () -> Bool
     ) throws {
