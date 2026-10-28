@@ -124,10 +124,17 @@ struct RestRelay: Sendable {
     /// It is set on the session, not on each request: a request's own
     /// `timeoutInterval` overrides the session's only once it is set, and
     /// `URLRequest(url:)` doesn't set it.
+    ///
+    /// The session has no cache. An ephemeral session still caches in memory,
+    /// and `URLCache` looks a response up by its URL, not by who asked for it.
+    /// Every frame shares this session, and callers send their own tokens, so
+    /// a response cached for one caller would answer another. The page can't
+    /// opt out either: a `fetch`'s `cache` option never reaches the relay.
     static let sharedSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = EditorHTTPClient.uploadInactivityTimeout
         configuration.httpCookieStorage = nil
+        configuration.urlCache = nil
         return URLSession(configuration: configuration)
     }()
 

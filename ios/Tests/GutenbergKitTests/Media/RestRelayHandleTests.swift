@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GutenbergKitHTTP
 @testable import GutenbergKit
 
 /// Covers what ``RestRelay/handle(_:)`` sends upstream and what it hands back,
@@ -17,6 +18,46 @@ struct RestRelayHandleTests {
     @Test("waits as long as an upload for a slow site")
     func sharedSessionWaitsAsLongAsAnUpload() {
         #expect(RestRelay.sharedSession.configuration.timeoutIntervalForRequest == EditorHTTPClient.uploadInactivityTimeout)
+    }
+
+    @Test("doesn't answer one caller with a response cached for another")
+    func sharedSessionDoesNotShareCachedResponses() async throws {
+        // A server may let a client cache a response to a request that carried
+        // a token. `URLCache` keys on the URL alone, and the shared session
+        // serves every frame, so a cached copy would reach a caller that sent
+        // another token. A stubbed `URLProtocol` is never answered from the
+        // cache, so this needs a real server.
+        let server = try await HTTPServer.start(name: "relay-cache-test", requiresAuthentication: false) { request in
+            HTTPResponse(
+                status: 200,
+                headers: [("Content-Type", "text/plain"), ("Cache-Control", "private, max-age=600")],
+                body: Data((request.parsed.header("Authorization") ?? "none").utf8)
+            )
+        }
+        defer { server.stop() }
+
+        let site = "http://127.0.0.1:\(server.port)"
+        let relay = RestRelay(
+            configuration: EditorConfigurationBuilder(
+                postType: .post,
+                siteURL: URL(string: site)!,
+                siteApiRoot: URL(string: "\(site)/wp-json/")!,
+                authHeader: "Bearer test-token"
+            ).build()
+        )
+        // A URL of its own, so no other test's response is in the cache.
+        let url = Self.relayURL(for: "\(site)/wp-json/wp/v2/users/me?test=\(UUID().uuidString)")
+
+        var first = URLRequest(url: url)
+        first.setValue("Bearer TOKEN-A", forHTTPHeaderField: "Authorization")
+        let firstResponse = try await relay.handle(first)
+
+        var second = URLRequest(url: url)
+        second.setValue("Bearer TOKEN-B", forHTTPHeaderField: "Authorization")
+        let secondResponse = try await relay.handle(second)
+
+        #expect(String(decoding: firstResponse.body, as: UTF8.self) == "Bearer TOKEN-A")
+        #expect(String(decoding: secondResponse.body, as: UTF8.self) == "Bearer TOKEN-B")
     }
 
     // MARK: - Request rewriting
