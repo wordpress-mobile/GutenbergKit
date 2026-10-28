@@ -382,10 +382,13 @@ struct RestRelay: Sendable {
     /// follows within the API root arrive without it, as they would from `fetch`.
     ///
     /// ``UpstreamTask`` is the task's delegate, and forwards each redirect to it.
+    /// The guard isn't a delegate itself: given to a task directly, it would
+    /// replace ``UpstreamTask``: the response would stop streaming, and the
+    /// observer would hear nothing.
     ///
     /// `@unchecked Sendable`: the root is a `let` set at init; the refusal
     /// and the request's `Authorization` are kept under a lock.
-    final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    final class RedirectGuard: @unchecked Sendable {
         /// A redirect the guard refused.
         struct Refusal: Equatable {
             /// Where the redirect went, without any user name or password.

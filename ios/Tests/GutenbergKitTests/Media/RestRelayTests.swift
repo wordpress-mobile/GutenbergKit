@@ -587,7 +587,7 @@ struct RestRelayTests {
         )
     }
 
-    /// A task for the delegate signature, which the guard never inspects.
+    /// A task to pass the guard's `urlSession(_:task:…)` method, which never reads it.
     ///
     /// Built once from a session the tests own and immediately invalidated:
     /// asking `URLSession.shared` for one per assertion left a suspended task
