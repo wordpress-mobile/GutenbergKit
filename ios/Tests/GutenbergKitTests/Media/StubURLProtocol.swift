@@ -19,6 +19,10 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         var body = Data()
         /// When set, the request fails with this error instead of responding.
         var failure: (any Error)?
+        /// When set, the stub answers with a redirect to this URL, using `status`.
+        /// If the session refuses the redirect, the 3xx is the response, as it would
+        /// be from a server.
+        var redirect: URL?
 
         /// If set, the stub sends the status, headers and `body`, then waits for
         /// the test to open the gate. Then it sends `rest`, or fails with
@@ -161,6 +165,22 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
         if let failure = registration.stub.failure {
             client?.urlProtocol(self, didFailWithError: failure)
+            return
+        }
+
+        if let redirect = registration.stub.redirect {
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: registration.stub.status,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": redirect.absoluteString]
+            )!
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: redirect), redirectResponse: response)
+            // A custom protocol has to send the 3xx itself for the session to end
+            // with it when the redirect is refused. Without this, the task waits
+            // until it times out.
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocolDidFinishLoading(self)
             return
         }
 

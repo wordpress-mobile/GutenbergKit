@@ -442,6 +442,20 @@ struct RestRelayHandleTests {
         #expect(recorder.events.last == "failed")
     }
 
+    @Test("refuses a site API redirect to another host, rather than following it")
+    func refusesRedirectToAnotherHost() async throws {
+        let recorder = TaskEventRecorder()
+
+        let exchange = try await relay(status: 302, redirect: "https://elsewhere.example/wp-json/wp/v2/posts", observer: recorder)
+
+        #expect(exchange.response.status == 502)
+        #expect(String(decoding: exchange.response.body, as: UTF8.self).contains("relay_redirect_refused"))
+        #expect(exchange.response.header("Location") == nil)
+        // The relay answers before the upstream task has finished.
+        try await waitUntil { recorder.events.contains("completed") }
+        #expect(!recorder.events.contains("performed"), "reported the refused redirect as the answer")
+    }
+
     @Test("refuses a path outside the API root before sending anything")
     func refusesForbiddenPath() async throws {
         let exchange = try await relay(target: Self.relayTarget("https://example.com/wp-json/../wp-admin/"))
@@ -491,6 +505,7 @@ struct RestRelayHandleTests {
         responseHeaders: [String: String] = [:],
         responseBody: Data = Data(),
         failure: (any Error)? = nil,
+        redirect: String? = nil,
         observer: (any EditorHTTPClientDelegate)? = nil,
         siteApiRoot: String = "https://example.com/wp-json/",
         siteURL: String = "https://example.com"
@@ -499,7 +514,8 @@ struct RestRelayHandleTests {
             status: status,
             headers: responseHeaders,
             body: responseBody,
-            failure: failure
+            failure: failure,
+            redirect: redirect.map { URL(string: $0)! }
         )
         let stubbed = StubURLProtocol.makeSession(stub: stub)
         defer { stubbed.finish() }
