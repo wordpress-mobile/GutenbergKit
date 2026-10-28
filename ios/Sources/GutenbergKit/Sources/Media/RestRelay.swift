@@ -23,7 +23,10 @@ import OSLog
 /// - A URL below the site's REST API root goes to the site, and gets the site
 ///   credential when the caller sent no `Authorization` of its own.
 /// - Any other URL — a plugin calling its own service, for example — goes
-///   where it was going, and never carries the site credential.
+///   where it was going. The relay never adds the site credential to it.
+///
+/// A caller's own `Authorization` is always sent as it arrived. See
+/// ``authorization(sentByCaller:toSiteAPI:)``.
 ///
 /// ## Security
 ///
@@ -32,12 +35,12 @@ import OSLog
 ///   and the relay attaches the site credential to what they send to the
 ///   site's REST API. Why that is left as it is: "Who can use the schemes" in
 ///   `docs/code/media-uploads.md`.
-/// - The site credential only goes to a URL the relay builds itself, from the
-///   configured API root and the path below it. The page's URL is matched
-///   against the root but never sent with the credential, so a mistake in the
-///   matching can send a request to the user's own site, but can't send the
-///   credential to another host. The built URL is re-checked against the
-///   root, and redirects away from it are refused.
+/// - The relay adds the site credential only to a URL it builds itself, from
+///   the configured API root and the path below it. The page's URL is matched
+///   against the root but never sent with the added credential, so a mistake
+///   in the matching can send a request to the user's own site, but can't make
+///   the relay send the credential to another host. The built URL is
+///   re-checked against the root, and redirects away from it are refused.
 /// - Which route *within* the site is reached is the caller's to choose. The
 ///   query is forwarded as-is, and WordPress registers `rest_route` as a public
 ///   query variable that `WP::parse_request()` prefers over the route the path
@@ -45,10 +48,12 @@ import OSLog
 ///   defend: every route reachable that way is one the editor may request
 ///   through the relay directly.
 /// - A caller's own `Authorization` is sent as it is, wherever the request
-///   goes. It is the caller's credential, to send where it likes — Jetpack AI
-///   signs its requests to WordPress.com with a token of its own. The site
-///   credential is the relay's to guard: see
-///   ``authorization(sentByCaller:toSiteAPI:)``.
+///   goes, even when it is the site credential. Jetpack AI signs its requests
+///   to WordPress.com with a token of its own, and the editor's jQuery AJAX setup
+///   sends the site credential to the site's `admin-ajax.php`. Which hosts the page sends the site
+///   credential to is decided on the page, before the request reaches the
+///   relay. Removing it here would protect nothing: the page already holds the
+///   credential, so it can send it anywhere.
 /// - The relay reaches any `https` URL, so any frame in the web view can read
 ///   another host's response without CORS. Without Lockdown Mode the editor
 ///   page can do that anyway; a sandboxed frame couldn't before.
@@ -83,7 +88,7 @@ struct RestRelay: Sendable {
     private let apiRoot: SiteAPIRoot
 
     /// The site credential: added to a site API request that has no
-    /// `Authorization` of its own, and never sent to another host.
+    /// `Authorization` of its own, and never added to any other request.
     private let authHeader: String
 
     /// The session upstream requests are sent on.
@@ -314,10 +319,11 @@ struct RestRelay: Sendable {
     /// but its path walks out of it. What counts as below the root, host
     /// aliases included, is ``SiteAPIRoot/path(below:)``'s to say.
     ///
-    /// Anything else goes where it was going, without the site credential. The
-    /// cost is an alias this can't recognize — a site reached by LAN IP whose
-    /// `home_url()` says `localhost`, a mapped domain, a migration — where a
-    /// paginated `Link` target reaches the site without the credential.
+    /// Anything else goes where it was going, and the relay doesn't add the
+    /// site credential to it. The cost is an alias this can't recognize — a
+    /// site reached by LAN IP whose `home_url()` says `localhost`, a mapped
+    /// domain, a migration — where a paginated `Link` target the caller sent
+    /// without a credential reaches the site without one.
     func destination(of url: URL) -> Destination? {
         guard let path = apiRoot.path(below: url) else {
             return .otherHost(url)
@@ -329,28 +335,16 @@ struct RestRelay: Sendable {
 
     /// The `Authorization` header to send upstream, or `nil` for none.
     ///
-    /// The caller's own header is sent as it is. The site credential is added
-    /// to a request for the site's REST API that has none, and removed from a
-    /// request for any other host. The page can put it there: api-fetch's
-    /// `tokenAuthMiddleware` adds it to every request it makes, whatever the
-    /// host.
-    ///
-    /// It can arrive joined to the caller's own value. When a caller writes its
-    /// header as `authorization` and api-fetch adds `Authorization`, `Headers`
-    /// keeps both, joined with ", ". `Headers` also trims whitespace from each
-    /// value. So the site credential is looked for as a trimmed, comma-separated
-    /// part, and only that part is removed.
+    /// The caller's own header is sent as it arrived, wherever the request
+    /// goes. It is never removed or replaced, even when it is the site
+    /// credential, or the site credential joined to another value. A request
+    /// that arrives without one gets the site credential if it is for the
+    /// site's REST API, and nothing otherwise.
     func authorization(sentByCaller callerValue: String?, toSiteAPI: Bool) -> String? {
-        if toSiteAPI {
-            return callerValue ?? (authHeader.isEmpty ? nil : authHeader)
+        if let callerValue {
+            return callerValue
         }
-        let siteCredential = authHeader.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let callerValue, !siteCredential.isEmpty else { return callerValue }
-
-        let parts = callerValue.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let kept = parts.filter { $0 != siteCredential }
-        guard kept.count < parts.count else { return callerValue }
-        return kept.isEmpty ? nil : kept.joined(separator: ", ")
+        return toSiteAPI && !authHeader.isEmpty ? authHeader : nil
     }
 
     /// Refuses redirects that leave the site API root.
@@ -375,7 +369,8 @@ struct RestRelay: Sendable {
     /// a scheme request's body is `Data`, held in memory.
     ///
     /// Without an API root it follows a redirect to any host. That is the
-    /// guard for a request to another host, which carries no site credential.
+    /// guard for a request to another host, which the relay adds no site
+    /// credential to.
     ///
     /// Every request, with a root or without, follows a redirect only to an
     /// `http` or `https` URL without a user name or password, and never from

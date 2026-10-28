@@ -6,7 +6,7 @@ import Testing
 /// URL the relay builds from the configured root, which is the relay's containment
 /// boundary: nothing the web view puts in the URL may make a request that carries
 /// the site credential address anything outside the root. Any other URL goes where
-/// it was going, and never carries the site credential.
+/// it was going, and the relay never adds the site credential to it.
 @Suite("RestRelay destination")
 struct RestRelayTests {
 
@@ -225,7 +225,7 @@ struct RestRelayTests {
     func uncoveredAliasIsAnotherHost() {
         // A documented limitation, not a decision: a site reached by LAN IP
         // emits `localhost` URLs, which aren't recognized as the same host, so
-        // paginated `Link` targets go out without the site credential.
+        // the relay doesn't add the site credential to paginated `Link` targets.
         #expect(isOtherHost(
             "http://localhost:8888/wp-json/wp/v2/posts?page=2",
             root: URL(string: "http://192.168.1.50:8888/wp-json/")!
@@ -278,7 +278,8 @@ struct RestRelayTests {
 
     @Test("follows a redirect to any host for a request to another host")
     func followsEveryRedirectWithoutPrefix() {
-        // A request for another host carries no site credential to keep in.
+        // The relay adds no site credential to a request for another host, so
+        // there is none to keep in.
         let redirectGuard = RestRelay.RedirectGuard(root: nil)
         for target in [
             "https://elsewhere.example/wp-json/wp/v2/posts",

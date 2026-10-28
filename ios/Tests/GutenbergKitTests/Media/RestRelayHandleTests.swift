@@ -116,50 +116,81 @@ struct RestRelayHandleTests {
         #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
-    @Test("removes the site credential from a request for another host")
-    func removesSiteCredentialForAnotherHost() async throws {
-        // api-fetch's token middleware puts the site credential on every
-        // request it makes, whatever the host.
+    @Test("sends the site credential the page attached to another host as it is")
+    func keepsPageSentSiteCredentialForAnotherHost() async throws {
+        // Which hosts get the site credential is the page's decision. The page
+        // holds the credential, so removing it here would protect nothing.
         for target in ["https://example.org/api", "https://example.com/b/wp-json/wp/v2/posts"] {
             let exchange = try await relay(
                 target: Self.relayTarget(target),
                 headers: ["Authorization": "Bearer test-token"]
             )
 
-            #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil, "\(target)")
+            #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer test-token", "\(target)")
         }
     }
 
-    @Test("removes the site credential when the page joined it to the caller's own")
-    func removesSiteCredentialJoinedToCallerCredential() async throws {
-        // A caller that writes its header as `authorization`, plus api-fetch's
-        // `Authorization`: `Headers` keeps both, joined with ", ".
-        let exchange = try await relay(
-            target: Self.relayTarget("https://example.org/api"),
-            headers: ["Authorization": "Bearer own-key, Bearer test-token"]
-        )
+    @Test("sends the page's Authorization to the rest of the site as it is, and adds nothing")
+    func keepsCallerCredentialForRestOfSite() async throws {
+        // VideoPress asks `admin-ajax.php` for its upload token with
+        // `apiFetch( { url: ajaxurl } )`. It is the site, but not its REST API.
+        let target = Self.relayTarget("https://example.com/wp-admin/admin-ajax.php")
 
-        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer own-key")
+        let withHeader = try await relay(target: target, headers: ["Authorization": "Bearer test-token"])
+        #expect(withHeader.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
+
+        let withoutHeader = try await relay(target: target)
+        #expect(withoutHeader.upstream.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
-    @Test("matches the site credential with its whitespace trimmed, and leaves other values alone")
-    func matchesTrimmedSiteCredential() {
-        // `Headers` trims whitespace, so the page's copy of a credential
-        // configured with a trailing space has none.
-        let relay = RestRelay(
+    @Test("sends a joined Authorization as it is, wherever it goes")
+    func keepsJoinedAuthorization() async throws {
+        // A caller that writes its header as `authorization`, plus api-fetch's
+        // `Authorization`: `Headers` keeps both, joined with ", ". `fetch`
+        // would send that value as it is, so the relay does too.
+        for target in ["https://example.com/wp-json/wp/v2/posts", "https://example.org/api"] {
+            let exchange = try await relay(
+                target: Self.relayTarget(target),
+                headers: ["Authorization": "Bearer own-key, Bearer test-token"]
+            )
+
+            #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer own-key, Bearer test-token", "\(target)")
+        }
+    }
+
+    @Test(
+        "replaces nothing, and adds the site credential only to a site API request without one",
+        arguments: [
+            // (caller's value, to the site API, expected)
+            (nil, true, "Bearer test-token"),
+            (nil, false, nil),
+            ("Bearer own-key", true, "Bearer own-key"),
+            ("Bearer own-key", false, "Bearer own-key"),
+            ("Bearer test-token", false, "Bearer test-token"),
+            ("Bearer own-key, Bearer test-token", true, "Bearer own-key, Bearer test-token"),
+            ("Bearer own-key, Bearer test-token", false, "Bearer own-key, Bearer test-token"),
+            // An empty header is still the caller's, and isn't replaced.
+            ("", true, ""),
+        ] as [(String?, Bool, String?)]
+    )
+    func authorizationRule(callerValue: String?, toSiteAPI: Bool, expected: String?) {
+        #expect(Self.siteRelay(authHeader: "Bearer test-token").authorization(sentByCaller: callerValue, toSiteAPI: toSiteAPI) == expected)
+    }
+
+    @Test("adds nothing when the editor has no site credential")
+    func addsNothingWithoutSiteCredential() {
+        #expect(Self.siteRelay(authHeader: "").authorization(sentByCaller: nil, toSiteAPI: true) == nil)
+    }
+
+    private static func siteRelay(authHeader: String) -> RestRelay {
+        RestRelay(
             configuration: EditorConfigurationBuilder(
                 postType: .post,
                 siteURL: URL(string: "https://example.com")!,
                 siteApiRoot: URL(string: "https://example.com/wp-json/")!,
-                authHeader: "Bearer test-token "
+                authHeader: authHeader
             ).build()
         )
-
-        #expect(relay.authorization(sentByCaller: "Bearer test-token", toSiteAPI: false) == nil)
-        #expect(relay.authorization(sentByCaller: "Bearer own-key,Bearer test-token", toSiteAPI: false) == "Bearer own-key")
-        // A value with commas of its own, and no site credential, goes as sent.
-        let digest = #"Digest username="a", realm="b", nonce="c""#
-        #expect(relay.authorization(sentByCaller: digest, toSiteAPI: false) == digest)
     }
 
     @Test("refuses anything but an http or https URL before sending anything")

@@ -32,8 +32,10 @@ export function createRelayFetchWrapper() {
  * Each request goes to `restRelay.endpoint`, with the URL it was for in the
  * `url` query parameter. Native code decides how to send it: a request for the
  * site's REST API gets the site credential if it has no `Authorization` of its
- * own, and a request for any other host never does. A caller's own
- * `Authorization` is sent on either way.
+ * own, and native code never adds it to a request for any other host. An
+ * `Authorization` the request already has is sent on as it is, wherever the
+ * request goes, so which hosts get the site credential is decided here, on the
+ * page.
  *
  * The relay wraps `fetch` rather than registering an api-fetch middleware or
  * fetch handler, either of which would replace api-fetch's own request building

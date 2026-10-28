@@ -182,10 +182,13 @@ redirect is followed only to an `http` or `https` URL, and never from `https` to
 URL with a user name or password is refused, as `fetch` refuses one: `URLSession` would store
 it and send it on later requests to that host.
 
-The site credential goes only with a request for the site's REST API, to a URL native code
-builds from the configured root. Native code removes it from any other request the page
-sent it with, and sends a caller's own `Authorization` as it is. Without Lockdown Mode the
-editor page can already read those responses; the second group couldn't.
+Native code adds the site credential only to a request for the site's REST API, to a URL it
+builds from the configured root. It never removes or replaces an `Authorization` the page
+sent, wherever the request goes, even when that is the site credential. Which hosts get the
+site credential is the page's decision, made before the request reaches native code:
+removing it there would protect nothing, because the page already holds the credential and
+can send it anywhere. Without Lockdown Mode the editor page can already read those responses;
+the second group couldn't.
 
 ## Background and timeouts
 
