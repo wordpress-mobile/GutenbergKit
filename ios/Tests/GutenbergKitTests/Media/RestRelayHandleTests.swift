@@ -50,11 +50,11 @@ struct RestRelayHandleTests {
 
         var first = URLRequest(url: url)
         first.setValue("Bearer TOKEN-A", forHTTPHeaderField: "Authorization")
-        let firstResponse = try await relay.handle(first)
+        let firstResponse = try await relay.handle(first).collected()
 
         var second = URLRequest(url: url)
         second.setValue("Bearer TOKEN-B", forHTTPHeaderField: "Authorization")
-        let secondResponse = try await relay.handle(second)
+        let secondResponse = try await relay.handle(second).collected()
 
         #expect(String(decoding: firstResponse.body, as: UTF8.self) == "Bearer TOKEN-A")
         #expect(String(decoding: secondResponse.body, as: UTF8.self) == "Bearer TOKEN-B")
