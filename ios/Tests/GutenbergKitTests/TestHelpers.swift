@@ -11,9 +11,10 @@ import Testing
 let patientTimeout: Duration = .seconds(60)
 
 /// Polls `condition` until it holds, failing the test at the caller's line if it hasn't within
-/// `timeout`.
+/// `timeout`. `condition` runs on the caller's actor.
 func waitUntil(
     timeout: Duration = patientTimeout,
+    isolation: isolated (any Actor)? = #isolation,
     sourceLocation: SourceLocation = #_sourceLocation,
     _ condition: () -> Bool
 ) async throws {

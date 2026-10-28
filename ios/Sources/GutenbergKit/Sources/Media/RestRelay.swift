@@ -162,8 +162,9 @@ struct RestRelay: Sendable {
         )
     }
 
-    /// Sends a relayed request on and returns the upstream response with
-    /// permissive CORS headers.
+    /// Sends a relayed request on. Returns as soon as the response's status and
+    /// headers arrive, with CORS headers the page accepts. The body follows in
+    /// chunks as the server sends it.
     ///
     /// Throws when the server can't be reached — offline, DNS, TLS, a timeout —
     /// so the scheme handler fails the page's `fetch` the way a network failure
@@ -172,37 +173,38 @@ struct RestRelay: Sendable {
     /// says so. Answered with a `502` instead, the failure would read as the
     /// site's error. The relay's own refusals — a URL it can't send, a path
     /// outside the API root, a redirect away from it — are still answered, with
-    /// a message the editor shows.
+    /// a message the editor shows. If the connection fails after the status and
+    /// headers have arrived, the body throws instead.
     ///
     /// - Parameter request: The page's request to the relay scheme. WebKit
     ///   delivers a string or `ArrayBuffer` body as `httpBody` and drops some
     ///   others without an error, so the page reads every body that is not a
     ///   string into an `ArrayBuffer` first (`bufferedBody` in `fetch-relay.js`).
     ///   The table of what was measured is in `docs/code/media-uploads.md`.
-    func handle(_ request: URLRequest) async throws -> SchemeResponse {
+    func handle(_ request: URLRequest) async throws -> Response {
         guard let requestedURL = request.url.flatMap(Self.requestedURL(in:)) else {
             Logger.restRelay.error("Refusing to relay a request without an http or https URL")
-            return Self.errorResponse(
+            return Response(Self.errorResponse(
                 status: 400,
                 code: "relay_invalid_url",
                 message: "The relay can only send a request to an http or https URL."
-            )
+            ))
         }
         guard !requestedURL.hasCredentials else {
             Logger.restRelay.error("Refusing to relay a request whose URL holds credentials")
-            return Self.errorResponse(
+            return Response(Self.errorResponse(
                 status: 400,
                 code: "relay_credentials_in_url",
                 message: "The relay can't send a request to a URL with a user name or password in it."
-            )
+            ))
         }
         guard let destination = destination(of: requestedURL) else {
             Logger.restRelay.error("Refusing to relay a request outside the site API root")
-            return Self.errorResponse(
+            return Response(Self.errorResponse(
                 status: 403,
                 code: "relay_forbidden_path",
                 message: "The requested path is outside the site API root."
-            )
+            ))
         }
         let (upstreamURL, isSiteAPI) = switch destination {
         case .siteAPI(let url): (url, true)
@@ -211,7 +213,7 @@ struct RestRelay: Sendable {
 
         if !isSiteAPI, upstreamURL.scheme?.lowercased() == "http", !isSiteHost(upstreamURL) {
             Logger.restRelay.error("Refusing to relay a plain http request to another host")
-            return Self.httpsRequired()
+            return Response(Self.httpsRequired())
         }
 
         var upstreamRequest = URLRequest(url: upstreamURL)
@@ -225,51 +227,43 @@ struct RestRelay: Sendable {
         )
         upstreamRequest.httpBody = request.httpBody
 
-        let reporter = observer.map(NetworkTaskReporter.init(reportingTo:))
+        // `URLSession` follows redirects on its own. Without `RedirectGuard`, a
+        // site API request could be redirected to any host, and the relay would
+        // pass that host's response back. The guard keeps a site API request
+        // inside the API root, lets a request for another host follow a
+        // redirect to any host, and handles `Authorization` on each redirect as
+        // `fetch` does. It never follows a redirect from `https` to `http`.
+        let redirectGuard = RedirectGuard(
+            apiRoot: isSiteAPI ? apiRoot : nil,
+            authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization")
+        )
+        let upstream = UpstreamTask(upstreamRequest, redirectGuard: redirectGuard, observer: observer)
+        let (response, body): (URLResponse, AsyncThrowingStream<Data, any Error>)
         do {
-            // The redirect guard is a per-task delegate: `URLSession` follows
-            // 3xx responses on its own, which would carry a site API request
-            // to whatever host the `Location` header names and relay that
-            // response back. See ``RedirectGuard``. A request for another host
-            // follows a redirect to any host, but neither follows one from
-            // `https` to `http`. Either keeps its `Authorization` on a
-            // redirect the way `fetch` would.
-            let redirectGuard = RedirectGuard(
-                apiRoot: isSiteAPI ? apiRoot : nil,
-                authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization"),
-                reporter: reporter
-            )
-            let (body, response) = try await session.data(for: upstreamRequest, delegate: redirectGuard)
-            reporter?.complete(with: .bytes(body), error: nil)
-
-            // A refused redirect leaves `URLSession` holding the 3xx itself.
-            // Relaying that would undo the refusal: the response carries the
-            // `Location` the guard just declined, and `fetch` follows redirects
-            // by default, so the web view would chase it to the very URL the
-            // guard exists to keep the request away from.
-            if let refusal = redirectGuard.refusal {
-                Logger.restRelay.error("Refused a relay redirect")
-                return Self.errorResponse(
-                    status: 502,
-                    code: "relay_redirect_refused",
-                    message: "The server redirected this request to \(refusal.target), which \(refusal.reason). The editor did not follow it."
-                )
-            }
-            guard let response = response as? HTTPURLResponse else {
-                return Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The server did not answer over HTTP.")
-            }
-            observer?.didPerformRequest(upstreamRequest, response: response, data: .bytes(body))
-
-            return SchemeResponse(
-                status: response.statusCode,
-                headers: Self.merged(response.allHeaderFields),
-                body: body
-            )
+            (response, body) = try await upstream.start(on: session)
         } catch {
-            reporter?.complete(with: nil, error: error)
             Logger.restRelay.error("Upstream request failed: \(error.localizedDescription)")
             throw error
         }
+
+        // Returning a refusal below drops `body`, which cancels the upstream
+        // request.
+        //
+        // When the guard refuses a redirect, `URLSession` returns the 3xx
+        // response itself. Don't pass it on: its `Location` header names the
+        // refused target, and the page's `fetch` would follow it there.
+        if let refusal = redirectGuard.refusal {
+            Logger.restRelay.error("Refused a relay redirect")
+            return Response(Self.errorResponse(
+                status: 502,
+                code: "relay_redirect_refused",
+                message: "The server redirected this request to \(refusal.target), which \(refusal.reason). The editor did not follow it."
+            ))
+        }
+        guard let response = response as? HTTPURLResponse else {
+            return Response(Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The server did not answer over HTTP."))
+        }
+        return Response(status: response.statusCode, headers: Self.merged(response.allHeaderFields), body: body)
     }
 
     /// Whether `url` is on the site's own host, whatever its port.
@@ -387,9 +381,14 @@ struct RestRelay: Sendable {
     /// later redirect comes back. So the `www.` alias and the `https` upgrade it
     /// follows within the API root arrive without it, as they would from `fetch`.
     ///
+    /// ``UpstreamTask`` is the task's delegate, and forwards each redirect to it.
+    /// The guard isn't a delegate itself: given to a task directly, it would
+    /// replace ``UpstreamTask``: the response would stop streaming, and the
+    /// observer would hear nothing.
+    ///
     /// `@unchecked Sendable`: the root is a `let` set at init; the refusal
     /// and the request's `Authorization` are kept under a lock.
-    final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    final class RedirectGuard: @unchecked Sendable {
         /// A redirect the guard refused.
         struct Refusal: Equatable {
             /// Where the redirect went, without any user name or password.
@@ -402,9 +401,6 @@ struct RestRelay: Sendable {
         /// The site's API root, or `nil` to follow a redirect to any host.
         private let apiRoot: SiteAPIRoot?
 
-        /// Reports the task, which this delegate sees as the task's only one.
-        private let reporter: NetworkTaskReporter?
-
         private let lock = NSLock()
         private var _refusal: Refusal?
 
@@ -416,9 +412,8 @@ struct RestRelay: Sendable {
             lock.withLock { _refusal }
         }
 
-        init(apiRoot: SiteAPIRoot?, authorization: String? = nil, reporter: NetworkTaskReporter? = nil) {
+        init(apiRoot: SiteAPIRoot?, authorization: String? = nil) {
             self.apiRoot = apiRoot
-            self.reporter = reporter
             self._authorization = authorization
         }
 
@@ -445,14 +440,6 @@ struct RestRelay: Sendable {
             // `URLSession` having dropped it.
             request.setValue(authorization(redirectingFrom: response.url, to: url), forHTTPHeaderField: "Authorization")
             completionHandler(request)
-        }
-
-        func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
-            reporter?.urlSession(session, didCreateTask: task)
-        }
-
-        func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
-            reporter?.urlSession(session, task: task, didFinishCollecting: metrics)
         }
 
         /// Why a redirect from `source` to `target` can't be followed, worded to

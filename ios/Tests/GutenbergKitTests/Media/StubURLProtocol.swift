@@ -7,7 +7,10 @@ import Foundation
 /// The stub and the recorder are held per-session rather than in a global: two
 /// tests running in parallel each build their own session, and a shared slot
 /// would hand one test the other's request.
-final class StubURLProtocol: URLProtocol {
+///
+/// `@unchecked Sendable`: each instance's state is only touched on the thread that
+/// called `startLoading()`, as `URLProtocol` requires.
+final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     /// The canned response one session answers with.
     struct Stub: Sendable {
@@ -16,19 +19,64 @@ final class StubURLProtocol: URLProtocol {
         var body = Data()
         /// When set, the request fails with this error instead of responding.
         var failure: (any Error)?
+        /// When set, the stub answers with a redirect to this URL, using `status`.
+        /// If the session refuses the redirect, the 3xx is the response, as it would
+        /// be from a server.
+        var redirect: URL?
+
+        /// If set, the stub sends the status, headers and `body`, then waits for
+        /// the test to open the gate. Then it sends `rest`, or fails with
+        /// `restFailure`. This lets a test check what reached the page before the
+        /// rest of the response arrived.
+        var gate: Gate?
+        var rest = Data()
+        var restFailure: (any Error)?
     }
 
-    /// The request that reached the stub, if any.
+    /// Holds back the rest of a stubbed response until the test calls `open()`.
+    final class Gate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var isOpen = false
+        private var waiting: [@Sendable () -> Void] = []
+
+        func open() {
+            let waiting = lock.withLock {
+                isOpen = true
+                return self.waiting
+            }
+            waiting.forEach { $0() }
+        }
+
+        fileprivate func whenOpen(_ action: @escaping @Sendable () -> Void) {
+            let runNow = lock.withLock {
+                if !isOpen { waiting.append(action) }
+                return isOpen
+            }
+            if runNow { action() }
+        }
+    }
+
+    /// The request that reached the stub, if any, and whether it was cancelled.
     final class Recorder: @unchecked Sendable {
         private let lock = NSLock()
         private var _request: URLRequest?
+        private var _wasStopped = false
 
         var request: URLRequest? {
             lock.withLock { _request }
         }
 
+        /// Whether `URLSession` cancelled the request before it finished.
+        var wasStopped: Bool {
+            lock.withLock { _wasStopped }
+        }
+
         func record(_ request: URLRequest) {
             lock.withLock { _request = request }
+        }
+
+        func recordStop() {
+            lock.withLock { _wasStopped = true }
         }
     }
 
@@ -44,6 +92,9 @@ final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) private static var registrations: [String: Registration] = [:]
 
     private static let tokenHeader = "X-Stub-Session"
+
+    private var registration: Registration?
+    private var isLoading = false
 
     /// A stubbed session and the recorder capturing what it was asked to send.
     ///
@@ -117,6 +168,22 @@ final class StubURLProtocol: URLProtocol {
             return
         }
 
+        if let redirect = registration.stub.redirect {
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: registration.stub.status,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": redirect.absoluteString]
+            )!
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: redirect), redirectResponse: response)
+            // A custom protocol has to send the 3xx itself for the session to end
+            // with it when the redirect is refused. Without this, the task waits
+            // until it times out.
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+
         let response = HTTPURLResponse(
             url: request.url!,
             statusCode: registration.stub.status,
@@ -124,11 +191,44 @@ final class StubURLProtocol: URLProtocol {
             headerFields: registration.stub.headers
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: registration.stub.body)
+        if !registration.stub.body.isEmpty {
+            client?.urlProtocol(self, didLoad: registration.stub.body)
+        }
+        guard let gate = registration.stub.gate else {
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+
+        // Send the rest of the response on this thread, as `URLProtocol`
+        // requires. `thread` is only passed to `perform(_:on:with:waitUntilDone:modes:)`,
+        // which is safe to call from any thread.
+        self.registration = registration
+        isLoading = true
+        nonisolated(unsafe) let thread = Thread.current
+        gate.whenOpen { [weak self] in
+            guard let self else { return }
+            perform(#selector(sendRest), on: thread, with: nil, waitUntilDone: false, modes: [RunLoop.Mode.common.rawValue])
+        }
+    }
+
+    @objc private func sendRest() {
+        guard isLoading, let stub = registration?.stub else { return }
+        isLoading = false
+        if let failure = stub.restFailure {
+            client?.urlProtocol(self, didFailWithError: failure)
+            return
+        }
+        if !stub.rest.isEmpty {
+            client?.urlProtocol(self, didLoad: stub.rest)
+        }
         client?.urlProtocolDidFinishLoading(self)
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        guard isLoading else { return }
+        isLoading = false
+        registration?.recorder.recordStop()
+    }
 
     private static func readAll(_ stream: InputStream) -> Data {
         stream.open()

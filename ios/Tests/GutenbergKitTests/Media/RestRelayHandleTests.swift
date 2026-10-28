@@ -50,11 +50,11 @@ struct RestRelayHandleTests {
 
         var first = URLRequest(url: url)
         first.setValue("Bearer TOKEN-A", forHTTPHeaderField: "Authorization")
-        let firstResponse = try await relay.handle(first)
+        let firstResponse = try await relay.handle(first).collected()
 
         var second = URLRequest(url: url)
         second.setValue("Bearer TOKEN-B", forHTTPHeaderField: "Authorization")
-        let secondResponse = try await relay.handle(second)
+        let secondResponse = try await relay.handle(second).collected()
 
         #expect(String(decoding: firstResponse.body, as: UTF8.self) == "Bearer TOKEN-A")
         #expect(String(decoding: secondResponse.body, as: UTF8.self) == "Bearer TOKEN-B")
@@ -417,7 +417,7 @@ struct RestRelayHandleTests {
         }
     }
 
-    @Test("reports the upstream request's task to the observer")
+    @Test("reports the upstream request's task to the observer, with the whole body")
     func reportsUpstreamTask() async throws {
         let recorder = TaskEventRecorder()
 
@@ -425,6 +425,11 @@ struct RestRelayHandleTests {
 
         #expect(recorder.events == ["created", "metrics", "completed", "performed"])
         #expect(Set(recorder.tasks).count == 1)
+        guard case .bytes(let body) = recorder.completedData else {
+            Issue.record("expected the response body, got \(String(describing: recorder.completedData))")
+            return
+        }
+        #expect(body == Data("[]".utf8))
     }
 
     @Test("reports the task of a request that never reaches the site")
@@ -435,6 +440,20 @@ struct RestRelayHandleTests {
 
         #expect(recorder.events.first == "created")
         #expect(recorder.events.last == "failed")
+    }
+
+    @Test("refuses a site API redirect to another host, rather than following it")
+    func refusesRedirectToAnotherHost() async throws {
+        let recorder = TaskEventRecorder()
+
+        let exchange = try await relay(status: 302, redirect: "https://elsewhere.example/wp-json/wp/v2/posts", observer: recorder)
+
+        #expect(exchange.response.status == 502)
+        #expect(String(decoding: exchange.response.body, as: UTF8.self).contains("relay_redirect_refused"))
+        #expect(exchange.response.header("Location") == nil)
+        // The relay answers before the upstream task has finished.
+        try await waitUntil { recorder.events.contains("completed") }
+        #expect(!recorder.events.contains("performed"), "reported the refused redirect as the answer")
     }
 
     @Test("refuses a path outside the API root before sending anything")
@@ -486,6 +505,7 @@ struct RestRelayHandleTests {
         responseHeaders: [String: String] = [:],
         responseBody: Data = Data(),
         failure: (any Error)? = nil,
+        redirect: String? = nil,
         observer: (any EditorHTTPClientDelegate)? = nil,
         siteApiRoot: String = "https://example.com/wp-json/",
         siteURL: String = "https://example.com"
@@ -494,7 +514,8 @@ struct RestRelayHandleTests {
             status: status,
             headers: responseHeaders,
             body: responseBody,
-            failure: failure
+            failure: failure,
+            redirect: redirect.map { URL(string: $0)! }
         )
         let stubbed = StubURLProtocol.makeSession(stub: stub)
         defer { stubbed.finish() }
@@ -514,7 +535,7 @@ struct RestRelayHandleTests {
         request.httpMethod = method
         request.allHTTPHeaderFields = headers
         request.httpBody = body
-        let response = try await relay.handle(request)
+        let response = try await relay.handle(request).collected()
 
         return Exchange(sentRequest: stubbed.recorder.request, sentBody: stubbed.recorder.request?.httpBody, response: response)
     }
@@ -524,6 +545,13 @@ private extension SchemeResponse {
     /// The value of the first header matching `name`, case-insensitively.
     func header(_ name: String) -> String? {
         headers.first { $0.key.lowercased() == name.lowercased() }?.value
+    }
+}
+
+extension RestRelay.Response {
+    /// Reads the whole body, and returns the complete response.
+    func collected() async throws -> SchemeResponse {
+        SchemeResponse(status: status, headers: headers, body: try await body.reduce(into: Data()) { $0.append($1) })
     }
 }
 
@@ -580,15 +608,205 @@ struct RestRelaySchemeHandlerTests {
         #expect(task.status == 200)
     }
 
-    private func makeHandler(session: URLSession) -> RestRelaySchemeHandler {
+    // MARK: - Streaming
+
+    /// The `Content-Type` for streamed test responses. `URLSession` holds back a
+    /// response with no type, or `text/plain`, until it has 512 bytes.
+    private static let eventStream = ["Content-Type": "text/event-stream"]
+
+    @Test("passes the body on to the page as it arrives")
+    func streamsTheBody() async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            rest: Data("data: two\n\n".utf8)
+        ))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+
+        #expect(task.status == 200)
+        #expect(task.header("Content-Type") == "text/event-stream")
+        #expect(task.body == Data("data: one\n\n".utf8))
+        #expect(!task.finished)
+
+        gate.open()
+        await task.waitUntilAnswered()
+
+        #expect(task.body == Data("data: one\n\ndata: two\n\n".utf8))
+        #expect(task.finished)
+        #expect(handler.activeRequestCount == 0)
+    }
+
+    @Test("cancels the request to the site when the page stops the response partway")
+    func stopCancelsAStreamingResponse() async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            rest: Data("data: two\n\n".utf8)
+        ))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+        handler.stop(task)
+
+        try await waitUntil { stubbed.recorder.wasStopped }
+        gate.open()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(task.body == Data("data: one\n\n".utf8), "answered a stopped task, which WebKit raises on")
+        #expect(!task.finished)
+        #expect(task.failure == nil)
+    }
+
+    /// The handler sends each chunk on the main actor. Here the test keeps the main actor
+    /// busy until the rest of the response has arrived, then stops the task. So the
+    /// second chunk has reached the handler, but hasn't been sent to the page yet.
+    @Test("doesn't send the page a chunk that was on its way when the page stopped the response")
+    func stopDropsAChunkOnItsWay() async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            rest: Data("data: two\n\n".utf8)
+        ))
+        defer { stubbed.finish() }
+        // The observer hears that the request completed only after every chunk has
+        // reached the handler.
+        let observer = TaskEventRecorder()
+        let handler = makeHandler(session: stubbed.session, observer: observer)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+        gate.open()
+        try holdMainActor { observer.events.contains("completed") }
+        handler.stop(task)
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(task.body == Data("data: one\n\n".utf8), "answered a stopped task, which WebKit raises on")
+        #expect(!task.finished)
+        #expect(task.failure == nil)
+    }
+
+    @Test("fails the page's request, rather than finishing it, when its work is cancelled partway")
+    func cancellingFailsAPartialResponse() async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            rest: Data("data: two\n\n".utf8)
+        ))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+        handler.cancelAll()
+        await task.waitUntilAnswered()
+
+        #expect(task.failure != nil)
+        #expect(!task.finished, "finished the page's request with part of the body")
+        #expect(task.body == Data("data: one\n\n".utf8))
+    }
+
+    @Test("fails the page's request when the response breaks off partway")
+    func failsWhenTheResponseBreaksOff() async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            restFailure: URLError(.networkConnectionLost)
+        ))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+        gate.open()
+        await task.waitUntilAnswered()
+
+        #expect((task.failure as? URLError)?.code == .networkConnectionLost)
+        #expect(task.body == Data("data: one\n\n".utf8))
+        #expect(!task.finished)
+        #expect(handler.activeRequestCount == 0)
+    }
+
+    /// Every response streams, whether it comes over `https` or plain `http`.
+    @Test(
+        "streams every response, over https or http",
+        arguments: [
+            ("https://example.com/wp-json/", "https://example.org/stream"),
+            ("http://example.com/wp-json/", "http://example.com/stream"),
+            ("http://example.com/wp-json/", "http://example.com/wp-json/wp/v2/posts"),
+        ]
+    )
+    func streamsEveryResponse(siteApiRoot: String, url: String) async throws {
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(headers: Self.eventStream, body: Data("one ".utf8), gate: gate, rest: Data("two".utf8)))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session, siteApiRoot: siteApiRoot)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: url)))
+
+        handler.start(task)
+        try await waitUntil { !task.body.isEmpty }
+        gate.open()
+        await task.waitUntilAnswered()
+
+        #expect(task.status == 200)
+        #expect(task.body == Data("one two".utf8))
+        #expect(task.finished)
+    }
+
+    private func makeHandler(
+        session: URLSession,
+        siteApiRoot: String = "https://example.com/wp-json/",
+        observer: (any EditorHTTPClientDelegate)? = nil
+    ) -> RestRelaySchemeHandler {
         RestRelaySchemeHandler(relay: RestRelay(
             configuration: EditorConfigurationBuilder(
                 postType: .post,
                 siteURL: URL(string: "https://example.com")!,
-                siteApiRoot: URL(string: "https://example.com/wp-json/")!,
+                siteApiRoot: URL(string: siteApiRoot)!,
                 authHeader: "Bearer test-token"
             ).build(),
-            session: session
+            session: session,
+            observer: observer
         ))
+    }
+
+    /// Waits for `condition` without giving up the main actor, so nothing else runs on
+    /// it in the meantime. Fails the test if `condition` hasn't held within `timeout`.
+    ///
+    /// `condition` has to become true without the main thread. Otherwise this can only
+    /// time out.
+    ///
+    /// The timeout is shorter than `patientTimeout`, because waiting here blocks every
+    /// other main-actor test. Call it only once the response has started arriving, so
+    /// a slow CI machine's start-up delay is already over.
+    private func holdMainActor(
+        timeout: Duration = .seconds(10),
+        sourceLocation: SourceLocation = #_sourceLocation,
+        until condition: () -> Bool
+    ) throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() && ContinuousClock.now < deadline {
+            Thread.sleep(forTimeInterval: 0.001)
+        }
+        try #require(condition(), "timed out waiting", sourceLocation: sourceLocation)
     }
 }
