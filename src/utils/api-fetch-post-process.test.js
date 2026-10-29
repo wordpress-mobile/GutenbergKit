@@ -205,6 +205,42 @@ describe( "core's media upload post-process middleware", () => {
 		);
 	} );
 
+	it( 'handles a failed orphan cleanup', async () => {
+		// Core sends the cleanup and never reads the result, so a failed delete
+		// would be an unhandled rejection, reported to the host as an exception.
+		const unhandled = [];
+		const onUnhandled = ( reason ) => unhandled.push( reason );
+		process.on( 'unhandledRejection', onUnhandled );
+
+		global.fetch = vi.fn( ( url ) => {
+			const path = String( url );
+			if ( path.includes( 'post-process' ) ) {
+				return Promise.resolve( makeResponse( 500, null ) );
+			}
+			if ( path.includes( 'force=true' ) ) {
+				return Promise.resolve(
+					makeResponse( 404, null, { code: 'rest_post_invalid_id' } )
+				);
+			}
+			return Promise.resolve( makeResponse( 500, '42' ) );
+		} );
+
+		try {
+			await expect( apiFetch( uploadOptions() ) ).rejects.toMatchObject( {
+				code: 'post_process',
+			} );
+			await new Promise( ( resolve ) => setTimeout( resolve, 50 ) );
+		} finally {
+			process.off( 'unhandledRejection', onUnhandled );
+		}
+
+		expect( unhandled ).toEqual( [] );
+		expect( error ).toHaveBeenCalledWith(
+			'Could not delete the unfinished upload',
+			expect.objectContaining( { code: 'rest_post_invalid_id' } )
+		);
+	} );
+
 	it( 'authenticates the post-process retry', async () => {
 		global.fetch = vi.fn( ( url ) => {
 			if ( String( url ).includes( 'post-process' ) ) {

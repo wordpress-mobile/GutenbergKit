@@ -56,17 +56,16 @@ export function configureApiFetch() {
 	//   the loopback server on Android. Every iOS upload with site credentials
 	//   takes this path.
 	// - Direct to WordPress, which does not expose it (see
-	//   `rest_send_cors_headers()`): Android only. It recovers only when the
-	//   editor is genuinely same-origin — `GutenbergView` derives the asset
-	//   domain from the site's host, which drops the port, so a site on a
-	//   non-default port (any local dev setup) is cross-origin and does not
-	//   recover.
+	//   `rest_send_cors_headers()`): Android only. `GutenbergView` serves the
+	//   editor from the site's origin, so this recovers when the REST API is
+	//   on that origin too. It does not recover when the API is elsewhere, as
+	//   with WP.com sites on `public-api.wordpress.com`.
 	//
 	// There is no fallback: core sends the header before
 	// `wp_generate_attachment_metadata()`, so the fatal leaves no body to parse
 	// the ID from.
 	apiFetch.use( nativeMediaUploadMiddleware );
-	apiFetch.use( apiFetch.mediaUploadMiddleware );
+	apiFetch.use( mediaUploadMiddleware );
 	apiFetch.use( stripDraftPostIdMiddleware );
 	apiFetch.use( mediaPermissionsMiddleware );
 	apiFetch.use( transformOEmbedApiResponse );
@@ -790,6 +789,31 @@ function uploadAbortError( signal ) {
 		signal.reason ??
 		new DOMException( 'The upload was aborted.', 'AbortError' )
 	);
+}
+
+/**
+ * Core's media upload middleware, with its orphan cleanup's failure handled.
+ *
+ * When every `post-process` retry fails, core deletes the attachment and never
+ * reads the result. A failed delete would otherwise be an unhandled rejection,
+ * which reaches the host as an exception with no useful message. Every
+ * `DELETE` that reaches this `next` is that cleanup: core makes no other.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function mediaUploadMiddleware( options, next ) {
+	return apiFetch.mediaUploadMiddleware( options, ( request ) => {
+		const response = next( request );
+		if ( request.method === 'DELETE' ) {
+			response.catch( ( cleanupError ) =>
+				logError(
+					'Could not delete the unfinished upload',
+					cleanupError
+				)
+			);
+		}
+		return response;
+	} );
 }
 
 /**
