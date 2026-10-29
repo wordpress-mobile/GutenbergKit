@@ -137,29 +137,60 @@ class GutenbergView : FrameLayout {
     var requestInterceptor: GutenbergRequestInterceptor = DefaultGutenbergRequestInterceptor()
 
     /**
-     * Optional delegate for customizing media upload behavior (resize, transcode,
-     * custom upload).
+     * Optional processor that transforms media before upload (resize, transcode,
+     * strip EXIF).
+     *
+     * To perform the upload yourself, set [mediaUploader] instead.
      *
      * Provide this **before the editor loads** — typically right after
      * construction (e.g. in the `AndroidView` factory). It is captured once, when
      * the page begins loading, and advertised to the page then; setting it
      * afterward has no effect, so the setter throws to surface the mistake.
      */
-    var mediaUploadDelegate: MediaUploadDelegate? = null
+    var mediaProcessor: MediaProcessor? = null
         set(value) {
-            check(!hasStartedLoading) {
-                "mediaUploadDelegate must be set before the editor loads (e.g. right " +
-                    "after construction). It is captured when the page begins loading; " +
-                    "setting it afterward has no effect."
-            }
+            check(!hasStartedLoading) { lateMediaAssignmentMessage("mediaProcessor") }
             field = value
         }
+
+    /**
+     * Takes over media upload on the host's own stack (background service, offline
+     * queue, resumable transport). Setting it makes the host own every upload and its
+     * whole lifecycle; GutenbergKit stays out of the network entirely for media.
+     *
+     * Same lifecycle rules as [mediaProcessor]: set it before the editor loads,
+     * and this view owns it for its lifetime — so you needn't retain it yourself, just
+     * don't strongly retain this [GutenbergView] from your uploader.
+     *
+     * A [mediaProcessor] can still transform the file first; only delivery moves
+     * to the uploader.
+     */
+    var mediaUploader: MediaUploader? = null
+        set(value) {
+            check(!hasStartedLoading) { lateMediaAssignmentMessage("mediaUploader") }
+            // An uploader's media deletes still relay through the internal media client,
+            // which needs a site root and an auth header to reach the configured site.
+            // Check it here, where the host hands the uploader over, rather than at
+            // server start: the stack trace names the caller's own line, and the mistake
+            // can't hide until the page loads. `configuration` is assigned in the
+            // constructor, so it is always available by the time this runs.
+            MediaServerCredentials.requireCredentialsForUploader(
+                siteApiRoot = configuration.siteApiRoot,
+                authHeader = configuration.authHeader,
+                hasUploader = value != null
+            )
+            field = value
+        }
+
+    private fun lateMediaAssignmentMessage(name: String) =
+        "$name must be set before the editor loads (e.g. right after construction). " +
+            "It is captured when the page begins loading; setting it afterward has no effect."
 
     @Volatile private var uploadServer: MediaUploadServer? = null
 
     /**
      * True once the editor page has begun loading and the upload server's
-     * configuration has been captured. After this the [mediaUploadDelegate] can no
+     * configuration has been captured. After this the [mediaProcessor] can no
      * longer take effect, so its setter throws.
      */
     @Volatile private var hasStartedLoading = false
@@ -722,13 +753,13 @@ class GutenbergView : FrameLayout {
     /**
      * Invoked when any page begins loading in the main frame. Resets readiness for
      * every page; for the editor document alone, starts the upload server once —
-     * capturing the [mediaUploadDelegate] provided before load — then advertises the
+     * capturing the [mediaProcessor] provided before load — then advertises the
      * editor globals (including the server's port and token).
      *
      * Starting the server here, on the UI thread, rather than from the
-     * [mediaUploadDelegate] setter keeps its whole lifecycle — start here, stop in
+     * [mediaProcessor] setter keeps its whole lifecycle — start here, stop in
      * [onDetachedFromWindow] — on the UI thread, so it can't race a
-     * background-thread delegate assignment.
+     * background-thread processor assignment.
      */
     private fun onEditorPageStarted(url: String?) {
         // Readiness belongs to the page: a new page, including one a reload starts,
@@ -762,17 +793,22 @@ class GutenbergView : FrameLayout {
     }
 
     private fun startUploadServer() {
-        // No delegate means nothing wants to customize uploads, so there's no reason
-        // to route them through the native server — leave it down and let uploads
-        // fall to the default WebView path. (Matches iOS.)
-        if (mediaUploadDelegate == null) return
+        // Nothing to route through the native server unless the host provided a
+        // processor or an uploader — leave it down and let uploads fall to the default
+        // WebView path. (Matches iOS.)
+        if (mediaProcessor == null && mediaUploader == null) return
 
-        // The native upload server relays through DefaultMediaUploader, which needs a
-        // site root and an auth header (every host provides one — the editor injects
-        // it because the WebView has no auth cookies). Without both there is nothing
-        // to upload through, so leave the server down and let uploads fall to the
-        // default WebView path rather than start a server that could only fail.
-        if (configuration.siteApiRoot.isEmpty() || configuration.authHeader.isEmpty()) return
+        // An InternalMediaClient delivers GutenbergKit-owned uploads (when no uploader
+        // is set) and relays the editor's media DELETEs to the configured site — every
+        // attachment lives there, even one a host uploader delivered. It needs a site
+        // root and an auth header (the editor injects the latter because the WebView
+        // has no auth cookies). Without them there is nothing to upload through, so
+        // leave the server down and let uploads fall to the default WebView path
+        // rather than start a server that could only fail.
+        //
+        // Only a mediaProcessor can reach this return: a mediaUploader without
+        // credentials already failed in its setter, so by here it has them.
+        if (!MediaServerCredentials.areUsable(configuration.siteApiRoot, configuration.authHeader)) return
 
         // The editor reaches the loopback server over cleartext http://localhost. If
         // the host app's network-security config doesn't permit cleartext to
@@ -780,7 +816,14 @@ class GutenbergView : FrameLayout {
         // before it leaves the page. Detect that here and don't start the server, so
         // the JS middleware routes uploads down the default path instead of a server
         // it can never reach. Hosts that want native media processing must permit
-        // cleartext to localhost (see the demo's res/xml/network_security_config.xml).
+        // cleartext to localhost — see "Android: permit cleartext to localhost" in
+        // docs/integration.md, and the demo's res/xml/network_security_config.xml.
+        //
+        // This drops a mediaUploader as silently as missing credentials would, and still
+        // only warns. The difference is the cause, not the symptom: the configuration is
+        // sound here — permit cleartext and the same setup works unchanged — so there is
+        // nothing for the host to fix in what it handed us. See
+        // MediaServerCredentials.requireCredentialsForUploader.
         if (!NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted(LOOPBACK_HOST)) {
             Log.w(
                 TAG,
@@ -792,15 +835,16 @@ class GutenbergView : FrameLayout {
         }
 
         try {
-            val defaultUploader = DefaultMediaUploader(
+            val internalClient = InternalMediaClient(
                 httpClient = uploadHttpClient,
                 siteApiRoot = configuration.siteApiRoot,
                 authHeader = configuration.authHeader,
                 siteApiNamespace = configuration.siteApiNamespace.toList()
             )
             uploadServer = MediaUploadServer(
-                uploadDelegate = mediaUploadDelegate,
-                defaultUploader = defaultUploader,
+                processor = mediaProcessor,
+                internalClient = internalClient,
+                uploader = mediaUploader,
                 cacheDir = context.cacheDir,
                 scope = coroutineScope
             )

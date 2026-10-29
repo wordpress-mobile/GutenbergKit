@@ -27,7 +27,7 @@ let package = Package(
     targets: [
         .target(
             name: "GutenbergKit",
-            dependencies: ["SwiftSoup", "SVGView", "GutenbergKitResources", "GutenbergKitHTTP"],
+            dependencies: ["SwiftSoup", "SVGView", "GutenbergKitResources"],
             path: "ios/Sources/GutenbergKit",
             packageAccess: false
         ),
@@ -45,7 +45,7 @@ let package = Package(
         gutenbergKitResources,
         .testTarget(
             name: "GutenbergKitTests",
-            dependencies: ["GutenbergKit"],
+            dependencies: ["GutenbergKit", "GutenbergKitHTTP"],
             path: "ios/Tests/GutenbergKitTests",
             exclude: [],
             resources: [

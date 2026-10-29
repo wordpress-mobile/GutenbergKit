@@ -240,8 +240,8 @@ public final class HTTPServer: Sendable {
 
         // Bound the wait for readiness. The listener can sit in a non-terminal
         // state (e.g. `.waiting` when it can't establish an endpoint) indefinitely;
-        // since callers await this — the editor load awaits the upload server's
-        // bind — an unbounded wait would hang the caller, not just fail the server.
+        // since callers await this, an unbounded wait would hang the caller, not
+        // just fail the server.
         // Race the readiness wait against a timeout, and tear the listener down on
         // any failure path so its socket isn't leaked. On `.ready` the group
         // returns the server without throwing, so a successfully-started server
@@ -279,8 +279,7 @@ public final class HTTPServer: Sendable {
 
     /// Races `operation` against `timeout`, throwing ``HTTPServerError/startTimeout``
     /// if the timeout wins. Used to bound the wait for the listener to become ready
-    /// so a caller — such as the editor load awaiting the upload server's bind —
-    /// isn't hung on a listener stuck in a non-terminal state.
+    /// so a caller isn't hung on a listener stuck in a non-terminal state.
     static func withStartTimeout<T: Sendable>(
         _ timeout: Duration,
         _ operation: @escaping @Sendable () async throws -> T
@@ -305,13 +304,35 @@ public final class HTTPServer: Sendable {
     /// are currently executing will receive a `CancellationError`.
     public func stop() {
         listener.cancel()
+        releaseConnectionHandler()
         connectionTasks.cancelAll()
         Logger.httpServer.info("HTTP server stopped")
     }
 
     deinit {
         listener.cancel()
+        releaseConnectionHandler()
         connectionTasks.cancelAll()
+    }
+
+    /// Drops the connection handler so teardown releases what it captured *here*,
+    /// on the caller's thread.
+    ///
+    /// `newConnectionHandler` retains the request handler, and through it whatever
+    /// the caller's closure captured. `cancel()` alone does not drop the block:
+    /// Network.framework holds the listener until cancellation completes on its own
+    /// queue, so the final release — and therefore the captured object's `deinit` —
+    /// lands there rather than wherever `stop()` was called.
+    ///
+    /// That covers an idle server. A request still in flight holds its own copy of what
+    /// the handler captured until that task unwinds, so a server stopped mid-request
+    /// releases last on the task's executor no matter what this does.
+    ///
+    /// Clearing it after `cancel()` rather than before is deliberate: the listener is
+    /// already torn down, so there is no window in which it is live but has no handler
+    /// to hand a connection to.
+    private func releaseConnectionHandler() {
+        listener.newConnectionHandler = nil
     }
 
     /// The library's default response for a parse error: the mapped status code

@@ -23,6 +23,29 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         #expect(mockClient.getCallCount == 1)
     }
 
+    /// An editor reopened on a post must not join the request an editor since closed still has
+    /// in flight for it: that one can predate an edit made in between.
+    @Test("fetchPost goes out for every caller, even with an identical request in flight")
+    func fetchPostIsNeverShared() async throws {
+        let session = ParkedURLSession()
+        defer { session.release() }
+        let configuration = makeConfiguration(postID: 5)
+        let repositories = (0..<2).map { _ in
+            makeRepository(
+                configuration: configuration,
+                httpClient: EditorHTTPClient(urlSession: session, authHeader: configuration.authHeader)
+            )
+        }
+
+        let fetches = repositories.map { repository in Task { try await repository.fetchPost(id: 5) } }
+        try await waitUntil { session.requestCount == 2 }
+
+        session.release()  // fails both parked requests
+        for fetch in fetches {
+            await #expect(throws: URLError.self) { try await fetch.value }
+        }
+    }
+
     // MARK: - fetchEditorSettings Tests
 
     @Test("fetchEditorSettings returns undefined when theme styles disabled")

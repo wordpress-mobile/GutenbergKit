@@ -126,6 +126,65 @@ let editorViewController = EditorViewController(
 )
 ```
 
+### Network Logging
+
+The editor reports its network requests in two places:
+
+-   **Requests the editor's page sends with `fetch`**: set `enableNetworkLogging` in the
+    configuration and implement `editor(_:didLogNetworkRequest:)`. Each record arrives when
+    the request ends.
+-   **Requests native code sends**: give the editor an `EditorHTTPClient` with an
+    `EditorHTTPClientDelegate`. That covers loading the editor and its assets, media
+    uploads and deletes, and the page's `fetch` requests, which native code relays. Those
+    go to the site's REST API and to any other host the page calls, such as a plugin's own
+    service, so don't assume a request is for the site.
+
+The delegate's task callbacks take `URLSession`'s own types, and arrive for every request,
+whatever becomes of it: `didCreateTask(_:)` when it starts, `task(_:didFinishCollecting:)`
+with its `URLSessionTaskMetrics`, and `task(_:didCompleteWith:error:)` with the response's
+body or the error that ended it. A request that is still waiting, or never finishes, has
+had `didCreateTask(_:)` and nothing after it. All three have default implementations, so
+implement only the ones you need.
+
+```swift
+final class NetworkObserver: EditorHTTPClientDelegate {
+    func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData) {}
+
+    func didCreateTask(_ task: URLSessionTask) {
+        // Record the request as started
+    }
+
+    func task(_ task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        // Record timing, connection, and bytes sent and received
+    }
+
+    func task(_ task: URLSessionTask, didCompleteWith data: EditorResponseData?, error: Error?) {
+        // Record the outcome
+    }
+}
+
+let editorViewController = EditorViewController(
+    configuration: configuration,
+    httpClient: EditorHTTPClient(
+        urlSession: URLSession.shared,
+        authHeader: configuration.authHeader,
+        delegate: NetworkObserver()
+    )
+)
+```
+
+With a delegate set, the page leaves the requests it relays through native code out of
+`editor(_:didLogNetworkRequest:)`, so you aren't told about each of them twice. The
+delegate is called from `URLSession`'s delegate queue and from the client's actor, so it
+must be thread-safe.
+
+Each request the delegate sees carries its `Authorization` header, as sent. That is usually
+the site's credential, but a caller's own token is sent as it is — Jetpack AI sends one to
+WordPress.com. Native code never adds the site's credential to a request for another host,
+but it doesn't remove one the page sent either, so a request to another host can carry it.
+Redact the header on every request before storing requests anywhere it shouldn't be kept,
+not only where it matches the site credential.
+
 ## Android Integration
 
 ### Adding the Library
@@ -251,6 +310,162 @@ val configuration = EditorConfiguration.builder()
     .setCachedAssetHosts(setOf("example.com", "cdn.example.com"))
     .build()
 ```
+
+## Media Handling
+
+The host can transform media before upload by supplying a `MediaProcessor` at init.
+To take over the upload itself, supply a `MediaUploader` instead — a processor only
+changes bytes; GutenbergKit still delivers them.
+
+```swift
+let editor = EditorViewController(
+    configuration: configuration,
+    mediaProcessor: ResizingProcessor(maxDimension: 2000)
+)
+```
+
+### Don't conform the object that owns the editor
+
+GutenbergKit never hands your processor the editor: every value crossing that boundary is a
+value type — a file URL, a MIME type, a filename. So a processor can only reach the editor
+if you put it there.
+
+That happens when you conform the object that already holds the editor in order to drive
+it. The editor holds the processor strongly in return — deliberately, so an in-flight upload
+can't lose it mid-request — which closes a retain cycle ARC cannot break. The editor is
+never deallocated.
+
+```swift
+// Leaks: coordinator -> editor -> mediaProcessor -> coordinator
+final class PostEditorCoordinator: MediaProcessor {
+    var editor: EditorViewController!
+    init(blog: Blog, configuration: EditorConfiguration) {
+        editor = EditorViewController(configuration: configuration, mediaProcessor: self)
+    }
+}
+```
+
+Use a leaf object instead. Nothing is lost: `processFile` is called off the main actor, so
+it could not have touched your coordinator's state regardless — whatever it needs is
+already separable:
+
+```swift
+final class PostEditorCoordinator {
+    private let editor: EditorViewController
+    init(blog: Blog, configuration: EditorConfiguration) {
+        editor = EditorViewController(
+            configuration: configuration,
+            mediaProcessor: BlogMediaProcessor(siteID: blog.dotComID, maxDimension: 2000)
+        )
+    }
+}
+```
+
+If your design genuinely requires the retaining shape, call `stopMediaHandling()` when you
+are finished with the editor. It is terminal — your handlers are released, later uploads
+fail, and the page sends deletes itself — so call it when the editor is going away, not when
+it is merely covered or backgrounded.
+
+### How uploads reach native code
+
+A native upload runs your `MediaProcessor`, then your `MediaUploader` or GutenbergKit's
+own client, whichever way the file arrived:
+
+-   **Files the page holds** — the Upload button, drag-and-drop, paste — go from the editor's
+    page to native code. On iOS that is a URL scheme the editor's own web view handles, so
+    there is nothing to configure and it works under Lockdown Mode. On Android it is a
+    loopback HTTP server, which needs the network security entry below.
+-   **Media from the native block inserter** is imported to disk (a clone, on iOS, so a
+    large video costs no memory) and handed to the page as a file, which it then uploads
+    like any other. WebKit reads the file from disk as it is sent, so the page never holds
+    it in memory. This needs iOS 18.4: before that the inserter doesn't offer the photo
+    library or the camera, and media is added from a block's own upload button.
+
+Either way the block uploads through Gutenberg's own pipeline, so its placeholder, saving
+lock, error notices, and recovery of a failed server-side resize all behave as they do for
+any upload.
+
+On iOS, uploads are native whether or not you supply a handler: GutenbergKit's own client
+delivers whatever you don't take over. Only an editor without site credentials uploads from
+the page, which holds the whole file in memory. After `stopMediaHandling()`, uploads fail. On
+Android, uploads are native only when you supply a handler; without one, or without site
+credentials, the page uploads straight to WordPress.
+
+An upload keeps running for about 30 seconds after the app moves to the background. One
+that takes longer is interrupted when iOS suspends the app. A `MediaUploader` that needs to
+survive that should use a background `URLSession` of its own, and dedupe by filename or a
+field it sets: a background session re-sends an upload whose response is slow, and
+WordPress creates an attachment for each copy.
+
+### Android: permit cleartext to localhost
+
+**Android hosts must add localhost to their network security configuration, or native
+media handling will silently not run.**
+
+On Android, GutenbergKit receives media uploads through a loopback HTTP server, which the
+editor reaches over cleartext `http://localhost`. Apps targeting API 28 or above deny
+cleartext by default, so without an entry the WebView blocks every upload request with
+`ERR_CLEARTEXT_NOT_PERMITTED` before it leaves the page. `GutenbergView` detects this and
+leaves the server down, so uploads fall back to the WebView's own path rather than failing
+against a server they can never reach.
+
+The failure is quiet by design — media still uploads — so the symptom is that your
+`MediaProcessor` or `MediaUploader` is simply never called. The only signal is a warning
+in logcat:
+
+```
+Cleartext to localhost is not permitted, so the native media upload server can't be
+reached from the WebView. Permit cleartext to localhost in the app's network security
+config to enable native media processing.
+```
+
+Add a `domain-config` to the file referenced by your `<application>`'s
+`android:networkSecurityConfig`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
+```
+
+This narrows cleartext to loopback only. It does not permit cleartext anywhere else — the
+rest of the app keeps whatever `base-config` (or the platform default) already applies.
+
+#### Why GutenbergKit can't ship this for you
+
+`android:networkSecurityConfig` is a single-valued attribute on `<application>`: an app
+has exactly one, and the XML files do not merge. A library that declares it collides with
+the host's, and the manifest merger fails the build until the app adds
+`tools:replace="android:networkSecurityConfig"` — which then discards the library's
+version entirely. It also collides with _other_ libraries that declare one; the WordPress
+Rust API client already does. And for a host that has no config of its own, a library's
+file would silently become the app's entire network security policy, replacing any
+certificate pinning or trust anchors it would otherwise have had.
+
+So the attribute has to be the app's. Only the app can arbitrate between the libraries
+that want a say in it.
+
+#### Devices running Android 16 and above
+
+API 36 added an implicit cleartext-permitted configuration for localhost, applied when the
+app's own config does not already name it. On those devices native media handling works
+without the entry above. GutenbergKit supports API 24 and up, so the entry is still
+required in practice — and it remains correct on Android 16, where naming localhost
+explicitly simply takes precedence over the implicit one.
+
+### Reusing a processor across editor sessions
+
+The editor holds the processor for its lifetime and releases it when it goes, so a processor
+built for a single editor needs no reference of its own. To use the same instance for
+several editors, keep your own reference — the editor drops only its own. Sharing is also
+the safer shape: a processor owned by something longer-lived than any editor is a leaf, so
+it cannot form the cycle above and there is nothing to tear down. It may be called
+concurrently if more than one editor is live, and it must not hold on to any editor it has
+served.
 
 ## Common Patterns
 

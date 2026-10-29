@@ -234,17 +234,27 @@ export function onNetworkRequest( requestData ) {
 /**
  * @typedef GBKitConfig
  *
- * @property {boolean}  [themeStyles]            Controls if theme styles are applied to the editor.
- * @property {string}   [siteURL]                The site's home URL.
- * @property {string}   [siteApiRoot]            The root URL of the site's API.
- * @property {string[]} [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
- * @property {string[]} [namespaceExcludedPaths] The paths that should not be namespaced.
- * @property {string}   [authHeader]             The authentication header.
- * @property {string}   [hideTitle]              Whether to hide the title.
- * @property {Post}     [post]                   The post data.
- * @property {boolean}  [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
- * @property {number}   [nativeUploadPort]       Port the local HTTP server is listening on. If absent, the native upload override is not activated.
- * @property {string}   [nativeUploadToken]      Per-session auth token for requests to the local upload server.
+ * @property {boolean}   [themeStyles]            Controls if theme styles are applied to the editor.
+ * @property {string}    [siteURL]                The site's home URL.
+ * @property {string}    [siteApiRoot]            The root URL of the site's API.
+ * @property {string[]}  [siteApiNamespace]       The namespace of the site's API; if multiple namespaces are provided, the first one is used as the default.
+ * @property {string[]}  [namespaceExcludedPaths] The paths that should not be namespaced.
+ * @property {string}    [authHeader]             The authentication header.
+ * @property {string}    [hideTitle]              Whether to hide the title.
+ * @property {Post}      [post]                   The post data.
+ * @property {boolean}   [enableNetworkLogging]   Enables logging of all network requests/responses to the native host via onNetworkRequest bridge method.
+ * @property {string}    [nativeUploadScheme]     iOS: the URL scheme native media uploads are sent over. Takes precedence over the loopback server.
+ * @property {number}    [nativeUploadPort]       Android: port the local HTTP server is listening on. If absent, the native upload override is not activated.
+ * @property {string}    [nativeUploadToken]      Android: per-session auth token for requests to the local upload server.
+ * @property {RestRelay} [restRelay]              iOS: where native code relays the page's requests. If absent, requests go straight from the page.
+ */
+
+/**
+ * Where the native REST relay is.
+ *
+ * @typedef {Object} RestRelay
+ * @property {string}  endpoint          The URL each request to another origin is sent to, with that request's URL in the `url` query parameter.
+ * @property {boolean} [reportsRequests] Whether native code reports each relayed request to the host itself, so the page leaves it out of its network log.
  */
 
 /**
