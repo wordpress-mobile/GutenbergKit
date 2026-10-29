@@ -123,6 +123,9 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     onMediaProxyServer = {
                         startActivity(Intent(this, MediaProxyServerActivity::class.java))
                     },
+                    onManagePermissions = {
+                        startActivity(Intent(this, ManagePermissionsActivity::class.java))
+                    },
                     isDiscoveringSite = isDiscoveringSite.value,
                     onDismissDiscovering = { isDiscoveringSite.value = false },
                     isLoadingCapabilities = isLoadingCapabilities.value,
@@ -208,6 +211,7 @@ private fun isDevServerRunning(): Boolean {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("LongParameterList", "LongMethod")
 fun MainScreen(
     configurations: List<ConfigurationItem>,
     onConfigurationClick: (ConfigurationItem) -> Unit,
@@ -215,6 +219,7 @@ fun MainScreen(
     onAddConfiguration: (String) -> Unit,
     onDeleteConfiguration: (ConfigurationItem) -> Unit,
     onMediaProxyServer: () -> Unit = {},
+    onManagePermissions: () -> Unit = {},
     isDiscoveringSite: Boolean = false,
     onDismissDiscovering: () -> Unit = {},
     isLoadingCapabilities: Boolean = false,
@@ -247,6 +252,13 @@ fun MainScreen(
                             onClick = {
                                 showOverflowMenu.value = false
                                 onMediaProxyServer()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Manage Permissions") },
+                            onClick = {
+                                showOverflowMenu.value = false
+                                onManagePermissions()
                             }
                         )
                     }
