@@ -78,9 +78,9 @@ export async function initializeEditor( {
 /**
  * Returns the post type's template to apply to a new post, if any.
  *
- * Only empty new posts are auto-drafts (see `getPost`), so a local draft keeps
- * its blocks. Post types without a template have an empty one, which core would
- * still apply as an edit.
+ * Only auto-drafts get the template, as in core. GBK seeds that status only for
+ * empty new posts (see `getPost`), so a local draft keeps its blocks. Post types
+ * without a template have an empty one, which core would still apply as an edit.
  *
  * @param {Object} post The post.
  * @return {Array|undefined} The template, or undefined to leave the post as is.
