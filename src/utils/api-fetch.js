@@ -742,10 +742,18 @@ function uploadAbortError( signal ) {
  * which reaches the host as an exception with no useful message. Every
  * `DELETE` that reaches this `next` is that cleanup: core makes no other.
  *
+ * The method is uppercased first. Core only recognizes an upload sent as
+ * `POST`, and the native middleware below it relies on core to parse the
+ * response, so an upload sent as `post` would otherwise reach the caller as a
+ * raw `Response`. `fetch` uppercases the standard methods anyway.
+ *
  * @type {APIFetchMiddleware}
  */
 function mediaUploadMiddleware( options, next ) {
-	return apiFetch.mediaUploadMiddleware( options, ( request ) => {
+	const normalized = options.method
+		? { ...options, method: options.method.toUpperCase() }
+		: options;
+	return apiFetch.mediaUploadMiddleware( normalized, ( request ) => {
 		const response = next( request );
 		if ( request.method === 'DELETE' ) {
 			response.catch( ( cleanupError ) =>

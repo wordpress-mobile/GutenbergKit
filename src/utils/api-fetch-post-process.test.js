@@ -293,6 +293,47 @@ describe( "core's media upload post-process middleware", () => {
 		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	describe( 'an upload sent as lowercase `post`', () => {
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteApiRoot: SITE_API_ROOT,
+				authHeader: 'Bearer test-token',
+				siteApiNamespace: [],
+				namespaceExcludedPaths: [],
+				nativeUploadPort: 8080,
+				nativeUploadToken: 'relay-token',
+			} );
+		} );
+
+		it( 'resolves with the parsed attachment', async () => {
+			global.fetch = vi.fn( () =>
+				Promise.resolve( makeResponse( 201, null, { id: 42 } ) )
+			);
+
+			await expect(
+				apiFetch( { ...uploadOptions(), method: 'post' } )
+			).resolves.toEqual( { id: 42 } );
+		} );
+
+		it( 'retries post-process', async () => {
+			global.fetch = vi.fn( ( url ) => {
+				if ( String( url ).includes( 'post-process' ) ) {
+					return Promise.resolve(
+						makeResponse( 200, null, { id: 42 } )
+					);
+				}
+				return Promise.resolve( makeResponse( 500, '42' ) );
+			} );
+
+			await expect(
+				apiFetch( { ...uploadOptions(), method: 'post' } )
+			).resolves.toEqual( { id: 42 } );
+			expect( fetchedPath( 1 ) ).toContain(
+				'/wp/v2/media/42/post-process'
+			);
+		} );
+	} );
+
 	it( 'leaves a successful upload untouched', async () => {
 		global.fetch = vi.fn( () =>
 			Promise.resolve(
