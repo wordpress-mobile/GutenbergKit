@@ -240,8 +240,8 @@ public final class HTTPServer: Sendable {
 
         // Bound the wait for readiness. The listener can sit in a non-terminal
         // state (e.g. `.waiting` when it can't establish an endpoint) indefinitely;
-        // since callers await this — the editor load awaits the upload server's
-        // bind — an unbounded wait would hang the caller, not just fail the server.
+        // since callers await this, an unbounded wait would hang the caller, not
+        // just fail the server.
         // Race the readiness wait against a timeout, and tear the listener down on
         // any failure path so its socket isn't leaked. On `.ready` the group
         // returns the server without throwing, so a successfully-started server
@@ -319,8 +319,7 @@ public final class HTTPServer: Sendable {
 
     /// Races `operation` against `timeout`, throwing ``HTTPServerError/startTimeout``
     /// if the timeout wins. Used to bound the wait for the listener to become ready
-    /// so a caller — such as the editor load awaiting the upload server's bind —
-    /// isn't hung on a listener stuck in a non-terminal state.
+    /// so a caller isn't hung on a listener stuck in a non-terminal state.
     static func withStartTimeout<T: Sendable>(
         _ timeout: Duration,
         _ operation: @escaping @Sendable () async throws -> T

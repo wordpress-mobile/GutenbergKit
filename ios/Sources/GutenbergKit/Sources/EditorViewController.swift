@@ -570,9 +570,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// The document-start script that installs `window.GBKit`.
     ///
-    /// The configuration is session-scoped — it carries the site credential and
-    /// the local server's port and tokens — so no copy of it outlives the load
-    /// that injected it. Versions before #613 mirrored it into `localStorage`,
+    /// The configuration carries the site credential, so no copy of it outlives
+    /// the load that injected it. Versions before #613 mirrored it into `localStorage`,
     /// which persists across launches; the script removes that key, scrubbing an
     /// upgraded device the next time the editor loads. Nothing reads it any
     /// more, so the line can go once builds from before #613 are no longer in
