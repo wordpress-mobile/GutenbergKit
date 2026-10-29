@@ -618,9 +618,37 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         )
     }
 
-    /// Deletes all cached editor data for all sites
+    /// Deletes all cached editor data for all sites.
+    ///
+    /// `HTMLPreviewManager` keeps a process-wide `SQLiteKVCache` connection
+    /// open against `htmlpreview.sqlite` + its WAL/SHM sidecars. Removing
+    /// those files out from under the live handle would leave the static
+    /// cache writing to an unlinked inode for the rest of the process. So we
+    /// clear the rows through the live handle and skip the underlying files
+    /// when sweeping `defaultCacheRoot`; everything else in the directory
+    /// (per-site `EditorURLCache` subdirs, etc.) is removed normally.
     public static func deleteAllData() throws {
-        try EditorURLCache.deleteAll()
+        HTMLPreviewManager.clearCache()
+
+        if FileManager.default.directoryExists(at: Paths.defaultCacheRoot) {
+            // The per-site `EditorURLCache` stores are among the files removed, so stop
+            // sharing their instances: a cache created afterwards opens a new file. Whether
+            // or not the removal finishes: one that fails partway has still deleted files.
+            defer { SQLiteKVCache.forgetInstances(under: Paths.defaultCacheRoot) }
+
+            let preserved: Set<String> = [
+                "htmlpreview.sqlite",
+                "htmlpreview.sqlite-wal",
+                "htmlpreview.sqlite-shm",
+            ]
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: Paths.defaultCacheRoot,
+                includingPropertiesForKeys: nil
+            )
+            for url in contents where !preserved.contains(url.lastPathComponent) {
+                try FileManager.default.removeItem(at: url)
+            }
+        }
 
         if FileManager.default.directoryExists(at: Paths.defaultStorageRoot) {
             try FileManager.default.removeItem(at: Paths.defaultStorageRoot)
