@@ -22,11 +22,13 @@ import { initializeEditor } from './editor.jsx';
 import { initializeFetchInterceptor } from './fetch-interceptor.js';
 import { injectEditorStyles } from './editor-styles.js';
 import { installFetchWrappers } from './fetch-chain.js';
+import { installXMLHttpRequestRelay } from './xhr-relay.js';
 
 vi.mock( './bridge.js' );
 vi.mock( './fetch-interceptor.js' );
 vi.mock( './fetch-chain.js' );
 vi.mock( './fetch-relay.js' );
+vi.mock( './xhr-relay.js' );
 vi.mock( './logger.js' );
 vi.mock( './editor-styles.js' );
 vi.mock( './ajax.js' );
@@ -91,6 +93,10 @@ describe( 'setUpEditorEnvironment', () => {
 			callOrder.push( 'initializeFetchInterceptor' );
 		} );
 
+		installXMLHttpRequestRelay.mockImplementation( () => {
+			callOrder.push( 'installXMLHttpRequestRelay' );
+		} );
+
 		configureLocale.mockImplementation( () => {
 			callOrder.push( 'configureLocale' );
 			return Promise.resolve();
@@ -129,6 +135,7 @@ describe( 'setUpEditorEnvironment', () => {
 		expect( callOrder ).toEqual( [
 			'awaitGBKitGlobal',
 			'initializeFetchInterceptor',
+			'installXMLHttpRequestRelay',
 			'configureLocale',
 			'injectEditorStyles',
 			'configureAdminGlobals',

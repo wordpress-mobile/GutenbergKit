@@ -76,7 +76,20 @@ An object made in another window is not an `instanceof` this window's `Blob` or
 dropped. The REST relay (`gbk-rest:`, `src/utils/fetch-relay.js`) meets the same rule for
 every request it relays, and reads every body that is not a string into an `ArrayBuffer`.
 
-The streamed case depends on where the file came from, and every failure is silent, so
+`XMLHttpRequest` gets the same treatment from `src/utils/xhr-relay.js`, with three
+differences measured in the iOS 27.0 Simulator:
+
+-   A request with an upload listener has its body delivered as `httpBodyStream`, whatever
+    the body. Without one, bodies arrive as they do from `fetch`. The relay reads either.
+    A `Blob`, or `FormData` holding one, is dropped either way, so the page reads those
+    into an `ArrayBuffer` first.
+-   WebKit doesn't apply the request's `timeout`: one set to 500 ms was still waiting
+    seconds later. The page sends it in an `X-GBK-Relay-Timeout` header, and native code
+    fails the task with `URLError(.timedOut)`, which the page sees as a `timeout` event.
+-   WebKit fires no upload `progress`, `load` or `loadend`. The page fires them when the
+    response's headers arrive, so an upload's progress jumps from nothing to done.
+
+The streamed `fetch` case depends on where the file came from, and every failure is silent, so
 the page always sends the file as 4 MB `ArrayBuffer` chunks:
 
 | Request                                | Body                         | Response             |

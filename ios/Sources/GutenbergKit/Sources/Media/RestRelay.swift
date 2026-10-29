@@ -180,7 +180,9 @@ struct RestRelay: Sendable {
     ///   delivers a string or `ArrayBuffer` body as `httpBody` and drops some
     ///   others without an error, so the page reads every body that is not a
     ///   string into an `ArrayBuffer` first (`bufferedBody` in `fetch-relay.js`).
-    ///   The table of what was measured is in `docs/code/media-uploads.md`.
+    ///   An `XMLHttpRequest` with an upload listener has its body delivered as
+    ///   `httpBodyStream` instead. The table of what was measured is in
+    ///   `docs/code/media-uploads.md`.
     func handle(_ request: URLRequest) async throws -> Response {
         guard let requestedURL = request.url.flatMap(Self.requestedURL(in:)) else {
             Logger.restRelay.error("Refusing to relay a request without an http or https URL")
@@ -225,7 +227,7 @@ struct RestRelay: Sendable {
             authorization(sentByCaller: request.value(forHTTPHeaderField: "Authorization"), toSiteAPI: isSiteAPI),
             forHTTPHeaderField: "Authorization"
         )
-        upstreamRequest.httpBody = request.httpBody
+        upstreamRequest.httpBody = try Self.body(of: request)
 
         // `URLSession` follows redirects on its own. Without `RedirectGuard`, a
         // site API request could be redirected to any host, and the relay would
@@ -264,6 +266,32 @@ struct RestRelay: Sendable {
             return Response(Self.errorResponse(status: 502, code: "relay_upstream_failed", message: "The server did not answer over HTTP."))
         }
         return Response(status: response.statusCode, headers: Self.merged(response.allHeaderFields), body: body)
+    }
+
+    /// The body of the page's request, wherever WebKit put it.
+    ///
+    /// The stream holds bytes the page already had in memory, so it is read
+    /// whole, like `httpBody`. Sent on as a stream instead, the upstream
+    /// request would go without a `Content-Length`.
+    private static func body(of request: URLRequest) throws -> Data? {
+        guard let stream = request.httpBodyStream else {
+            return request.httpBody
+        }
+        stream.open()
+        defer { stream.close() }
+
+        var body = Data()
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count < 0 {
+                throw stream.streamError ?? URLError(.cannotDecodeRawData)
+            }
+            if count == 0 {
+                return body
+            }
+            body.append(buffer, count: count)
+        }
     }
 
     /// Whether `url` is on the site's own host, whatever its port.
@@ -515,6 +543,7 @@ struct RestRelay: Sendable {
         "origin", "referer",
         "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user",
         "cookie", "authorization",
+        RestRelaySchemeHandler.timeoutHeader.lowercased(),
     ]
 
     /// Upstream response headers dropped from relayed responses.
