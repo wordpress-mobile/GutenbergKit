@@ -270,6 +270,29 @@ describe( "core's media upload post-process middleware", () => {
 		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	it( "surfaces WordPress's error for a native upload it cannot recover", async () => {
+		// The native middleware hands core the raw response; core parses it.
+		bridge.getGBKit.mockReturnValue( {
+			siteApiRoot: SITE_API_ROOT,
+			authHeader: 'Bearer test-token',
+			siteApiNamespace: [],
+			namespaceExcludedPaths: [],
+			nativeUploadPort: 8080,
+			nativeUploadToken: 'relay-token',
+		} );
+		const body = {
+			code: 'rest_upload_file_too_big',
+			message: 'Too big.',
+			data: { status: 413 },
+		};
+		global.fetch = vi.fn( () =>
+			Promise.resolve( makeResponse( 413, null, body ) )
+		);
+
+		await expect( apiFetch( uploadOptions() ) ).rejects.toEqual( body );
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'leaves a successful upload untouched', async () => {
 		global.fetch = vi.fn( () =>
 			Promise.resolve(

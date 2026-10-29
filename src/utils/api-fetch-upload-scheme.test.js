@@ -104,7 +104,7 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 				makeNext()
 			);
 
-			expect( result ).toEqual( {
+			expect( await result.json() ).toEqual( {
 				id: 42,
 				source_url: 'https://example.com/a.jpg',
 			} );
@@ -203,26 +203,6 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 				'99'
 			);
 		} );
-
-		it( 'rejects with the parsed WordPress error by default', async () => {
-			installScheme( {
-				[ `/sessions/${ SESSION }/finish` ]: () =>
-					json( 413, {
-						code: 'rest_upload_file_too_big',
-						message: 'Too big.',
-					} ),
-			} );
-
-			await expect(
-				nativeMediaUploadMiddleware(
-					makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
-					makeNext()
-				)
-			).rejects.toEqual( {
-				code: 'rest_upload_file_too_big',
-				message: 'Too big.',
-			} );
-		} );
 	} );
 
 	describe( 'native code refusing or failing the upload', () => {
@@ -237,12 +217,13 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 			} );
 			const next = makeNext();
 
-			await expect(
-				nativeMediaUploadMiddleware(
-					makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
-					next
-				)
-			).rejects.toEqual( {
+			const rejection = await nativeMediaUploadMiddleware(
+				makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
+				next
+			).catch( ( error ) => error );
+
+			expect( rejection.status ).toBe( 503 );
+			expect( await rejection.json() ).toEqual( {
 				code: 'native_upload_unavailable',
 				message:
 					'Native media uploads are not available in this editor.',
@@ -280,12 +261,13 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 			} );
 			const next = makeNext();
 
-			await expect(
-				nativeMediaUploadMiddleware(
-					makeOptions( new File( [ 'x' ], 'a.mp4' ) ),
-					next
-				)
-			).rejects.toEqual( {
+			const rejection = await nativeMediaUploadMiddleware(
+				makeOptions( new File( [ 'x' ], 'a.mp4' ) ),
+				next
+			).catch( ( error ) => error );
+
+			expect( rejection.status ).toBe( 413 );
+			expect( await rejection.json() ).toEqual( {
 				code: 'upload_file_too_big',
 				message: 'The file is too large to upload in the editor.',
 				data: { status: 413 },

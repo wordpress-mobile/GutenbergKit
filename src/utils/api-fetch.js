@@ -322,10 +322,8 @@ function nativeMediaUpload( options, transport ) {
 	// Use the two-argument form of `.then()` so the rejection handler catches
 	// *only* a failure to reach native code — not errors thrown while handling
 	// a response (those must surface as real failures).
-	return upload.then(
-		( response ) => relayUploadResponse( response, options ),
-		( connectionError ) =>
-			rejectUnreachableUpload( connectionError, options )
+	return upload.then( relayUploadResponse, ( connectionError ) =>
+		rejectUnreachableUpload( connectionError, options )
 	);
 }
 
@@ -506,74 +504,19 @@ function uploadFields( formData ) {
 }
 
 /**
- * Turns native code's relay of WordPress's response into what the caller asked
- * for.
+ * Hands native code's relay of WordPress's response to core's media upload
+ * middleware, which runs above this one.
+ *
+ * Core always asks for the raw `Response` (`parse: false`) so it can read
+ * `x-wp-upload-attachment-id` off a failed upload and retry `post-process`. It
+ * parses the response itself, so this only rejects on a non-2xx. That rejection
+ * is not logged: core may still recover the upload.
  *
  * @param {Response} response WordPress's response, relayed.
- * @param {Object}   options  The api-fetch options.
- * @return {Promise|Response} The response or its parsed body.
+ * @return {Promise<Response>|Response} The response.
  */
-function relayUploadResponse( response, options ) {
-	// `parse: false` asks for raw `Response` semantics. Core's media
-	// upload middleware runs above this one and makes exactly that
-	// request so it can read `x-wp-upload-attachment-id` off a failed
-	// upload and retry `post-process`. Honor it by resolving or
-	// rejecting with the `Response` itself, leaving the parsing (and
-	// the recovery decision) to that middleware — parsing here would
-	// hide the header and turn a recoverable upload into a permanent
-	// failure.
-	if ( options.parse === false ) {
-		if ( ! response.ok ) {
-			// A handoff to core's post-process retry, not an outcome —
-			// core reads `x-wp-upload-attachment-id` off this response and
-			// may still recover. Stay silent (as `nativeMediaDelete` does)
-			// rather than reporting a failure that hasn't happened yet.
-			return Promise.reject( response );
-		}
-		return response;
-	}
-
-	// Native code relays WordPress's response verbatim. On a
-	// non-2xx, mirror @wordpress/api-fetch: reject with the parsed WP
-	// error body ({ code, message, data }) so @wordpress/media-utils
-	// surfaces WordPress's real message. On success, return WordPress's
-	// attachment object unchanged so every consumer behaves exactly as
-	// it would for a non-native upload.
-	if ( ! response.ok ) {
-		return response
-			.json()
-			.catch( () => {
-				// An abort during the body read rejects json() too; surface
-				// the cancellation, not an "invalid response" error.
-				if ( options.signal?.aborted ) {
-					throw uploadAbortError( options.signal );
-				}
-				return invalidUploadResponseError();
-			} )
-			.then( ( body ) => {
-				logError( 'Native upload failed', body );
-				// Throw the parsed body verbatim, even if it isn't the usual
-				// WordPress `{ code, message, data }` shape. This is
-				// deliberate: it mirrors `@wordpress/api-fetch`'s
-				// `parseAndThrowError`, so a native-relayed error reaches
-				// consumers identically to a direct upload's. We intentionally
-				// don't reshape or second-guess a non-standard error body.
-				throw body;
-			} );
-	}
-	// A 2xx with a non-JSON body (e.g. an HTML error page injected by an
-	// intermediary) rejects json(); normalize it the same way as the
-	// non-ok path rather than surfacing a raw SyntaxError.
-	return response.json().catch( () => {
-		// An abort during the body read rejects json(); surface the
-		// cancellation rather than an "invalid response" error notice.
-		if ( options.signal?.aborted ) {
-			throw uploadAbortError( options.signal );
-		}
-		const error = invalidUploadResponseError();
-		logError( 'Native upload returned an invalid response', error );
-		throw error;
-	} );
+function relayUploadResponse( response ) {
+	return response.ok ? response : Promise.reject( response );
 }
 
 /**
