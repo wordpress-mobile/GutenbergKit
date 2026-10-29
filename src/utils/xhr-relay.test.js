@@ -383,6 +383,22 @@ describe( 'createRelayXMLHttpRequest', () => {
 			] );
 		} );
 
+		it( 'can be set again after an abort', async () => {
+			// `abort()` leaves the request unsent, where the browser allows it.
+			for ( const body of [ 'x', new NodeBlob( [ 'x' ] ) ] ) {
+				const xhr = new RelayXMLHttpRequest();
+				xhr.open( 'POST', 'https://example.org/upload' );
+				xhr.send( body );
+				xhr.abort();
+				await settle();
+
+				expect( () => {
+					xhr.withCredentials = true;
+				} ).not.toThrow();
+				expect( xhr.withCredentials ).toBe( true );
+			}
+		} );
+
 		it( 'keeps the caller’s value for a request that isn’t relayed', () => {
 			const xhr = new RelayXMLHttpRequest();
 			xhr.withCredentials = true;
@@ -475,6 +491,30 @@ describe( 'createRelayXMLHttpRequest', () => {
 			} ).toThrow(
 				expect.objectContaining( { name: 'InvalidStateError' } )
 			);
+		} );
+
+		it( 'lets a listener the browser calls during send open the request again', () => {
+			// A synchronous request fires its `load` before `send()` returns.
+			class LoadingXMLHttpRequest extends FakeXMLHttpRequest {
+				send( ...args ) {
+					super.send( ...args );
+					this.dispatchEvent( new Event( 'load' ) );
+				}
+			}
+			const Relay = createRelayXMLHttpRequest( LoadingXMLHttpRequest, {
+				restRelay: REST_RELAY,
+			} );
+			const xhr = new Relay();
+			xhr.addEventListener(
+				'load',
+				() => xhr.open( 'GET', 'https://example.org/b', false ),
+				{ once: true }
+			);
+			xhr.open( 'GET', 'https://example.org/a', false );
+			xhr.send();
+
+			expect( () => xhr.send() ).not.toThrow();
+			expect( xhr.callsTo( 'send' ) ).toHaveLength( 2 );
 		} );
 
 		it( 'passes a header set after send to the browser to refuse', () => {

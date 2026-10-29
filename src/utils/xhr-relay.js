@@ -160,7 +160,9 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		}
 
 		set withCredentials( value ) {
-			if ( this.#sent ) {
+			// The browser refuses it once the request is sent, but doesn't
+			// know a request waiting for its body has been.
+			if ( this.#pending ) {
 				throw invalidState( 'withCredentials' );
 			}
 			super.withCredentials = this.#target ? false : value;
@@ -196,12 +198,15 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			const sent =
 				this.#method === 'GET' || this.#method === 'HEAD' ? null : body;
 
+			// Set before the browser's `send()`, which can fire events whose
+			// listeners open the request again.
+			this.#sent = true;
+
 			if ( ! this.#async ) {
 				for ( const type of this.#contentTypes ) {
 					super.setRequestHeader( 'Content-Type', type );
 				}
 				super.send( sent );
-				this.#sent = true;
 				return;
 			}
 
@@ -211,11 +216,9 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 					super.setRequestHeader( 'Content-Type', type );
 				}
 				this.#sendRelayed( sent, startedAt );
-				this.#sent = true;
 				return;
 			}
 
-			this.#sent = true;
 			const pending = {};
 			this.#pending = pending;
 			const headers = new Headers();
