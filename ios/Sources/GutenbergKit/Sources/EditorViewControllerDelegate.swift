@@ -97,6 +97,10 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// This method is called when network logging is enabled via `EditorConfiguration.enableNetworkLogging`.
     /// It provides visibility into all fetch-based network requests made by the editor.
     ///
+    /// One exception: if the editor's `EditorHTTPClient` has a delegate, the requests that
+    /// native code sends to the site's REST API for the page are reported to that
+    /// ``EditorHTTPClientDelegate`` instead of here, so each request is reported once.
+    ///
     /// - parameter request: The network request details including URL, headers, body, response, and timing.
     func editor(_ viewController: EditorViewController, didLogNetworkRequest request: RecordedNetworkRequest)
 

@@ -72,12 +72,9 @@ extension EditorAssetBundleProvider: WKURLSchemeHandler {
                 preconditionFailure("Cannot read asset with no bundle present. This is a programmer error.")
             }
 
-            // Check if the path is valid and the asset exists in the bundle.
-            // If not, fetch from the original HTTPS URL (e.g., for plugin SVGs
-            // referenced in CSS that weren't downloaded into the bundle).
-            let shouldFetchFromRemote = !bundle.isValidAssetPath(for: url) || !bundle.hasAssetData(for: url)
-
-            guard !shouldFetchFromRemote else {
+            // If the bundle doesn't have the asset, fetch it from the original HTTPS URL
+            // (e.g., for plugin SVGs referenced in CSS that weren't downloaded into the bundle).
+            guard bundle.hasAssetData(for: url) else {
                 Logger.assetLibrary.info("     Asset not in bundle – fetching from remote")
                 self.fetchFromRemote(for: urlSchemeTask)
                 return
@@ -87,7 +84,11 @@ extension EditorAssetBundleProvider: WKURLSchemeHandler {
                 Logger.assetLibrary.info("     Path: \(bundle.assetDataPath(for: url))")
 
                 let data = try bundle.assetData(for: url)
-                let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+
+                // Serve the asset with the `Content-Type` the site sent. Without one, the web view
+                // can only go by the URL's file extension.
+                let headers = bundle.contentType(forAssetAt: url).map { ["Content-Type": $0] }
+                let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!
                 urlSchemeTask.didReceive(response)
                 urlSchemeTask.didReceive(data)
                 urlSchemeTask.didFinish()

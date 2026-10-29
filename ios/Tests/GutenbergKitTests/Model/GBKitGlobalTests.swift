@@ -55,6 +55,40 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(global.siteApiRoot == Self.testApiRoot)
   }
 
+  @Test("tells the page whether native code reports the relay's requests")
+  func mapsRelayReporting() throws {
+    let reporting = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayEndpoint: "gbk-rest://relay/fetch", restRelayReportsRequests: true
+    )
+    let silent = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayEndpoint: "gbk-rest://relay/fetch"
+    )
+    #expect(reporting.restRelay?.reportsRequests == true)
+    #expect(silent.restRelay?.reportsRequests == false)
+  }
+
+  @Test("tells the page where the relay is")
+  func mapsRelayEndpoint() throws {
+    let global = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayEndpoint: "gbk-rest://relay/fetch"
+    )
+    #expect(global.restRelay?.endpoint == "gbk-rest://relay/fetch")
+    #expect(try global.toString().contains(#""endpoint":"gbk-rest:\/\/relay\/fetch""#))
+  }
+
+  @Test("offers no relay in offline mode, where there is no site")
+  func omitsRelayOffline() throws {
+    let global = try GBKitGlobal(
+      configuration: makeConfigurationBuilder().setIsOfflineModeEnabled(true).build(),
+      dependencies: makeDependencies(),
+      restRelayEndpoint: "gbk-rest://relay/fetch"
+    )
+    #expect(global.restRelay == nil)
+  }
+
   @Test("maps themeStyles from configuration")
   func mapsThemeStyles() throws {
     let withThemeStyles = makeConfiguration(shouldUseThemeStyles: true)

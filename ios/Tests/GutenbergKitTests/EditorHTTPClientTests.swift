@@ -6,8 +6,12 @@ import Testing
 private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var _capturedRequests: [URLRequest] = []
+    private var _downloadedFiles: [URL] = []
 
     var responseData = Data()
+
+    /// The HTTP status code `download(for:delegate:)` responds with.
+    var downloadStatusCode = 200
 
     var capturedRequests: [URLRequest] {
         lock.withLock { _capturedRequests }
@@ -15,6 +19,11 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
 
     var lastCapturedRequest: URLRequest? {
         capturedRequests.last
+    }
+
+    /// The temporary file each `download(for:delegate:)` call returned, in order.
+    var downloadedFiles: [URL] {
+        lock.withLock { _downloadedFiles }
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
@@ -40,7 +49,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
         let url = request.url ?? URL(string: "https://example.com")!
         let response = HTTPURLResponse(
             url: url,
-            statusCode: 200,
+            statusCode: downloadStatusCode,
             httpVersion: nil,
             headerFields: nil
         )!
@@ -48,6 +57,7 @@ private final class SpyURLSession: URLSessionProtocol, @unchecked Sendable {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         try responseData.write(to: tempURL)
+        lock.withLock { _downloadedFiles.append(tempURL) }
 
         return (tempURL, response)
     }
@@ -112,6 +122,32 @@ struct EditorHTTPClientTests {
 
         let capturedRequest = try #require(spySession.lastCapturedRequest)
         #expect(capturedRequest.value(forHTTPHeaderField: "Authorization") == authHeader)
+    }
+
+    @Test("download() throws for a non-2xx status")
+    func downloadThrowsForFailureStatus() async throws {
+        let spySession = SpyURLSession()
+        spySession.downloadStatusCode = 404
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+
+        await #expect(throws: EditorHTTPClient.ClientError.self) {
+            try await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!))
+        }
+    }
+
+    /// The downloaded file holds the error response's body. `download()` throws instead of returning it, so
+    /// no caller can remove it, and `download()` has to.
+    @Test("download() removes the downloaded file for a non-2xx status")
+    func downloadRemovesFileForFailureStatus() async throws {
+        let spySession = SpyURLSession()
+        spySession.downloadStatusCode = 404
+        spySession.responseData = Data("Not Found".utf8)
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+
+        _ = try? await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!))
+
+        let file = try #require(spySession.downloadedFiles.first)
+        #expect(!FileManager.default.fileExists(at: file))
     }
 
     // MARK: - Timeout Tests
@@ -184,16 +220,27 @@ struct EditorHTTPClientTests {
         _ = try await uploadClient.performRaw(request)
 
         let captured = try #require(spySession.lastCapturedRequest)
-        // The short REST timeout must not bleed into uploads — the request keeps
-        // its own (default) inactivity timeout instead.
+        // The short REST timeout must not bleed into uploads.
         #expect(captured.timeoutInterval != restTimeout)
-        #expect(captured.timeoutInterval == request.timeoutInterval)
         // Auth and the shared session are still used.
         #expect(captured.value(forHTTPHeaderField: "Authorization") == authHeader)
     }
 
-    @Test("uploadClient() preserves an explicit upload request timeout instead of clobbering it")
-    func uploadClientPreservesExplicitTimeout() async throws {
+    @Test("uploadClient() raises URLRequest's 60s default so a slow server response can't orphan the attachment")
+    func uploadClientRaisesDefaultTimeout() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token")
+
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
+        #expect(request.timeoutInterval == 60)
+        _ = try await client.uploadClient().performRaw(request)
+
+        let captured = try #require(spySession.lastCapturedRequest)
+        #expect(captured.timeoutInterval == EditorHTTPClient.uploadInactivityTimeout)
+    }
+
+    @Test("uploadClient() keeps an upload request's own timeout when it is longer than the floor")
+    func uploadClientPreservesLongerExplicitTimeout() async throws {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
@@ -201,16 +248,27 @@ struct EditorHTTPClientTests {
             requestTimeout: 15
         )
 
-        let uploadClient = client.uploadClient()
         var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
-        request.timeoutInterval = 120
+        request.timeoutInterval = EditorHTTPClient.uploadInactivityTimeout * 2
 
-        _ = try await uploadClient.performRaw(request)
+        _ = try await client.uploadClient().performRaw(request)
 
         // On the REST client the requestTimeout (15) would clobber this to 15;
-        // the upload client leaves it alone.
+        // the upload client leaves a longer value alone.
         let captured = try #require(spySession.lastCapturedRequest)
-        #expect(captured.timeoutInterval == 120)
+        #expect(captured.timeoutInterval == EditorHTTPClient.uploadInactivityTimeout * 2)
+    }
+
+    @Test("The REST client leaves the request's timeout alone when it has no requestTimeout")
+    func restClientDoesNotApplyUploadFloor() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token")
+
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
+        _ = try await client.performRaw(request)
+
+        let captured = try #require(spySession.lastCapturedRequest)
+        #expect(captured.timeoutInterval == 60)
     }
 
     @Test("uploadClient() carries the request-observing delegate so uploads are observed too")
@@ -459,6 +517,84 @@ struct EditorHTTPClientTests {
         #elseif os(macOS)
         #expect(userAgent.contains("macOS/"))
         #endif
+    }
+
+    // MARK: - Sharing Tests
+
+    @Test("identical requests from clients on one session share a key")
+    func identicalRequestsShareAKey() async throws {
+        let session = SpyURLSession()
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
+        let first = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+        let second = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+        #expect(first != nil)
+        #expect(first == second)
+    }
+
+    @Test("requests with other credentials, sessions, or timeouts don't share")
+    func requestsWithOtherCredentialsSessionsOrTimeoutsDontShare() async throws {
+        let session = SpyURLSession()
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
+        let key = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+
+        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer b").sharedRequest(for: request) != key)
+        #expect(await EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a").sharedRequest(for: request) != key)
+        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer a", requestTimeout: 5).sharedRequest(for: request) != key)
+    }
+
+    @Test("only safe requests without a body, from a client no delegate watches, are shared")
+    func onlySafeUnwatchedRequestsAreShared() async throws {
+        let session = SpyURLSession()
+        let client = EditorHTTPClient(urlSession: session, authHeader: "Bearer a")
+        let url = URL(string: "https://example.com/wp-json/wp/v2/settings")!
+
+        #expect(await client.sharedRequest(for: URLRequest(method: .OPTIONS, url: url)) != nil)
+        #expect(await client.sharedRequest(for: URLRequest(method: .POST, url: url)) == nil)
+
+        var withBody = URLRequest(url: url)
+        withBody.httpBody = Data("{}".utf8)
+        #expect(await client.sharedRequest(for: withBody) == nil)
+
+        let watched = EditorHTTPClient(urlSession: session, authHeader: "Bearer a", delegate: SpyHTTPClientDelegate())
+        #expect(await watched.sharedRequest(for: URLRequest(url: url)) == nil)
+    }
+
+    @Test("a request that asks to skip the cache goes out alone")
+    func aRequestThatSkipsTheCacheGoesOutAlone() async throws {
+        let client = EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a")
+        var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts/5")!)
+
+        let freshAnswerPolicies: [URLRequest.CachePolicy] = [
+            .reloadIgnoringLocalCacheData, .reloadIgnoringLocalAndRemoteCacheData, .reloadRevalidatingCacheData,
+        ]
+        for policy in freshAnswerPolicies {
+            request.cachePolicy = policy
+            #expect(await client.sharedRequest(for: request) == nil)
+        }
+
+        request.cachePolicy = .returnCacheDataElseLoad
+        #expect(await client.sharedRequest(for: request) != nil)
+    }
+
+    @Test("identical requests in flight go out once")
+    func identicalRequestsInFlightGoOutOnce() async throws {
+        let session = ParkedURLSession()
+        defer { session.release() }
+        let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
+        let clients = [
+            EditorHTTPClient(urlSession: session, authHeader: "Bearer a"),
+            EditorHTTPClient(urlSession: session, authHeader: "Bearer a"),
+        ]
+        let key = try #require(await clients[0].sharedRequest(for: request))
+
+        let callers = clients.map { client in Task { try await client.perform(request) } }
+        try await waitUntil { EditorHTTPClient.inFlightRequests.waiterCount(for: key) == 2 }
+
+        session.release()  // fails the parked request, for every caller waiting on it
+        for caller in callers {
+            await #expect(throws: URLError.self) { try await caller.value }
+        }
+        #expect(session.requestCount == 1)
     }
 }
 

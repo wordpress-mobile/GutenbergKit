@@ -99,6 +99,71 @@ extension URL {
         components!.scheme = scheme
         return components!.url!
     }
+
+    /// Whether the URL has a user name or password in it, as in
+    /// `https://user:pass@example.com/`.
+    var hasCredentials: Bool {
+        user(percentEncoded: true) != nil || password(percentEncoded: true) != nil
+    }
+
+    /// The URL without its user name and password, or `nil` if it can't be
+    /// rebuilt without them.
+    func removingCredentials() -> URL? {
+        guard hasCredentials else { return self }
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else { return nil }
+        components.user = nil
+        components.password = nil
+        return components.url
+    }
+
+    /// The URL's origin, as `fetch` compares origins: its scheme, host, and
+    /// port, lowercased, with a default port filled in. `nil` for a URL
+    /// without a host, or with a scheme that has no default port and names
+    /// none.
+    ///
+    /// Example: `https://Example.com/a` and `https://example.com:443/b` both
+    /// have the origin `https://example.com:443`.
+    var origin: String? {
+        guard let scheme = scheme?.lowercased(),
+              let host = host()?.lowercased(),
+              let port = port ?? schemeDefaultPort(scheme) else {
+            return nil
+        }
+        return "\(scheme)://\(host):\(port)"
+    }
+}
+
+// MARK: - URLComponents Extensions
+
+extension URLComponents {
+    /// The port the scheme uses when a URL names none: 80 for `http`, 443 for
+    /// `https`, and `nil` for any other scheme.
+    var defaultPort: Int? {
+        schemeDefaultPort(scheme)
+    }
+
+    /// The port the URL names, or `nil` when it names none or names its
+    /// scheme's default. So `https://example.com:443` and `https://example.com`
+    /// have the same one.
+    var explicitPort: Int? {
+        port == defaultPort ? nil : port
+    }
+
+    /// The percent-encoded path, or `/` when it is empty. HTTP treats an empty
+    /// path as `/`.
+    var percentEncodedPathOrSlash: String {
+        percentEncodedPath.isEmpty ? "/" : percentEncodedPath
+    }
+}
+
+/// The port `scheme` uses when a URL names none: 80 for `http`, 443 for
+/// `https`, and `nil` for any other scheme.
+private func schemeDefaultPort(_ scheme: String?) -> Int? {
+    switch scheme?.lowercased() {
+    case "http": 80
+    case "https": 443
+    default: nil
+    }
 }
 
 // MARK: - URLRequest Extensions

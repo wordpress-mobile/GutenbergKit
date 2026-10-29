@@ -356,3 +356,63 @@ struct URLAppendingRawPathTests {
     #expect(result.absoluteString == "https://example.com/wp-json/wp/v2/themes?status=active")
   }
 }
+
+// MARK: - URL credentials and origin
+
+@Suite
+struct URLCredentialsAndOriginTests {
+
+  @Test("hasCredentials is true for a user name, a password, or both", arguments: [
+    "https://user@example.com/", "https://:pass@example.com/", "https://user:pass@example.com/",
+  ])
+  func hasCredentials(url: String) {
+    #expect(URL(string: url)!.hasCredentials)
+  }
+
+  @Test("hasCredentials is false without them, even with an @ elsewhere", arguments: [
+    "https://example.com/", "https://example.com/@user", "https://example.com/?to=a@b.example",
+  ])
+  func hasNoCredentials(url: String) {
+    #expect(!URL(string: url)!.hasCredentials)
+  }
+
+  @Test("removingCredentials drops the user name and password, and nothing else")
+  func removesCredentials() {
+    let url = URL(string: "https://user:pass@example.com:8443/a?b=c#d")!
+    #expect(url.removingCredentials()?.absoluteString == "https://example.com:8443/a?b=c#d")
+
+    let plain = URL(string: "https://example.com/a")!
+    #expect(plain.removingCredentials() == plain)
+  }
+
+  @Test("origin is the lowercased scheme, host, and port, with a default port filled in")
+  func origin() {
+    #expect(URL(string: "https://Example.com/a")!.origin == "https://example.com:443")
+    #expect(URL(string: "https://example.com:443/b")!.origin == "https://example.com:443")
+    #expect(URL(string: "HTTP://example.com/")!.origin == "http://example.com:80")
+    #expect(URL(string: "http://example.com:8080/")!.origin == "http://example.com:8080")
+    #expect(URL(string: "file:///tmp/a")!.origin == nil)
+  }
+}
+
+// MARK: - URLComponents ports and path
+
+@Suite
+struct URLComponentsPortAndPathTests {
+
+  @Test("explicitPort is nil for no port or the scheme's default, and the port otherwise")
+  func explicitPort() {
+    #expect(URLComponents(string: "https://example.com/")!.explicitPort == nil)
+    #expect(URLComponents(string: "https://example.com:443/")!.explicitPort == nil)
+    #expect(URLComponents(string: "http://example.com:80/")!.explicitPort == nil)
+    #expect(URLComponents(string: "https://example.com:80/")!.explicitPort == 80)
+    #expect(URLComponents(string: "http://example.com:8888/")!.explicitPort == 8888)
+  }
+
+  @Test("percentEncodedPathOrSlash reads an empty path as /")
+  func percentEncodedPathOrSlash() {
+    #expect(URLComponents(string: "https://example.com")!.percentEncodedPathOrSlash == "/")
+    #expect(URLComponents(string: "https://example.com/?a=b")!.percentEncodedPathOrSlash == "/")
+    #expect(URLComponents(string: "https://example.com/caf%C3%A9")!.percentEncodedPathOrSlash == "/caf%C3%A9")
+  }
+}
