@@ -68,17 +68,20 @@ class PostsListActivity : ComponentActivity() {
     companion object {
         const val EXTRA_ACCOUNT_ID = "account_id"
         const val EXTRA_POST_TYPE = "post_type"
+        const val EXTRA_TITLE = "title"
 
         fun createIntent(
             context: Context,
             accountId: ULong,
             postType: PostTypeDetails,
+            title: String,
             configuration: EditorConfiguration,
             dependencies: EditorDependencies?
         ): Intent {
             return Intent(context, PostsListActivity::class.java).apply {
                 putExtra(EXTRA_ACCOUNT_ID, accountId.toLong())
                 putExtra(EXTRA_POST_TYPE, postType)
+                putExtra(EXTRA_TITLE, title)
                 putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
                 if (dependencies != null) {
                     val filePath = EditorDependenciesSerializer.writeToDisk(context, dependencies)
@@ -95,6 +98,7 @@ class PostsListActivity : ComponentActivity() {
         val accountId = intent.getLongExtra(EXTRA_ACCOUNT_ID, -1L).takeIf { it >= 0 }?.toULong()
         val postType = intent.getParcelableExtra(EXTRA_POST_TYPE, PostTypeDetails::class.java)
             ?: PostTypeDetails.post
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.posts)
         val configuration = intent.getParcelableExtra(MainActivity.EXTRA_CONFIGURATION, EditorConfiguration::class.java)
         val dependenciesPath = intent.getStringExtra(EditorActivity.EXTRA_DEPENDENCIES_PATH)
 
@@ -116,6 +120,7 @@ class PostsListActivity : ComponentActivity() {
             AppTheme {
                 PostsListScreen(
                     viewModel = viewModel,
+                    title = title,
                     onClose = { finish() },
                     onPostSelected = { post ->
                         launchEditor(post, configuration, dependenciesPath, accountId)
@@ -171,14 +176,13 @@ class PostsListViewModel(
 
             try {
                 val app = application as GutenbergKitApplication
-                val account = app.accountRepository.all().firstOrNull { it.id() == accountId }
-                    ?: error("Account not found")
+                val account = app.findAccount(accountId) ?: error("Account not found")
                 val client = app.createApiClient(account)
 
                 val endpointType = when (postType.postType) {
                     "page" -> PostEndpointType.Pages
                     "post" -> PostEndpointType.Posts
-                    else -> PostEndpointType.Custom(postType.postType)
+                    else -> PostEndpointType.Custom(postType.restBase)
                 }
 
                 // Single page only — matches the iOS demo, which doesn't paginate either.
@@ -209,6 +213,7 @@ class PostsListViewModel(
 @Composable
 fun PostsListScreen(
     viewModel: PostsListViewModel,
+    title: String,
     onClose: () -> Unit,
     onPostSelected: (AnyPostWithEditContext) -> Unit
 ) {
@@ -222,7 +227,7 @@ fun PostsListScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.posts)) },
+                title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(

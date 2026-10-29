@@ -107,8 +107,6 @@ data class GBKitGlobal(
             nativeUploadPort: Int? = null,
             nativeUploadToken: String? = null
         ): GBKitGlobal {
-            val postId = (configuration.postId?.toInt() ?: -1).takeIf({ it != 0 })
-
             return GBKitGlobal(
                 siteURL = configuration.siteURL.ifEmpty { null },
                 siteApiRoot = configuration.siteApiRoot.ifEmpty { null },
@@ -121,7 +119,7 @@ data class GBKitGlobal(
                 hideTitle = configuration.hideTitle,
                 locale = configuration.locale ?: "en",
                 post = Post(
-                    id = postId ?: -1,
+                    id = configuration.serverPostId ?: -1,
                     type = configuration.postType.postType,
                     restBase = configuration.postType.restBase,
                     restNamespace = configuration.postType.restNamespace,

@@ -16,6 +16,7 @@ struct AddSiteView: View {
     @State private var errorMessage: String?
     @State private var isAuthenticating = false
     @State private var authTask: Task<Void, Never>?
+    @FocusState private var isSiteUrlFocused: Bool
 
     private let authenticationManager = AuthenticationManager()
 
@@ -29,6 +30,7 @@ struct AddSiteView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+                        .focused($isSiteUrlFocused)
                         .onSubmit {
                             startAuthentication()
                         }
@@ -67,6 +69,9 @@ struct AddSiteView: View {
                 }
             }
         }
+        .onAppear {
+            isSiteUrlFocused = true
+        }
         .onDisappear {
             authTask?.cancel()
         }
@@ -83,6 +88,7 @@ struct AddSiteView: View {
             do {
                 let account = try await authenticationManager.startAuthentication(
                     siteUrl: trimmedUrl,
+                    storedAccounts: configurationStorage.accountRepository.all(),
                     presentationContext: presentationContextProvider
                 )
                 try onAdd(account)

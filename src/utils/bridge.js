@@ -74,6 +74,21 @@ export function onEditorHistoryChanged( hasUndo, hasRedo ) {
 }
 
 /**
+ * Notifies the native host that the post's save availability has changed.
+ *
+ * @param {boolean} isSaveable     Whether the post has content worth saving.
+ * @param {boolean} isSavingLocked Whether saving is locked, e.g. by an upload in progress.
+ *
+ * @return {void}
+ */
+export function onEditorSaveAvailabilityChanged( isSaveable, isSavingLocked ) {
+	dispatchToBridge( 'onEditorSaveAvailabilityChanged', {
+		isSaveable,
+		isSavingLocked,
+	} );
+}
+
+/**
  * Notifies the native host that the featured image has changed.
  *
  * @param {number} [mediaID] The featured image ID.

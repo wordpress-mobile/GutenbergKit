@@ -37,7 +37,7 @@ if (oauthCredentialsFile.exists()) {
 
 android {
     namespace = "com.example.gutenbergkit"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.gutenbergkit"
@@ -54,7 +54,8 @@ android {
 
         buildConfigField("String", "WP_ENV_SITE_URL", "\"${wpEnvCredentials["siteUrl"] ?: ""}\"")
         buildConfigField("String", "WP_ENV_SITE_API_ROOT", "\"${wpEnvCredentials["siteApiRoot"] ?: ""}\"")
-        buildConfigField("String", "WP_ENV_AUTH_HEADER", "\"${wpEnvCredentials["authHeader"] ?: ""}\"")
+        buildConfigField("String", "WP_ENV_USERNAME", "\"${wpEnvCredentials["username"] ?: ""}\"")
+        buildConfigField("String", "WP_ENV_APP_PASSWORD", "\"${wpEnvCredentials["appPassword"] ?: ""}\"")
     }
 
     buildTypes {

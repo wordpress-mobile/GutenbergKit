@@ -8,17 +8,6 @@ import {
 import { store as editorStore, PostTitle } from '@wordpress/editor';
 import { useSelect } from '@wordpress/data';
 import { store as editPostStore } from '@wordpress/edit-post';
-import '@wordpress/format-library';
-// Base styles for the content within the block canvas iframe.
-import componentStyles from '@wordpress/components/build-style/style.css?inline';
-import blockEditorContentStyles from '@wordpress/block-editor/build-style/content.css?inline';
-import blocksStyles from '@wordpress/block-library/build-style/style.css?inline';
-import blocksEditorStyles from '@wordpress/block-library/build-style/editor.css?inline';
-// Right-to-left counterparts, generated upstream by `rtlcss`.
-import componentStylesRTL from '@wordpress/components/build-style/style-rtl.css?inline';
-import blockEditorContentStylesRTL from '@wordpress/block-editor/build-style/content-rtl.css?inline';
-import blocksStylesRTL from '@wordpress/block-library/build-style/style-rtl.css?inline';
-import blocksEditorStylesRTL from '@wordpress/block-library/build-style/editor-rtl.css?inline';
 import './style.scss';
 import EditorToolbar from '../editor-toolbar';
 import { useEditorStyles } from './use-editor-styles';
@@ -33,20 +22,6 @@ const {
 	useLayoutClasses,
 	useLayoutStyles,
 } = unlock( blockEditorPrivateApis );
-
-const LTR_CANVAS_STYLES = [
-	componentStyles,
-	blockEditorContentStyles,
-	blocksStyles,
-	blocksEditorStyles,
-];
-
-const RTL_CANVAS_STYLES = [
-	componentStylesRTL,
-	blockEditorContentStylesRTL,
-	blocksStylesRTL,
-	blocksEditorStylesRTL,
-];
 
 // Add some styles for alignwide/alignfull Post Content and its children.
 const alignCSS = `.is-root-container.alignwide { max-width: var(--wp--style--global--wide-size); margin-left: auto; margin-right: auto;}
@@ -94,21 +69,13 @@ const VisualEditor = forwardRef( function UnforwardedVisualEditor(
 		};
 	}, [] );
 
-	// `configureLocale` resolves the direction onto the document before the
-	// editor renders, and it does not change for the editor's lifetime.
-	const canvasStyles =
-		document.documentElement.dir === 'rtl'
-			? RTL_CANVAS_STYLES
-			: LTR_CANVAS_STYLES;
-
 	const styles = useEditorStyles(
 		// `commonStyles` represent manually added notable styles that are missing.
 		// The styles likely absent due to them being injected by the WP Admin
 		// context.
 		commonStyles,
 		// Add sensible default styles if theme styles are not present.
-		hasThemeStyles ? '' : defaultThemeStyles,
-		...canvasStyles
+		hasThemeStyles ? '' : defaultThemeStyles
 	);
 
 	const editorClasses = clsx( 'gutenberg-kit-visual-editor', {
@@ -176,7 +143,7 @@ const VisualEditor = forwardRef( function UnforwardedVisualEditor(
 						</>
 					) }
 				{ ! hideTitle && (
-					<div className={ titleClasses }>
+					<div className={ titleClasses } contentEditable={ false }>
 						<PostTitle ref={ editorPostTitleRef } />
 					</div>
 				) }

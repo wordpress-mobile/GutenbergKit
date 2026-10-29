@@ -79,6 +79,17 @@ make release VERSION_TYPE=patch DRY_RUN=true
 -   `make` - for building the project
 -   Git - for version control operations
 
+### `demo-app-login.sh`
+
+Signs a demo app into WordPress sites with credentials stored on your machine: the self-hosted sites listed in `~/.config/wp/sites`, and a WordPress.com site with the bearer token in `WPCOM_TOKEN` or `~/.wpcom-token`. See [Signing In to the Demo Apps](../docs/code/demo-app-login.md).
+
+#### Usage
+
+```bash
+make login-ios-app
+make login-android-app
+```
+
 ### `fetch-translations.js`
 
 Fetches and caches locale string files for the GutenbergKit project. This script is typically run as part of the build process.

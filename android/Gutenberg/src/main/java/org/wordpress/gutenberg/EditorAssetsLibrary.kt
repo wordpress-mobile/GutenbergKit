@@ -39,7 +39,7 @@ class EditorAssetsLibrary(
     suspend fun loadManifestContent(headers: Map<String, String> = emptyMap()): String =
         withContext(Dispatchers.IO) {
             val endpoint = configuration.editorAssetsEndpoint
-                ?: "${configuration.siteApiRoot}wpcom/v2/editor-assets"
+                ?: configuration.siteApiRoot.appendingRestPath("/wpcom/v2/editor-assets")
 
             val connection = URL(endpoint).openConnection() as HttpURLConnection
             try {

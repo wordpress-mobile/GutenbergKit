@@ -109,7 +109,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// Whether opening the editor has already placed the caret in its content.
     ///
     /// Autofocus belongs to opening the editor, not to the reload after a crash:
-    /// ``focus(force:)`` decides from the content the editor was opened with,
+    /// ``focus(force:)`` decides from the post the editor was opened with,
     /// which a reload can replace with newer content from the host, so repeating
     /// it would raise the keyboard over a restored post.
     private var hasAutofocused = false
@@ -930,17 +930,20 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         evaluate("editor.appendTextAtCursor(decodeURIComponent('\(escapedText)'));")
     }
 
-    /// Sets focus to the editor if the content is empty.
+    /// Sets focus to the editor if it opened a new, empty post.
     ///
     /// This method programmatically focuses the editor, placing the cursor in the content area
-    /// so the user can begin typing immediately. Focus is only applied when the editor is displaying
-    /// empty content to avoid disrupting existing content editing.
+    /// so the user can begin typing immediately. Focus is only applied to a new post with a blank
+    /// title and content, to avoid disrupting existing posts and local drafts.
     ///
-    /// Use the `force` parameter to apply focus even when there is content in the editor.
+    /// Use the `force` parameter to apply focus to any post.
     ///
-    /// - Parameter force: When true, applies focus even when there is content in the editor.
+    /// - Parameter force: When true, applies focus even when the post isn't new and empty.
     public func focus(force: Bool = false) {
-        if force || configuration.content.isEmpty {
+        if force || configuration.isNewEmptyPost {
+            // iOS 27 no longer makes the web view first responder for script
+            // focus, leaving the page without input focus and the keyboard hidden.
+            webView.becomeFirstResponder()
             evaluate("editor.focus();")
         }
     }
@@ -986,6 +989,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 self.state.hasUndo = body.hasUndo
                 self.state.hasRedo = body.hasRedo
                 delegate?.editor(self, didUpdateHistoryState: state)
+            case .onEditorSaveAvailabilityChanged:
+                let availability = try message.decode(EditorSaveAvailability.self)
+                delegate?.editor(self, didUpdateSaveAvailability: availability)
             case .onEditorFeaturedImageChanged:
                 let body = try message.decode(EditorJSMessage.DidUpdateFeaturedImageBody.self)
                 delegate?.editor(self, didUpdateFeaturedImage: body.mediaID)
@@ -1303,8 +1309,12 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
         // External main frame navigation should open in the system browser.
         if let url = navigationAction.request.url {
-            Logger.navigation.debug("Opening external URL in system browser: \(url.absoluteString)")
-            await UIApplication.shared.open(url)
+            if let windowScene = webView.window?.windowScene {
+                Logger.navigation.debug("Opening external URL in system browser: \(url.absoluteString)")
+                await windowScene.open(url, options: nil)
+            } else {
+                Logger.navigation.warning("Not opening external URL; editor is not in a window: \(url.absoluteString)")
+            }
         }
         return .cancel
     }

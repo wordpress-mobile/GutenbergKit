@@ -56,6 +56,10 @@ struct SitePreparationView: View {
             Section("Feature Configuration") {
                 Toggle("Enable Native Inserter", isOn: $viewModel.enableNativeInserter)
                 Toggle("Enable Native Media Upload", isOn: $viewModel.enableNativeMediaUpload)
+                Toggle("Enable Theme Styles", isOn: $viewModel.enableThemeStyles)
+                    .disabled(!viewModel.siteSupportsThemeStyles || viewModel.disableButtons)
+                Toggle("Enable Third-Party Blocks", isOn: $viewModel.enableThirdPartyBlocks)
+                    .disabled(!viewModel.siteSupportsBlockAssets || viewModel.disableButtons)
                 Toggle("Enable Network Logging", isOn: $viewModel.enableNetworkLogging)
 
                 Picker("Network Fallback", selection: $viewModel.networkFallbackMode) {
@@ -71,10 +75,11 @@ struct SitePreparationView: View {
                     }
                 } else {
                     Picker("Post Type", selection: $viewModel.selectedPostTypeDetails) {
-                        ForEach(viewModel.postTypes, id: \.self) { postType in
-                            Text(postType.name).tag(postType)
+                        ForEach(viewModel.postTypes, id: \.details) { option in
+                            Text(option.label).tag(option.details)
                         }
                     }
+                    .disabled(viewModel.disableButtons)
 
                     NavigationLink {
                         if let client = viewModel.client,
@@ -82,6 +87,7 @@ struct SitePreparationView: View {
                             PostsListView(
                                 client: client,
                                 postTypeDetails: viewModel.selectedPostTypeDetails,
+                                title: viewModel.selectedPostType.pluralLabel,
                                 editorConfiguration: configuration,
                                 editorDependencies: viewModel.editorDependencies
                             )
@@ -96,8 +102,8 @@ struct SitePreparationView: View {
                 Section("Editor Configuration Details") {
                     KeyValueRow(key: "Site URL", value: editorConfiguration.siteURL.absoluteString)
                     KeyValueRow(key: "API Root", value: editorConfiguration.siteApiRoot.absoluteString)
-                    KeyValueRow(key: "Supports Block Assets", value: editorConfiguration.shouldUsePlugins)
-                    KeyValueRow(key: "Supports Theme Styles", value: editorConfiguration.shouldUseThemeStyles)
+                    KeyValueRow(key: "Supports Block Assets", value: viewModel.siteSupportsBlockAssets)
+                    KeyValueRow(key: "Supports Theme Styles", value: viewModel.siteSupportsThemeStyles)
                     KeyValueRow(key: "Editor Locale", value: localeSummary(for: editorConfiguration))
                 }
             }
@@ -188,6 +194,36 @@ class SitePreparationViewModel {
 
     var enableNativeMediaUpload: Bool = true
 
+    /// Whether the site exposes the editor settings that theme styles load from.
+    private(set) var siteSupportsThemeStyles = false
+
+    var enableThemeStyles: Bool {
+        get { editorConfiguration?.shouldUseThemeStyles ?? false }
+        set {
+            guard siteSupportsThemeStyles, let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setShouldUseThemeStyles(newValue)
+                .build()
+            // Discard dependencies prepared under the previous setting.
+            editorDependencies = nil
+        }
+    }
+
+    /// Whether the site exposes the editor assets that third-party blocks load from.
+    private(set) var siteSupportsBlockAssets = false
+
+    var enableThirdPartyBlocks: Bool {
+        get { editorConfiguration?.shouldUsePlugins ?? false }
+        set {
+            guard siteSupportsBlockAssets, let config = editorConfiguration else { return }
+            editorConfiguration = config.toBuilder()
+                .setShouldUsePlugins(newValue)
+                .build()
+            // Discard dependencies prepared under the previous setting.
+            editorDependencies = nil
+        }
+    }
+
     var enableNetworkLogging: Bool {
         get { editorConfiguration?.enableNetworkLogging ?? false }
         set {
@@ -208,7 +244,12 @@ class SitePreparationViewModel {
         }
     }
 
-    var postTypes: [PostTypeDetails] = []
+    var postTypes: [PostTypeOption] = []
+
+    var selectedPostType: PostTypeOption {
+        postTypes.first { $0.details == selectedPostTypeDetails }
+            ?? PostTypeOption(details: selectedPostTypeDetails)
+    }
 
     var selectedPostTypeDetails: PostTypeDetails {
         get { editorConfiguration?.postType ?? .post }
@@ -245,12 +286,15 @@ class SitePreparationViewModel {
 
     @MainActor
     func startLoading() {
+        // `.onAppear` fires on every return from Browse; reloading would reset the user's settings.
+        guard editorConfiguration == nil else { return }
+
         self.taskHandle = Task {
             do {
                 switch configurationItem {
                 case .bundledEditor:
                     self.editorConfiguration = Self.applyDemoAppDefaults(to: .bundled)
-                    self.postTypes = [.post, .page]
+                    self.postTypes = PostTypeOption.builtIn
                 case .localWordPress:
                     guard let credentials = LocalWordPressCredentials.load() else {
                         throw AppError(errorDescription: "Local WordPress not configured.\n\nRun 'make wp-env-start' from the project root to set up a local WordPress environment.")
@@ -307,11 +351,15 @@ class SitePreparationViewModel {
                         let newConfiguration = try await self.loadConfiguration(for: account)
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: newConfiguration)
                     } catch let error as WpApiError where error.isDeviceOffline {
-                        self.postTypes = [.post, .page]
+                        self.postTypes = PostTypeOption.builtIn
                         let fallback = Self.buildOfflineConfiguration(for: account)
                         self.editorConfiguration = Self.applyDemoAppDefaults(to: fallback)
                     }
                 }
+
+                // Record support before the toggles can change the configuration's values.
+                self.siteSupportsThemeStyles = self.editorConfiguration?.shouldUseThemeStyles ?? false
+                self.siteSupportsBlockAssets = self.editorConfiguration?.shouldUsePlugins ?? false
             } catch {
                 self.error = error
             }
@@ -368,6 +416,7 @@ class SitePreparationViewModel {
         self.prepareEditor(with: EditorService(configuration: configuration, cachePolicy: .ignore))
     }
 
+    @MainActor
     private func prepareEditor(with editorService: EditorService) {
         self.taskHandle = Task {
             self.disableButtons = true
@@ -460,6 +509,7 @@ class SitePreparationViewModel {
         .setShouldUseThemeStyles(canUseEditorStyles)
         .setShouldUsePlugins(canUsePlugins)
         .setSiteApiNamespace(siteApiNamespace)
+        .setNamespaceExcludedPaths(["/wpcom/v2/following/recommendations", "/wpcom/v2/following/mine"])
         .setAuthHeader(account.authHeader)
         .setLogLevel(.debug)
         .build()
@@ -480,7 +530,7 @@ class SitePreparationViewModel {
     @MainActor
     private func loadPostTypes() async throws {
         guard let client = self.client else {
-            self.postTypes = [.post, .page]
+            self.postTypes = PostTypeOption.builtIn
             return
         }
 
@@ -503,17 +553,20 @@ class SitePreparationViewModel {
             }
             .values
             .map { postType in
-                PostTypeDetails(
-                    postType: postType.slug,
-                    restBase: postType.restBase,
-                    restNamespace: postType.restNamespace
+                PostTypeOption(
+                    details: PostTypeDetails(
+                        postType: postType.slug,
+                        restBase: postType.restBase,
+                        restNamespace: postType.restNamespace
+                    ),
+                    label: postType.labels.singularName,
+                    pluralLabel: postType.labels.name
                 )
             }
-            .sorted(using: KeyPathComparator(\.postType))
-
-        if let firstType = postTypes.first {
-            self.selectedPostTypeDetails = firstType
-        }
+            .sorted(using: [
+                KeyPathComparator(\.label, comparator: .localizedStandard),
+                KeyPathComparator(\.details.postType),
+            ])
     }
 
     func buildAndLoadConfiguration(navigation: Navigation) {
@@ -528,6 +581,27 @@ class SitePreparationViewModel {
         )
 
         navigation.present(editor)
+    }
+}
+
+/// A post type offered in the picker, with the names shown for it.
+struct PostTypeOption {
+    static let builtIn = [PostTypeOption(details: .post), PostTypeOption(details: .page)]
+
+    let details: PostTypeDetails
+    let label: String
+    let pluralLabel: String
+
+    /// Falls back to the slug and REST base when the site's labels are missing or blank.
+    init(details: PostTypeDetails, label: String? = nil, pluralLabel: String? = nil) {
+        self.details = details
+        self.label = Self.nonBlank(label) ?? details.postType.capitalized
+        self.pluralLabel = Self.nonBlank(pluralLabel) ?? details.restBase.capitalized
+    }
+
+    private static func nonBlank(_ value: String?) -> String? {
+        guard let value, !value.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return value
     }
 }
 
@@ -566,12 +640,6 @@ struct KeyValueRow: View {
                     .foregroundStyle(bool ? Color.green : Color.red)
             }
         }
-    }
-}
-
-extension PostTypeDetails {
-    var name: String {
-        postType.capitalized
     }
 }
 

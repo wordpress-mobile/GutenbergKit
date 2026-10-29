@@ -5,6 +5,7 @@ import {
 	logException,
 } from './bridge';
 import { configureLocale } from './localization';
+import { configureAdminGlobals } from './admin-globals';
 import { loadEditorAssets } from './editor-loader';
 import { configureAjax } from './ajax';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge';
@@ -32,6 +33,7 @@ export async function setUpEditorEnvironment() {
 		installFetchLayers();
 		const isRTL = await configureLocale();
 		injectEditorStyles( isRTL );
+		configureAdminGlobals( isRTL );
 		await initializeWordPressGlobals();
 		await configureApiFetch();
 		const pluginLoadResult = await loadPluginsIfEnabled();
@@ -174,7 +176,7 @@ async function initializeEditor( pluginLoadResult = {} ) {
 		initializeVideoPressAjaxBridge();
 	}
 
-	_initializeEditor( {
+	await _initializeEditor( {
 		allowedBlockTypes,
 		pluginLoadFailed: pluginLoadResult.pluginLoadFailed,
 	} );

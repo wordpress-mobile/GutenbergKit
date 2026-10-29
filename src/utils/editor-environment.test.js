@@ -16,6 +16,7 @@ import { configureAjax } from './ajax.js';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
 import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
+import { configureAdminGlobals } from './admin-globals.js';
 import { configureApiFetch } from './api-fetch.js';
 import { initializeEditor } from './editor.jsx';
 import { initializeFetchInterceptor } from './fetch-interceptor.js';
@@ -45,6 +46,10 @@ vi.mock( './editor-loader.js', () => ( {
 
 vi.mock( './localization.js', () => ( {
 	configureLocale: vi.fn(),
+} ) );
+
+vi.mock( './admin-globals.js', () => ( {
+	configureAdminGlobals: vi.fn(),
 } ) );
 
 vi.mock( './api-fetch.js', () => ( {
@@ -95,6 +100,10 @@ describe( 'setUpEditorEnvironment', () => {
 			callOrder.push( 'injectEditorStyles' );
 		} );
 
+		configureAdminGlobals.mockImplementation( () => {
+			callOrder.push( 'configureAdminGlobals' );
+		} );
+
 		initializeWordPressGlobals.mockImplementation( () => {
 			callOrder.push( 'loadRemainingGlobals' );
 		} );
@@ -122,12 +131,21 @@ describe( 'setUpEditorEnvironment', () => {
 			'initializeFetchInterceptor',
 			'configureLocale',
 			'injectEditorStyles',
+			'configureAdminGlobals',
 			'loadRemainingGlobals',
 			'configureApiFetch',
 			'configureAjax',
 			'initializeVideoPressAjaxBridge',
 			'initializeEditor',
 		] );
+	} );
+
+	it( 'applies the resolved text direction to the admin globals', async () => {
+		configureLocale.mockResolvedValue( true );
+
+		await setUpEditorEnvironment();
+
+		expect( configureAdminGlobals ).toHaveBeenCalledWith( true );
 	} );
 
 	it( 'loads plugins when plugins enabled', async () => {
@@ -197,45 +215,41 @@ describe( 'setUpEditorEnvironment', () => {
 		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'handles errors during editor initialization', async () => {
-		const testError = new Error( 'Editor initialization failed' );
-		initializeEditor.mockImplementation( () => {
-			throw testError;
-		} );
+	it.each( [
+		[
+			'synchronous',
+			( testError ) =>
+				initializeEditor.mockImplementation( () => {
+					throw testError;
+				} ),
+		],
+		[
+			'asynchronous',
+			( testError ) => initializeEditor.mockRejectedValue( testError ),
+		],
+	] )(
+		'handles %s errors during editor initialization',
+		async ( _, mockFailure ) => {
+			const testError = new Error( 'Editor initialization failed' );
+			mockFailure( testError );
 
-		await setUpEditorEnvironment();
+			await setUpEditorEnvironment();
 
-		expect( logException ).toHaveBeenCalledWith( testError, {
-			isHandled: true,
-			handledBy: 'setUpEditorEnvironment',
-		} );
-		expect( error ).toHaveBeenCalledWith(
-			'Error initializing editor',
-			testError
-		);
-		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
-	} );
-
-	it( 'handles errors during plugin loading', async () => {
-		getGBKit.mockReturnValue( { plugins: true } );
-
-		const testError = new Error( 'Plugin loading failed' );
-		initializeEditor.mockImplementation( () => {
-			throw testError;
-		} );
-
-		await setUpEditorEnvironment();
-
-		expect( logException ).toHaveBeenCalledWith( testError, {
-			isHandled: true,
-			handledBy: 'setUpEditorEnvironment',
-		} );
-		expect( error ).toHaveBeenCalledWith(
-			'Error initializing editor',
-			testError
-		);
-		expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
-	} );
+			expect( logException ).toHaveBeenCalledWith( testError, {
+				isHandled: true,
+				handledBy: 'setUpEditorEnvironment',
+			} );
+			expect( error ).toHaveBeenCalledWith(
+				'Error initializing editor',
+				testError
+			);
+			expect( EditorLoadError ).toHaveBeenCalledWith( {
+				error: testError,
+			} );
+			expect( document.body.innerHTML ).toBe( '<div>Error</div>' );
+			expect( editorLoaded ).toHaveBeenCalledTimes( 1 );
+		}
+	);
 
 	it( 'initializes VideoPress bridge when videopress/video is not in allowed block types', async () => {
 		getGBKit.mockReturnValue( { plugins: true } );

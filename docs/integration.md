@@ -13,7 +13,7 @@ This guide covers how to integrate GutenbergKit into your iOS or Android app. If
 
 ### Android
 
--   **Platform**: minSdk 24 (Android 7.0). Your module must set `compileSdk` to 36 or later — the published AAR declares `minCompileSdk=36`, and Gradle fails `checkAarMetadata` below it.
+-   **Platform**: minSdk 24 (Android 7.0). Your module must set `compileSdk` to 37 or later — the published AAR declares `minCompileSdk=37`, and Gradle fails `checkAarMetadata` below it.
 -   **Dependencies** (managed via Gradle):
     -   `androidx.webkit:webkit` - Enhanced WebView features
     -   `com.google.code.gson:gson` - JSON serialization
@@ -76,6 +76,11 @@ extension YourViewController: EditorViewControllerDelegate {
 
     func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
         // Undo/redo state changed - use state.hasUndo and state.hasRedo
+    }
+
+    func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability) {
+        // Optional - while availability.isSavingLocked (e.g. during uploads), don't save
+        // the post to the server, whether from a save control or in code (e.g. autosave)
     }
 
     func editor(_ viewController: EditorViewController, didRequestMediaFromSiteMediaLibrary config: OpenMediaLibraryAction) {
@@ -259,6 +264,11 @@ gutenbergView.setContentChangeListener {
 
 gutenbergView.setHistoryChangeListener { hasUndo, hasRedo ->
     // Undo/redo state changed
+}
+
+gutenbergView.setSaveAvailabilityListener { availability ->
+    // While availability.isSavingLocked (e.g. during uploads), don't save the post
+    // to the server, whether from a save control or in code (e.g. autosave)
 }
 
 gutenbergView.setOpenMediaLibraryListener { config ->

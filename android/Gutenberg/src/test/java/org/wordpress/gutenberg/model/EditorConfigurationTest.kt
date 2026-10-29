@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class EditorConfigurationBuilderTest {
@@ -214,6 +215,11 @@ class EditorConfigurationBuilderTest {
 
     @Test
     fun `setLocale runs the resolver against the shipped manifest`() {
+        assumeTrue(
+            "No translations in this dev-server build; run `make fetch-translations`",
+            SupportedLocales.ALL.isNotEmpty()
+        )
+
         // Direct match — `pt-br` is shipped.
         assertEquals(
             "pt-br",
@@ -1000,5 +1006,30 @@ class EditorConfigurationTest {
         assertFalse(config.enableOfflineMode)
         assertTrue(config.enableNativeBlockInserter)
         assertTrue(config.enableInserterMediaStrip)
+    }
+
+    // MARK: - isNewEmptyPost Tests
+
+    @Test
+    fun `isNewEmptyPost is true for a post without an ID, title, or content`() {
+        assertTrue(builder().build().isNewEmptyPost)
+        assertTrue(builder().setTitle(" ").setContent("\n").build().isNewEmptyPost)
+    }
+
+    @Test
+    fun `isNewEmptyPost is true for a negative ID converted to UInt`() {
+        // `toInt()` reads this as -1, which the web editor treats as a new post.
+        assertTrue(builder().setPostId((-1L).toUInt()).build().isNewEmptyPost)
+    }
+
+    @Test
+    fun `isNewEmptyPost is false for a post the server has`() {
+        assertFalse(builder().setPostId(123u).build().isNewEmptyPost)
+    }
+
+    @Test
+    fun `isNewEmptyPost is false for a local draft with a title or content`() {
+        assertFalse(builder().setTitle("Trip notes").build().isNewEmptyPost)
+        assertFalse(builder().setContent("<p>Day 1</p>").build().isNewEmptyPost)
     }
 }

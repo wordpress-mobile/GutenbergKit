@@ -2,6 +2,7 @@ package com.example.gutenbergkit
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,6 +48,8 @@ import com.example.gutenbergkit.ui.dialogs.AddConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DeleteConfigurationDialog
 import com.example.gutenbergkit.ui.dialogs.DiscoveringSiteDialog
 import com.example.gutenbergkit.ui.theme.AppTheme
+import org.json.JSONArray
+import org.json.JSONException
 import org.wordpress.gutenberg.BuildConfig
 import uniffi.wp_mobile.Account
 
@@ -63,6 +66,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
     companion object {
         const val EXTRA_CONFIGURATION = "configuration"
+        private const val ACCOUNTS_EXTRA = "accounts"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,6 +80,12 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
         // Add local WordPress option
         configurations.add(ConfigurationItem.LocalWordPress)
+
+        // Only a fresh launch signs in. A recreated activity, or one reopened from Recents, is handed the
+        // original intent again, which would add back a site that was deleted in the meantime.
+        if (savedInstanceState == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
+            signInFromLaunchExtrasIfNeeded()
+        }
 
         // Load saved accounts
         configurations.addAll(
@@ -121,6 +131,54 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                 )
             }
         }
+    }
+
+    /**
+     * Stores the sites in the `accounts` launch extra as accounts, replacing any account already stored for the
+     * same site. Lets an emulator be signed in without a login flow – see `bin/demo-app-login.sh`.
+     */
+    private fun signInFromLaunchExtrasIfNeeded() {
+        val json = intent.getStringExtra(ACCOUNTS_EXTRA) ?: return
+
+        for (account in accountsFromJson(json)) {
+            val siteApiRoot = ConfigurationItem.ConfiguredEditor.fromAccount(account).siteApiRoot
+            // Store the new account before removing the one it replaces, so that a failed store loses nothing.
+            val stale = accountRepository.all()
+                .map { ConfigurationItem.ConfiguredEditor.fromAccount(it) }
+                .filter { it.siteApiRoot == siteApiRoot }
+            accountRepository.store(account)
+            stale.forEach { accountRepository.remove(it.accountId) }
+        }
+    }
+
+    /**
+     * Reads the `accounts` launch extra, which is a JSON array. Each entry is a self-hosted site with its
+     * credentials and REST API root, or a WordPress.com site with a bearer token. Anything else is skipped.
+     */
+    private fun accountsFromJson(json: String): List<Account> = try {
+        val entries = JSONArray(json)
+        (0 until entries.length()).mapNotNull { index ->
+            val entry = entries.getJSONObject(index)
+            when {
+                entry.has("wpcomToken") -> Account.WpCom(
+                    id = 0u,
+                    username = entry.getString("wpcomSiteHost"),
+                    token = entry.getString("wpcomToken"),
+                    siteApiRoot = AuthenticationManager.wordPressComSiteApiRoot(entry.getLong("wpcomSiteId").toULong())
+                )
+                entry.has("siteUrl") -> Account.SelfHostedSite(
+                    id = 0u,
+                    domain = entry.getString("siteUrl"),
+                    username = entry.getString("username"),
+                    password = entry.getString("password"),
+                    siteApiRoot = entry.getString("siteApiRoot")
+                )
+                else -> null
+            }
+        }
+    } catch (e: JSONException) {
+        Log.w("MainActivity", "Ignoring a malformed `accounts` launch extra", e)
+        emptyList()
     }
 
     private fun launchSitePreparation(config: ConfigurationItem) {

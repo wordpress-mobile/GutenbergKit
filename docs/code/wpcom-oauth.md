@@ -31,3 +31,7 @@ Edit `wp_com_oauth_credentials.json` with your application's Client ID and Clien
 ```
 
 This file is gitignored to prevent credentials from being committed.
+
+## Signing In Without an OAuth Application
+
+If you already have a WordPress.com bearer token, `make login-ios-app` and `make login-android-app` add a WordPress.com site with none of the setup above. See [Signing In to the Demo Apps](./demo-app-login.md).

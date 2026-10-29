@@ -52,8 +52,10 @@ updates:
           - dependency-name: 'com.android.application'
           - dependency-name: 'com.android.library'
           - dependency-name: 'org.jetbrains.kotlin.*'
-          # A new Gradle major is adopted alongside the AGP upgrade that
-          # requires it, not ahead of the AGP version pinned above.
+          # A new Gradle major is adopted alongside WordPress-Android, whose
+          # wrapper runs this project's build scripts in the composite build.
+          # The `Android toolchain sync` workflow opens an issue when the
+          # majors differ.
           - dependency-name: 'gradle-wrapper'
             update-types: ['version-update:semver-major']
           # Published to a private S3 Maven repo with a versioning scheme

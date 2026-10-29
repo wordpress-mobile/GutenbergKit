@@ -341,6 +341,84 @@ class RESTAPIRepositoryTest {
         assertEquals(expectedURLs, capturedURLs.toSet())
     }
 
+    /**
+     * Sites using plain permalinks have no path-based REST root, so WordPress advertises the
+     * query form `https://example.com/?rest_route=/` instead.
+     */
+    @Test
+    fun `endpoints are appended to the route of a query-based API root`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://example.com/?rest_route=/",
+            PostTypeDetails.post
+        ).setPlugins(true).setThemeStyles(true).setAuthHeader("Bearer test").build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchPost(id = 1)
+        repository.fetchPostType("post")
+        repository.fetchActiveTheme()
+        repository.fetchPostTypes()
+
+        val expectedURLs = setOf(
+            "https://example.com/?rest_route=/wp/v2/posts/1&context=edit",
+            "https://example.com/?rest_route=/wp/v2/types/post&context=edit",
+            "https://example.com/?rest_route=/wp/v2/themes&context=edit&status=active",
+            "https://example.com/?rest_route=/wp/v2/types&context=view"
+        )
+
+        assertEquals(expectedURLs, capturedURLs.toSet())
+    }
+
+    @Test
+    fun `URLs are normalized when query-based API root has no trailing slash`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://example.com/?rest_route=",  // No trailing slash
+            PostTypeDetails.post
+        ).setPlugins(true).setThemeStyles(true).setAuthHeader("Bearer test").build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchPost(id = 1)
+
+        assertEquals(
+            setOf("https://example.com/?rest_route=/wp/v2/posts/1&context=edit"),
+            capturedURLs.toSet()
+        )
+    }
+
+    @Test
+    fun `namespace is inserted into a query-based API root`() = runBlocking {
+        val capturedURLs = mutableListOf<String>()
+        val capturingClient = createCapturingClient { capturedURLs.add(it) }
+
+        val configuration = EditorConfiguration.builder(
+            TEST_SITE_URL,
+            "https://example.com/?rest_route=/",
+            PostTypeDetails.post
+        ).setPlugins(true).setThemeStyles(true).setAuthHeader("Bearer test")
+            .setSiteApiNamespace(arrayOf("sites/123/")).build()
+
+        val cache = EditorURLCache(cacheRoot, EditorCachePolicy.Always)
+        val repository = RESTAPIRepository(configuration, capturingClient, cache)
+
+        repository.fetchPost(id = 1)
+
+        assertEquals(
+            setOf("https://example.com/?rest_route=/wp/v2/sites/123/posts/1&context=edit"),
+            capturedURLs.toSet()
+        )
+    }
+
     @Test
     fun `namespace is inserted into URLs`() = runBlocking {
         val capturedURLs = mutableListOf<String>()

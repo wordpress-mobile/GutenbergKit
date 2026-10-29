@@ -609,7 +609,11 @@ describe( 'nativeMediaUploadMiddleware', () => {
 				makeNext()
 			).catch( ( error ) => error );
 
-			expect( thrown ).toEqual( { code: 'rest_cannot_delete' } );
+			// As api-fetch does, an error body without `data` gains the status.
+			expect( thrown ).toEqual( {
+				code: 'rest_cannot_delete',
+				data: { status: 403 },
+			} );
 		} );
 	} );
 } );

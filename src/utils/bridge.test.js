@@ -4,6 +4,7 @@ import {
 	getGBKit,
 	getPost,
 	showBlockInserter,
+	onEditorSaveAvailabilityChanged,
 } from './bridge';
 
 vi.mock( './logger.js', () => ( {
@@ -582,5 +583,56 @@ describe( 'showBlockInserter', () => {
 
 		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
 		expect( postMessage ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'onEditorSaveAvailabilityChanged', () => {
+	let originalWindow;
+
+	beforeEach( () => {
+		originalWindow = {
+			webkit: window.webkit,
+			editorDelegate: window.editorDelegate,
+		};
+		delete window.webkit;
+		delete window.editorDelegate;
+	} );
+
+	afterEach( () => {
+		if ( originalWindow.webkit !== undefined ) {
+			window.webkit = originalWindow.webkit;
+		}
+		if ( originalWindow.editorDelegate !== undefined ) {
+			window.editorDelegate = originalWindow.editorDelegate;
+		}
+	} );
+
+	// The Android interface receives the payload values positionally.
+	it( 'passes isSaveable then isSavingLocked to the Android bridge', () => {
+		const editorDelegate = { onEditorSaveAvailabilityChanged: vi.fn() };
+		window.editorDelegate = editorDelegate;
+
+		onEditorSaveAvailabilityChanged( true, false );
+
+		expect(
+			editorDelegate.onEditorSaveAvailabilityChanged
+		).toHaveBeenCalledWith( true, false );
+	} );
+
+	// `EditorSaveAvailability` decodes these keys on iOS.
+	it( 'passes a keyed payload to the iOS bridge', () => {
+		const postMessage = vi.fn();
+		window.webkit = {
+			messageHandlers: {
+				editorDelegate: { postMessage },
+			},
+		};
+
+		onEditorSaveAvailabilityChanged( false, true );
+
+		expect( postMessage ).toHaveBeenCalledWith( {
+			message: 'onEditorSaveAvailabilityChanged',
+			body: { isSaveable: false, isSavingLocked: true },
+		} );
 	} );
 } );

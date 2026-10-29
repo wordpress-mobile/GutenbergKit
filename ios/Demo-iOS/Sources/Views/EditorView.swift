@@ -232,6 +232,8 @@ private struct _EditorView: UIViewControllerRepresentable {
 
         func editorDidBecomeUnavailable(_ viewController: EditorViewController) {
             viewModel.isEditorReady = false
+            // The crashed editor's save lock no longer applies.
+            viewModel.isSavingLocked = false
         }
 
         func editor(_ viewContoller: EditorViewController, didDisplayInitialContent content: String) {
@@ -258,6 +260,10 @@ private struct _EditorView: UIViewControllerRepresentable {
         func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState) {
             viewModel.hasUndo = state.hasUndo
             viewModel.hasRedo = state.hasRedo
+        }
+
+        func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability) {
+            viewModel.isSavingLocked = availability.isSavingLocked
         }
 
         func editor(_ viewController: EditorViewController, didUpdateFeaturedImage mediaID: Int) {
@@ -407,6 +413,8 @@ private final class EditorViewModel {
     var isCodeEditorEnabled = false
     var isSaving = false
     var isEditorReady = false
+    /// Whether the editor has locked saving, e.g. while a media upload is in progress.
+    var isSavingLocked = false
 
     var hasPostID = false
 
@@ -420,7 +428,7 @@ private final class EditorViewModel {
     }
 
     var canSave: Bool {
-        isEditorReady && !isSaving && hasPostID && hasChanges
+        isEditorReady && !isSaving && !isSavingLocked && hasPostID && hasChanges
     }
 
     enum Action {

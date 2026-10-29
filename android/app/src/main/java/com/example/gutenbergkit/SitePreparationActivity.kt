@@ -70,7 +70,6 @@ import java.util.Locale
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.model.EditorDependenciesSerializer
-import org.wordpress.gutenberg.model.PostTypeDetails
 
 class SitePreparationActivity : ComponentActivity() {
 
@@ -128,7 +127,7 @@ class SitePreparationActivity : ComponentActivity() {
                     TYPE_LOCAL_WORDPRESS -> ConfigurationItem.LocalWordPress
                     TYPE_CONFIGURED -> {
                         ConfigurationItem.ConfiguredEditor(
-                            accountId = json.optLong(KEY_ACCOUNT_ID, 0).toULong(),
+                            accountId = json.getLong(KEY_ACCOUNT_ID).toULong(),
                             name = json.getString(KEY_NAME),
                             siteUrl = json.getString(KEY_SITE_URL),
                             siteApiRoot = json.getString(KEY_SITE_API_ROOT),
@@ -156,7 +155,11 @@ class SitePreparationActivity : ComponentActivity() {
             SitePreparationViewModelFactory(application, configurationItem)
         )[SitePreparationViewModel::class.java]
 
-        val accountId = (configurationItem as? ConfigurationItem.ConfiguredEditor)?.accountId
+        val accountId = when (configurationItem) {
+            is ConfigurationItem.ConfiguredEditor -> configurationItem.accountId
+            is ConfigurationItem.LocalWordPress -> LocalWordPressCredentials.ACCOUNT_ID
+            is ConfigurationItem.BundledEditor -> null
+        }
 
         setContent {
             AppTheme {
@@ -197,12 +200,19 @@ class SitePreparationActivity : ComponentActivity() {
 
     private fun launchPostsList(
         accountId: ULong,
-        postType: PostTypeDetails,
+        postType: PostTypeOption,
         configuration: EditorConfiguration,
         dependencies: EditorDependencies?
     ) {
         startActivity(
-            PostsListActivity.createIntent(this, accountId, postType, configuration, dependencies)
+            PostsListActivity.createIntent(
+                this,
+                accountId,
+                postType.details,
+                postType.pluralLabel,
+                configuration,
+                dependencies
+            )
         )
     }
 }
@@ -214,7 +224,7 @@ fun SitePreparationScreen(
     accountId: ULong?,
     onClose: () -> Unit,
     onStartEditor: (EditorConfiguration, EditorDependencies?, Boolean) -> Unit,
-    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeDetails) -> Unit
+    onBrowsePosts: (EditorConfiguration, EditorDependencies?, PostTypeOption) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -322,6 +332,13 @@ private fun LoadedView(
                 onEnableInserterMediaStripChange = viewModel::setEnableInserterMediaStrip,
                 enableNativeMediaUpload = uiState.enableNativeMediaUpload,
                 onEnableNativeMediaUploadChange = viewModel::setEnableNativeMediaUpload,
+                siteSupportsThemeStyles = uiState.editorConfiguration?.themeStyles == true,
+                enableThemeStyles = uiState.enableThemeStyles,
+                onEnableThemeStylesChange = viewModel::setEnableThemeStyles,
+                siteSupportsBlockAssets = uiState.editorConfiguration?.plugins == true,
+                enableThirdPartyBlocks = uiState.enableThirdPartyBlocks,
+                onEnableThirdPartyBlocksChange = viewModel::setEnableThirdPartyBlocks,
+                isPreparing = uiState.isLoading,
                 enableNetworkLogging = uiState.enableNetworkLogging,
                 onEnableNetworkLoggingChange = viewModel::setEnableNetworkLogging,
                 postTypes = uiState.postTypes,
@@ -410,11 +427,18 @@ private fun FeatureConfigurationCard(
     onEnableInserterMediaStripChange: (Boolean) -> Unit,
     enableNativeMediaUpload: Boolean,
     onEnableNativeMediaUploadChange: (Boolean) -> Unit,
+    siteSupportsThemeStyles: Boolean,
+    enableThemeStyles: Boolean,
+    onEnableThemeStylesChange: (Boolean) -> Unit,
+    siteSupportsBlockAssets: Boolean,
+    enableThirdPartyBlocks: Boolean,
+    onEnableThirdPartyBlocksChange: (Boolean) -> Unit,
+    isPreparing: Boolean,
     enableNetworkLogging: Boolean,
     onEnableNetworkLoggingChange: (Boolean) -> Unit,
-    postTypes: List<PostTypeDetails>,
-    selectedPostType: PostTypeDetails?,
-    onPostTypeChange: (PostTypeDetails) -> Unit,
+    postTypes: List<PostTypeOption>,
+    selectedPostType: PostTypeOption?,
+    onPostTypeChange: (PostTypeOption) -> Unit,
     showBrowseButton: Boolean = false,
     onBrowsePosts: () -> Unit = {}
 ) {
@@ -472,6 +496,38 @@ private fun FeatureConfigurationCard(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+            // Enable Theme Styles Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Theme Styles")
+                Switch(
+                    checked = siteSupportsThemeStyles && enableThemeStyles,
+                    onCheckedChange = onEnableThemeStylesChange,
+                    enabled = siteSupportsThemeStyles && !isPreparing
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Enable Third-Party Blocks Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Enable Third-Party Blocks")
+                Switch(
+                    checked = siteSupportsBlockAssets && enableThirdPartyBlocks,
+                    onCheckedChange = onEnableThirdPartyBlocksChange,
+                    enabled = siteSupportsBlockAssets && !isPreparing
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
             // Enable Network Logging Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -508,6 +564,7 @@ private fun FeatureConfigurationCard(
                                 .selectable(
                                     selected = postType == selectedPostType,
                                     onClick = { onPostTypeChange(postType) },
+                                    enabled = !isPreparing,
                                     role = Role.RadioButton
                                 )
                                 .padding(vertical = 4.dp),
@@ -515,10 +572,11 @@ private fun FeatureConfigurationCard(
                         ) {
                             RadioButton(
                                 selected = postType == selectedPostType,
-                                onClick = null
+                                onClick = null,
+                                enabled = !isPreparing
                             )
                             Text(
-                                text = postType.postType.replaceFirstChar { it.uppercase() },
+                                text = postType.label,
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }

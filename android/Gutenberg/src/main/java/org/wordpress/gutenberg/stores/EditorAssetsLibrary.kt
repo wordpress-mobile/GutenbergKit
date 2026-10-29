@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.wordpress.gutenberg.EditorHTTPClient
 import org.wordpress.gutenberg.EditorHTTPClientProtocol
+import org.wordpress.gutenberg.appendingRestPath
 import org.wordpress.gutenberg.model.EditorAssetBundle
 import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
@@ -265,14 +266,15 @@ class EditorAssetsLibrary(
     // MARK: - Helpers
 
     private fun editorAssetsUrl(configuration: EditorConfiguration): String {
-        val baseUrl = configuration.siteApiRoot.trimEnd('/')
         val namespace = configuration.siteApiNamespace.firstOrNull()
 
-        return if (namespace != null) {
-            "$baseUrl/wpcom/v2/${namespace}editor-assets?exclude=core,gutenberg"
-        } else {
-            "$baseUrl/wpcom/v2/editor-assets?exclude=core,gutenberg"
-        }
+        return configuration.siteApiRoot.appendingRestPath(
+            if (namespace != null) {
+                "/wpcom/v2/${namespace}editor-assets?exclude=core,gutenberg"
+            } else {
+                "/wpcom/v2/editor-assets?exclude=core,gutenberg"
+            }
+        )
     }
 
     /**

@@ -8,19 +8,20 @@ import { credentials } from './wp-env-fixtures';
  * This is a simplified version of the JSON that WordPress's oEmbed proxy
  * (`/oembed/1.0/proxy`) returns after fetching from YouTube's oEmbed
  * endpoint. Using a mock avoids external network calls to YouTube, which
- * can flake in CI due to rate-limiting or connectivity issues.
+ * can flake in CI due to rate-limiting or connectivity issues. The 600×338
+ * dimensions match a real response and earn the 16:9 aspect-ratio classes.
  *
  * @type {Object}
  */
 const YOUTUBE_OEMBED_RESPONSE = {
 	url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
 	title: 'Rick Astley - Never Gonna Give You Up',
-	html: '<iframe width="200" height="113" src="https://www.youtube.com/embed/dQw4w9WgXcQ?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen title="Rick Astley - Never Gonna Give You Up"></iframe>',
+	html: '<iframe width="600" height="338" src="https://www.youtube.com/embed/dQw4w9WgXcQ?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen title="Rick Astley - Never Gonna Give You Up"></iframe>',
 	author_name: 'Rick Astley',
 	author_url: 'https://www.youtube.com/@RickAstleyYT',
 	type: 'video',
-	height: 113,
-	width: 200,
+	height: 338,
+	width: 600,
 	version: '1.0',
 	provider_name: 'YouTube',
 	provider_url: 'https://www.youtube.com/',
@@ -107,7 +108,37 @@ test.describe( 'Embedded Content', () => {
 		expect( blocks[ 0 ].attributes.providerNameSlug ).toBe( 'youtube' );
 	} );
 
-	test( 'should show a fallback link for a non-embeddable URL', async ( {
+	// The preview's height comes entirely from block library's responsive
+	// embed styles, which match only while left unscoped by the block canvas.
+	test( 'should size the YouTube preview to its aspect ratio', async ( {
+		page,
+	} ) => {
+		const editor = new EditorPage( page );
+		await mockOembedProxy( page );
+		await editor.setup();
+
+		await editor.insertBlock( 'core/embed' );
+
+		const urlInput = page.getByRole( 'textbox', {
+			name: 'Embed URL',
+		} );
+		await expect( urlInput ).toBeVisible();
+		await urlInput.fill( 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' );
+		await page.keyboard.press( 'Enter' );
+
+		const preview = page.locator(
+			'.wp-block-embed.wp-embed-aspect-16-9 iframe.components-sandbox'
+		);
+		await expect( preview ).toBeAttached( { timeout: 30_000 } );
+
+		await expect
+			.poll( async () => ( await preview.boundingBox() )?.height ?? 0 )
+			.toBeGreaterThan( 0 );
+		const { width, height } = await preview.boundingBox();
+		expect( height ).toBeCloseTo( ( width * 9 ) / 16, 0 );
+	} );
+
+	test( 'should store no preview for a non-embeddable URL', async ( {
 		page,
 	} ) => {
 		const editor = new EditorPage( page );
@@ -123,16 +154,13 @@ test.describe( 'Embedded Content', () => {
 		await urlInput.fill( 'https://example.com/not-embeddable' );
 		await page.keyboard.press( 'Enter' );
 
-		// Wait for the embed to resolve (or fall back).
-		// The block should still render with the URL attribute.
+		// The proxy answers 404, so core stores `false` for the preview
+		// rather than a preview object.
 		await page.waitForFunction(
-			() => {
-				const blocks = window.wp.data
-					.select( 'core/block-editor' )
-					.getBlocks();
-				return blocks[ 0 ]?.attributes?.url;
-			},
-			null,
+			( url ) =>
+				window.wp.data.select( 'core' ).getEmbedPreview( url ) ===
+				false,
+			'https://example.com/not-embeddable',
 			{ timeout: 30_000 }
 		);
 

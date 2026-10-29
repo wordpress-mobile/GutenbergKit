@@ -85,6 +85,13 @@ struct LocalWordPressCredentials: Codable {
 
 extension Account {
 
+    /// Builds the API root stored for a WordPress.com site account.
+    ///
+    /// The site ID is parsed back out of the stored account, so every WordPress.com account must use this format.
+    static func wpComSiteApiRoot(siteId: UInt64) -> String {
+        "https://public-api.wordpress.com/wp/v2/sites/\(siteId)"
+    }
+
     var displayName: String {
         switch self {
         case .selfHostedSite(_, let domain, _, _, _):

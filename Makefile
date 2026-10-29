@@ -26,6 +26,7 @@
 .DEFAULT_GOAL := help
 
 SIMULATOR_DESTINATION := OS=latest,name=iPhone 17
+IOS_E2E_RESULT_BUNDLE := build/ios-e2e.xcresult
 
 .PHONY: help
 help: ## Display this help menu
@@ -46,6 +47,7 @@ define XCODEBUILD_CMD
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
 		CODE_SIGNING_ALLOWED=NO \
+		$(3) \
 		| xcbeautify
 endef
 
@@ -182,6 +184,12 @@ copy-android-dist:
 build-ios-library: build ## Build the Swift package for iOS
 	$(call XCODEBUILD_CMD, build, GutenbergKit)
 
+# API that is unavailable in app extensions, such as `UIApplication.shared`,
+# fails this build. CI runs it so the library stays usable from an extension.
+.PHONY: build-ios-library-extension-safe
+build-ios-library-extension-safe: build ## Build the Swift package for iOS with app-extension-safe API only
+	$(call XCODEBUILD_CMD, build, GutenbergKit, APPLICATION_EXTENSION_API_ONLY=YES)
+
 .PHONY: build-ios-resources-xcframework
 build-ios-resources-xcframework: build ## Build GutenbergKitResources XCFramework
 # `build` short-circuits `copy-ios-dist` when `dist/` already exists (e.g. in
@@ -216,6 +224,18 @@ serve-dev-force: install-web-deps ## Serve the editor from the Vite development 
 .PHONY: start-devtools
 start-devtools: install-web-deps ## Start the React Developer Tools
 	npm run dev:tools
+
+# Credentials come from ~/.config/wp/sites, WPCOM_TOKEN or ~/.wpcom-token, never
+# a make variable, so that they stay out of shell history.
+DEMO_APP_LOGIN = ./bin/demo-app-login.sh $(if $(SITE),--site "$(SITE)") $(if $(DEVICE),--device "$(DEVICE)")
+
+.PHONY: login-ios-app
+login-ios-app: ## Sign the iOS demo app into the sites in ~/.config/wp/sites and ~/.wpcom-token (optional: SITE for just one, DEVICE)
+	@$(DEMO_APP_LOGIN) --platform ios
+
+.PHONY: login-android-app
+login-android-app: ## Sign the Android demo app into the sites in ~/.config/wp/sites and ~/.wpcom-token (optional: SITE for just one, DEVICE)
+	@$(DEMO_APP_LOGIN) --platform android
 
 ################################################################################
 # Local WordPress Environment Targets (wp-env)
@@ -374,12 +394,15 @@ test-ios-app-e2e: ## Run iOS demo app E2E tests against the production build
 	@echo "--- :open_file_folder: Copying build into iOS bundle"
 	@$(MAKE) copy-ios-dist
 	@echo "--- :ios: Running iOS E2E Tests (production build)"
+# xcodebuild refuses to overwrite an existing result bundle.
+	@rm -rf '$(IOS_E2E_RESULT_BUNDLE)'
 	@set -o pipefail && \
 		xcodebuild test \
 		-project ./ios/Demo-iOS/Gutenberg.xcodeproj \
 		-scheme GutenbergUITests \
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
+		-resultBundlePath '$(IOS_E2E_RESULT_BUNDLE)' \
 		| xcbeautify
 
 .PHONY: test-ios-app-e2e-dev
@@ -452,7 +475,15 @@ test-android-app-e2e: ## Run Android demo app E2E tests against the production b
 	@$(MAKE) copy-android-dist
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android E2E Tests (production build)"
-	./android/gradlew -p ./android :app:connectedDebugAndroidTest
+# The system intermittently kills the app mid-test. The system and events
+# buffers record why, but the per-test logcat omits them; enlarge the buffers
+# so the whole test run survives until the dump.
+	@mkdir -p android/app/build/outputs/buildkite-logs
+	-@adb logcat -b all -G 16M
+	@./android/gradlew -p ./android :app:connectedDebugAndroidTest; \
+	EXIT=$$?; \
+	adb logcat -b all -d > android/app/build/outputs/buildkite-logs/device-logcat.txt; \
+	exit $$EXIT
 
 .PHONY: test-android-app-e2e-dev
 test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
@@ -476,10 +507,13 @@ test-android-library-e2e: build ## Run Android library E2E tests on a device or 
 	$(ENSURE_ANDROID_DEVICE)
 	@echo "--- :android: Running Android Library E2E Tests"
 	@mkdir -p android/Gutenberg/build/outputs/buildkite-logs
-	@adb logcat -c
+# As in test-android-app-e2e: keep the buffers that record why the system
+# kills a process.
+	-@adb logcat -b all -G 16M
+	@adb logcat -b all -c
 	@./android/gradlew -p ./android :Gutenberg:connectedDebugAndroidTest; \
 	EXIT=$$?; \
-	adb logcat -d > android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; \
+	adb logcat -b all -d > android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; \
 	echo "--- :mag: Buildkite Test Engine collector output"; \
 	if grep -E 'Buildkite|BUILDKITE_ANALYTICS' android/Gutenberg/build/outputs/buildkite-logs/device-logcat.txt; then :; \
 	else \
