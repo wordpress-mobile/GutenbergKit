@@ -316,6 +316,31 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         #expect(urls.contains { $0.contains("sites/123/posts/1") })
     }
 
+    @Test("endpoints are appended below an API root that ends in two slashes")
+    func endpointsAreAppendedBelowDoubledSlashApiRoot() async throws {
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: Self.testSiteURL,
+            siteApiRoot: URL(string: "https://example.com/wp-json//")!
+        )
+        .setShouldUseThemeStyles(true)
+        .setAuthHeader("Bearer test-token")
+        .build()
+        let repository = makeRepository(configuration: configuration, httpClient: mockClient)
+
+        // Using try? because the mock returns empty data that fails decoding.
+        // We only care about the URLs that were requested, not the responses.
+        _ = try? await repository.fetchPost(id: 1)
+        _ = try? await repository.fetchEditorSettings()
+        _ = try? await repository.fetchPostType(for: "post")
+
+        let urls = Set(mockClient.requestedURLs.map(\.absoluteString))
+        #expect(urls.contains("https://example.com/wp-json/wp/v2/posts/1?context=edit"))
+        #expect(urls.contains("https://example.com/wp-json/wp-block-editor/v1/settings"))
+        #expect(urls.contains("https://example.com/wp-json/wp/v2/types/post?context=edit"))
+    }
+
     // MARK: - Query-based API Root Tests (plain permalinks)
 
     /// Sites using plain permalinks have no path-based REST root, so WordPress advertises the

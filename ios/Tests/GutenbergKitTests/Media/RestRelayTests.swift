@@ -40,6 +40,16 @@ struct RestRelayTests {
         )
     }
 
+    @Test("collapses a doubled trailing slash on the API root")
+    func normalizesAPIRootWithDoubledTrailingSlash() {
+        // api-fetch's root middleware collapses it, so requests arrive with one
+        // slash.
+        #expect(
+            siteAPIURL("https://example.com/wp-json/wp/v2/posts", root: URL(string: "https://example.com/wp-json//")!)
+                == "https://example.com/wp-json/wp/v2/posts"
+        )
+    }
+
     @Test("preserves percent-encoding in the query")
     func preservesPercentEncoding() {
         #expect(

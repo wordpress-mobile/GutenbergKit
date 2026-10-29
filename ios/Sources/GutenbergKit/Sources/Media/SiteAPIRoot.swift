@@ -30,12 +30,20 @@ struct SiteAPIRoot: Sendable {
     /// inside the route value. Appended after `%2F`, it would make a root no
     /// path can extend: WordPress reads `rest_route=%2F/wp/v2/posts` as the
     /// route `//wp/v2/posts` and answers `rest_no_route`.
+    ///
+    /// A doubled trailing slash collapses to one. api-fetch builds its root
+    /// with `ensureTrailingSlash`, which collapses it, so requests arrive below
+    /// `…/wp-json/`. Kept doubled, the root would match none of them, and every
+    /// one would go out without the site credential.
     init(_ configured: URL) {
         var root = configured.absoluteString
         if let query = root.firstIndex(of: "?") {
             root = String(root[..<query]) + Self.decodingSlashes(root[query...])
         }
-        string = root.hasSuffix("/") ? root : root + "/"
+        while root.hasSuffix("/") {
+            root.removeLast()
+        }
+        string = root + "/"
     }
 
     /// Whether `target` is below the root, with a route that stays inside it.
