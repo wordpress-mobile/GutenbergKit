@@ -41,6 +41,12 @@ import org.json.JSONObject
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.inserter.clearPhotoPreferences
 import org.wordpress.gutenberg.inserter.warmupPhotoPrefs
+import kotlinx.serialization.encodeToString
+import org.wordpress.gutenberg.media.MediaFileManager
+import org.wordpress.gutenberg.media.MediaInfo
+import org.wordpress.gutenberg.media.MediaInfoJson
+import org.wordpress.gutenberg.media.MediaPathHandler
+import org.wordpress.gutenberg.media.StoredMedia
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -111,9 +117,9 @@ class GutenbergView : FrameLayout {
      * over a restored post.
      */
     private var hasAutofocused = false
-    private lateinit var assetLoader: WebViewAssetLoader
-    private lateinit var assetAuthority: String
-    private lateinit var assetScheme: String
+    private var assetLoader: WebViewAssetLoader by writeOnce()
+    private var assetAuthority: String by writeOnce()
+    private var assetScheme: String by writeOnce()
 
     /** The editor document [loadEditor] loaded, the only page given the editor globals. */
     private var editorUri: Uri? = null
@@ -351,10 +357,18 @@ class GutenbergView : FrameLayout {
         // process-wide cache — no async-load placeholder, no visible flash.
         warmupPhotoPrefs(context)
 
-        // Initialize the asset loader now that context is available
-        assetLoader = WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", AssetsPathHandler(context))
-            .build()
+        // Sweep stale media imports off the UI thread before the inserter can
+        // trigger them — `listFiles()` + per-file `delete()` would otherwise
+        // jank the first Camera tap, where the cleanup latch would flip on
+        // the main thread. Idempotent via `MediaFileManager`'s process-wide
+        // latch, so re-firing across `GutenbergView` instances is harmless.
+        val appContext = context.applicationContext
+        coroutineScope.launch(Dispatchers.IO) {
+            MediaFileManager.primeCleanup(appContext)
+        }
+
+        // The asset loader is built in `loadEditor`, where the configured
+        // `assetAuthority` and HTTP-allowance flag are known.
 
         // Create the internal WebView as first child (behind overlays)
         webView = WebView(context).apply {
@@ -731,6 +745,10 @@ class GutenbergView : FrameLayout {
             .setDomain(assetAuthority)
             .setHttpAllowed(isLocalHttpSite)
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
+            .addPathHandler(
+                MediaFileManager.MEDIA_PATH_PREFIX,
+                MediaPathHandler(MediaFileManager.uploadsDir(this.context)),
+            )
             .build()
 
         // Transition to spinner phase (WebView initialization)
@@ -1288,6 +1306,23 @@ class GutenbergView : FrameLayout {
         evaluateIfLoaded("window.blockInserter?.insertBlock(${JSONObject.quote(blockId)});")
     }
 
+    /**
+     * Hands a list of inserter-sourced media to the JS editor via
+     * `window.blockInserter.insertMedia(...)`. URL stamping happens here, not
+     * in `MediaFileManager`, so the URLs match the live `assetAuthority` /
+     * `assetScheme` rather than the build-time defaults — keeping the media
+     * same-origin against the editor bundle however the asset loader is
+     * configured.
+     */
+    internal fun insertMediaFromInserter(stored: List<StoredMedia>) {
+        if (stored.isEmpty()) return
+        val media = stored.map {
+            MediaInfo(url = mediaUrlFor(assetScheme, assetAuthority, it.fileName), type = it.type)
+        }
+        val payload = MediaInfoJson.encodeToString(media)
+        evaluateIfLoaded("window.blockInserter?.insertMedia($payload);")
+    }
+
     private fun dismissBlockInserter() {
         evaluateIfLoaded("window.blockInserter?.onClose?.();")
     }
@@ -1324,6 +1359,7 @@ class GutenbergView : FrameLayout {
             payload = payload,
             showMediaStrip = configuration.enableInserterMediaStrip,
             onBlockSelected = { block -> insertBlock(block.id) },
+            onMediaSelected = { media -> insertMediaFromInserter(media) },
         )
         dialog.setOnDismissListener {
             if (blockInserterDialog === dialog) {
@@ -1742,6 +1778,15 @@ data class Media(
         }
     }
 }
+
+private fun mediaUrlFor(scheme: String, authority: String, fileName: String): String =
+    Uri.Builder()
+        .scheme(scheme)
+        .authority(authority)
+        .appendEncodedPath(MediaFileManager.MEDIA_PATH_PREFIX.trim('/'))
+        .appendPath(fileName)
+        .build()
+        .toString()
 
 enum class MediaType(var label: String) {
     IMAGE("image"),
