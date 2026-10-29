@@ -61,13 +61,23 @@ extension URL {
     /// diverge: this keeps the leading slash on the route value, which WordPress's `rest_route`
     /// matching expects, whereas the middleware strips it.
     ///
+    /// A root that ends in several slashes, such as `https://example.com/wp-json//`, is treated
+    /// like one that ends in a single slash, as the middleware does. Kept doubled, WordPress would
+    /// read the route as `//wp/v2/posts` and answer `rest_no_route`.
+    ///
     /// File URLs are always treated as plain paths, so a query string in a local path is never
-    /// mistaken for a query-based REST root.
+    /// mistaken for a query-based REST root. Their trailing slashes are kept, because in
+    /// `file:///` they belong to the scheme.
     ///
     /// - Parameter rawPath: The path to append. May or may not start with a slash.
     /// - Returns: A new URL with the path appended.
     func appending(rawPath: String) -> URL {
-        let urlString = self.absoluteString
+        var urlString = self.absoluteString
+        if !isFileURL {
+            while urlString.hasSuffix("//") {
+                urlString.removeLast()
+            }
+        }
 
         // A query-based root already carries the REST route in its query string, so the path is
         // concatenated onto that value and its own query separator becomes `&`.

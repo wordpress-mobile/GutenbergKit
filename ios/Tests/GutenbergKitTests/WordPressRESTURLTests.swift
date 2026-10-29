@@ -45,6 +45,16 @@ struct WordPressRESTURLTests {
     #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media")
   }
 
+  @Test("does not double the slash when the root ends in two")
+  func doubledTrailingSlashRoot() {
+    let url = WordPressRESTURL.namespaced(
+      apiRoot: URL(string: "https://example.com/wp-json//")!,
+      path: "/wp/v2/media",
+      namespace: "sites/123"
+    )
+    #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media")
+  }
+
   @Test("inserts the namespace after a non-wp/v2 version segment")
   func otherVersionSegment() {
     let url = WordPressRESTURL.namespaced(

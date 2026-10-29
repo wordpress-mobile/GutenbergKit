@@ -113,6 +113,28 @@ struct EditorAssetLibraryTests {
         #expect(mockClient.getCallCount == 2)
     }
 
+    @Test("fetchManifest requests the manifest below an API root that ends in two slashes")
+    func fetchManifestWithDoubledSlashApiRoot() async throws {
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://example.com")!,
+            siteApiRoot: URL(string: "https://example.com/wp-json//")!
+        )
+        .setShouldUsePlugins(true)
+        .build()
+
+        let mockClient = EditorAssetLibraryMockHTTPClient()
+        mockClient.urlResponseHandler = { _ in Data(#"{"scripts":"","styles":"","allowed_block_types":[]}"#.utf8) }
+
+        let library = makeLibrary(configuration: configuration, httpClient: mockClient)
+        _ = try await library.fetchManifest()
+
+        #expect(
+            mockClient.requestedURLs.map(\.absoluteString)
+                == ["https://example.com/wp-json/wpcom/v2/editor-assets?exclude=core,gutenberg"]
+        )
+    }
+
     @Test("fetchManifest returns the manifest of a matching bundle on disk, even under .ignore")
     func fetchManifestReturnsMatchingBundleManifest() async throws {
         let manifestJSON = uniqueManifestJSON(identifier: "test-cached-manifest-\(UUID().uuidString)")

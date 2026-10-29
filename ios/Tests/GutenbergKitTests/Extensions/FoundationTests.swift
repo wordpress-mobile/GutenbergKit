@@ -213,6 +213,27 @@ struct URLAppendingRawPathTests {
     #expect(result.absoluteString == "https://example.com/api/posts")
   }
 
+  @Test("collapses a doubled trailing slash on the base URL")
+  func collapsesDoubledTrailingSlash() {
+    let base = URL(string: "https://example.com/wp-json//")!
+    let result = base.appending(rawPath: "/wp/v2/posts")
+    #expect(result.absoluteString == "https://example.com/wp-json/wp/v2/posts")
+  }
+
+  @Test("collapses several trailing slashes on the base URL")
+  func collapsesSeveralTrailingSlashes() {
+    let base = URL(string: "https://example.com/wp-json///")!
+    let result = base.appending(rawPath: "wp/v2/posts")
+    #expect(result.absoluteString == "https://example.com/wp-json/wp/v2/posts")
+  }
+
+  @Test("keeps the slashes of a file URL's scheme")
+  func keepsFileURLSchemeSlashes() {
+    let base = URL(string: "file:///")!
+    let result = base.appending(rawPath: "tmp/assets")
+    #expect(result.absoluteString == "file:///tmp/assets")
+  }
+
   // MARK: - Multi-segment Paths
 
   @Test("appends multi-segment path")
@@ -266,6 +287,13 @@ struct URLAppendingRawPathTests {
   @Test("keeps exactly one leading slash when the REST root omits its trailing slash")
   func keepsOneLeadingSlashWhenRootOmitsTrailingSlash() {
     let base = URL(string: "https://example.com/?rest_route=")!
+    let result = base.appending(rawPath: "/wp/v2/media")
+    #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
+  }
+
+  @Test("collapses a doubled trailing slash on a query-based REST root")
+  func collapsesDoubledTrailingSlashOnQueryBasedRoot() {
+    let base = URL(string: "https://example.com/?rest_route=//")!
     let result = base.appending(rawPath: "/wp/v2/media")
     #expect(result.absoluteString == "https://example.com/?rest_route=/wp/v2/media")
   }
