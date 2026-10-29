@@ -14,7 +14,7 @@ struct EditorHTTPClientTaskReportingTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(status: 200, body: Data(#"{"id":1}"#.utf8)))
         defer { stubbed.finish() }
         let recorder = TaskEventRecorder()
-        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", delegate: recorder)
+        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", authorizationScope: .example, delegate: recorder)
 
         _ = try await client.perform(URLRequest(url: url))
 
@@ -32,7 +32,7 @@ struct EditorHTTPClientTaskReportingTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(failure: URLError(.notConnectedToInternet)))
         defer { stubbed.finish() }
         let recorder = TaskEventRecorder()
-        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", delegate: recorder)
+        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", authorizationScope: .example, delegate: recorder)
 
         await #expect(throws: URLError.self) {
             try await client.perform(URLRequest(url: url))
@@ -49,7 +49,7 @@ struct EditorHTTPClientTaskReportingTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(status: 200, body: Data("asset".utf8)))
         defer { stubbed.finish() }
         let recorder = TaskEventRecorder()
-        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", delegate: recorder)
+        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", authorizationScope: .example, delegate: recorder)
 
         _ = try await client.download(URLRequest(url: url))
 
@@ -66,7 +66,7 @@ struct EditorHTTPClientTaskReportingTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(status: 201, body: Data(#"{"id":7}"#.utf8)))
         defer { stubbed.finish() }
         let recorder = TaskEventRecorder()
-        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", delegate: recorder)
+        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", authorizationScope: .example, delegate: recorder)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -80,7 +80,7 @@ struct EditorHTTPClientTaskReportingTests {
     func noDelegate() async throws {
         let stubbed = StubURLProtocol.makeSession(stub: .init(status: 200, body: Data("{}".utf8)))
         defer { stubbed.finish() }
-        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test")
+        let client = EditorHTTPClient(urlSession: stubbed.session, authHeader: "Bearer test", authorizationScope: .example)
 
         _ = try await client.perform(URLRequest(url: url))
 

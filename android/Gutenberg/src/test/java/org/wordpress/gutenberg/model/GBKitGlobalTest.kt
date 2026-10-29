@@ -179,6 +179,18 @@ class GBKitGlobalTest {
     }
 
     @Test
+    fun `maps authHeaderDomains from configuration, for the editor's own requests`() {
+        val configuration = makeConfiguration().toBuilder()
+            .setAuthHeaderDomains(setOf("*.wp.com", "*.files.wordpress.com"))
+            .build()
+
+        val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())
+
+        assertEquals(listOf("*.wp.com", "*.files.wordpress.com"), global.authHeaderDomains)
+        assertTrue(global.toJsonString().contains(""""authHeaderDomains":["*.wp.com","*.files.wordpress.com"]"""))
+    }
+
+    @Test
     fun `maps postStatus from configuration`() {
         val configuration = makeConfiguration(postStatus = "publish")
         val global = GBKitGlobal.fromConfiguration(configuration, makeDependencies())

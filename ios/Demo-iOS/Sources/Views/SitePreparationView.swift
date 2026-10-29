@@ -389,6 +389,7 @@ class SitePreparationViewModel {
         .setShouldUsePlugins(true)
         .setNetworkFallbackMode(.automatic)
         .setAuthHeader(account.authHeader)
+        .setAuthHeaderDomains(account.authHeaderDomains)
         .setLogLevel(.debug)
         .build()
     }
@@ -511,6 +512,7 @@ class SitePreparationViewModel {
         .setSiteApiNamespace(siteApiNamespace)
         .setNamespaceExcludedPaths(["/wpcom/v2/following/recommendations", "/wpcom/v2/following/mine"])
         .setAuthHeader(account.authHeader)
+        .setAuthHeaderDomains(account.authHeaderDomains)
         .setLogLevel(.debug)
         .build()
     }
