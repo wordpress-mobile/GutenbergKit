@@ -79,8 +79,10 @@ every request it relays, and reads every body that is not a string into an `Arra
 `XMLHttpRequest` gets the same treatment from `src/utils/xhr-relay.js`, with three
 differences measured in the iOS 27.0 Simulator:
 
--   A request with an upload listener has its body delivered as `httpBodyStream`, whatever
-    the body. Without one, bodies arrive as they do from `fetch`. The relay reads either.
+-   A request whose `xhr.upload` was read before `send()`, as adding an upload listener
+    does, has its body delivered as `httpBodyStream`, whatever the body. WebKit streams
+    the body once that object exists, listener or not (`XMLHttpRequest.cpp` in WebKit).
+    Otherwise, bodies arrive as they do from `fetch`. The relay reads either.
     A `Blob`, or `FormData` holding one, is dropped either way, so the page reads those
     into an `ArrayBuffer` first.
 -   WebKit doesn't apply the request's `timeout`: one set to 500 ms was still waiting

@@ -180,7 +180,8 @@ struct RestRelay: Sendable {
     ///   delivers a string or `ArrayBuffer` body as `httpBody` and drops some
     ///   others without an error, so the page reads every body that is not a
     ///   string into an `ArrayBuffer` first (`bufferedBody` in `fetch-relay.js`).
-    ///   An `XMLHttpRequest` with an upload listener has its body delivered as
+    ///   An `XMLHttpRequest` whose `upload` was read before it was sent, as
+    ///   adding an upload listener does, has its body delivered as
     ///   `httpBodyStream` instead. The table of what was measured is in
     ///   `docs/code/media-uploads.md`.
     func handle(_ request: URLRequest) async throws -> Response {

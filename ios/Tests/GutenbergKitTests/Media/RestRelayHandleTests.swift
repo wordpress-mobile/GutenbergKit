@@ -397,7 +397,7 @@ struct RestRelayHandleTests {
 
     @Test("sends a body WebKit delivered as a stream")
     func relaysStreamedBodies() async throws {
-        // WebKit delivers the body of an `XMLHttpRequest` with an upload listener
+        // WebKit delivers the body of an `XMLHttpRequest` whose `upload` was read
         // as `httpBodyStream`, as `tus-js-client` sends each chunk.
         let body = Data((0..<200_000).map { UInt8($0 % 251) })
         let exchange = try await relay(
