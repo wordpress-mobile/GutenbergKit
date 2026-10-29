@@ -3,8 +3,14 @@
 The Android demo app at `android/app/` configures Android `StrictMode` so that
 disk I/O on the main thread, leaked closables, registration leaks, and similar
 issues introduced inside the GutenbergKit library surface during local
-development. The demo crashes on any new `ThreadPolicy` violation, so library
-regressions can't quietly slip in.
+development.
+
+For now, violations are **logged, not fatal**. The library still reads the disk
+on the main thread while the editor page loads (see
+[What's still in the library](#whats-still-in-the-library)), so crashing on
+violations would crash every editor launch. Switching `ThreadPolicy` to
+`penaltyDeath()` is tracked in
+[#848](https://github.com/wordpress-mobile/GutenbergKit/issues/848).
 
 ## Configuration
 
@@ -16,7 +22,6 @@ StrictMode.setThreadPolicy(
     StrictMode.ThreadPolicy.Builder()
         .detectAll()
         .penaltyLog()
-        .penaltyDeath()
         .build()
 )
 StrictMode.setVmPolicy(
@@ -37,10 +42,9 @@ Configuration notes:
     `detectFileUriExposure`, `detectCleartextNetwork`, etc.
 -   **`Application.onCreate()`** is the right place — earlier is better so the
     policy covers everything that follows.
--   **`penaltyDeath()` on `ThreadPolicy`, but `penaltyLog()` on `VmPolicy`.** VM
-    violations like `LeakedClosableObject` fire during GC and would crash at
-    unpredictable times unrelated to the offending code path, which is
-    unhelpful as a signal.
+-   **`VmPolicy` stays on `penaltyLog()`, even after #848.** VM violations like
+    `LeakedClosableObject` fire during GC and would crash at unpredictable
+    times unrelated to the offending code path, which is unhelpful as a signal.
 -   **`penaltyDialog()` is deliberately not enabled.** It interrupts manual
     testing without adding signal.
 -   **No `StrictMode.allowThreadDiskReads()` permits inside the library.** That
@@ -48,48 +52,77 @@ Configuration notes:
 
 ## Demo-side initialization shape
 
-Because `penaltyDeath` crashes on any violation, the demo had to be
-restructured so that nothing on the main thread touches disk:
+The demo keeps its own code off the main thread's disk, so the log only shows
+violations that come from the library:
 
 -   **`AccountRepository`** is initialized lazily on `Dispatchers.IO` — its
     constructor reads `filesDir` and triggers `com.sun.jna.Native.<clinit>`,
     which itself runs ~8 disk reads while loading the dispatch library. See
     `GutenbergKitApplication.accountRepository()` and the `withAccountRepository`
     helper.
--   **All `AccountRepository` reads/writes** (`.all()`, `.store()`, `.remove()`)
-    are wrapped in `withAccountRepository { ... }`, which awaits the deferred
-    init and then dispatches the call to `Dispatchers.IO`. The Keystore-backed
-    password transformer does both disk and crypto work per call.
+-   **All `AccountRepository` access** (`.all()`, `.get()`, `.store()`,
+    `.remove()`, and `GutenbergKitApplication.findAccount`) goes through
+    `withAccountRepository { ... }`, which awaits the deferred init and then
+    dispatches the call to `Dispatchers.IO`. The Keystore-backed password
+    transformer does both disk and crypto work per call. This includes signing
+    in from the `accounts` launch extra (`make login-android-app`).
+-   **`GutenbergKitApplication.createApiClient`** suspends and builds the
+    `WpRequestExecutor` on `Dispatchers.IO`. Its OkHttp client sets up an SSL
+    context, which StrictMode reports as a slow call.
 -   **`EditorService.create`** touches `context.filesDir` / `context.cacheDir`,
     allocates a synchronous SSL context, and reads the asset bundles
     directory. `SitePreparationViewModel.createEditorService` wraps the call
     in `withContext(Dispatchers.IO)`.
--   **`EditorService.purge` / `EditorService.fetchAssetBundleCount`** also
-    touch disk. Wrapped in `withContext(Dispatchers.IO)` at the call site.
+-   **`EditorService.prepare`, `purge` and `fetchAssetBundleCount`** also touch
+    disk (`prepare` runs a periodic asset cleanup on the caller's thread).
+    Wrapped in `withContext(Dispatchers.IO)` at the call site.
 -   **`EditorDependenciesSerializer.writeToDisk` / `readFromDisk`** are
     wrapped at the demo entry points: `SitePreparationActivity.launchEditor`
-    (write before `startActivity`) and `EditorActivity.onCreate` (read into
-    Compose state, render once ready).
+    and `launchPostsList` (write before `startActivity`) and
+    `EditorActivity.onCreate` (read into Compose state, render once ready).
 
 `NetworkAvailabilityProvider` stays initialized eagerly on the main thread —
 its constructor only stores a SAM lambda, no I/O.
 
 ## What's still in the library
 
-Several violations originate inside `:Gutenberg`. The demo wraps the call sites
-in `withContext(Dispatchers.IO)` rather than fixing them upstream — per
-[#488](https://github.com/wordpress-mobile/GutenbergKit/issues/488), library
-fixes are tracked separately and don't ship with the StrictMode work. Each is
-a candidate for a follow-up that moves the I/O off the caller's thread or
+### Wrapped by the demo
+
+These library calls do I/O on the caller's thread. The demo calls them on
+`Dispatchers.IO`, but every host has to know to do the same. Each is a
+candidate for a follow-up that moves the I/O off the caller's thread or
 exposes a `suspend` API:
 
 -   `EditorService.create` (sync `EditorHTTPClient` + `Paths.cacheRoot` +
     `Paths.storageRoot` + `Paths.defaultTempStorageRoot` +
     `EditorURLCache.<init>` + `EditorAssetsLibrary.<init>`).
+-   `EditorService.prepare` → `EditorService.cleanup` →
+    `EditorAssetsLibrary.readAssetBundles`.
 -   `EditorService.fetchAssetBundleCount` /
     `EditorAssetsLibrary.readAssetBundles`.
 -   `EditorDependenciesSerializer.writeToDisk` /
     `EditorDependenciesSerializer.readFromDisk`.
+
+### Not wrappable — tracked in #848
+
+Most of these run on the main thread inside `GutenbergView.onEditorPageStarted`,
+which `WebViewClient.onPageStarted` calls. The last one runs from the
+`GutenbergView` constructor. The host has no call site to move, so the demo
+logs them on every editor launch:
+
+| Violation                                                      | Where                                                                                          | When                                             |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `DiskReadViolation`                                            | `EditorAssetBundle.getEditorRepresentation`, via `GBKitGlobal.fromConfiguration`               | Every editor launched with prepared dependencies |
+| `CustomViolation: newSSLContext`                               | `GutenbergView.uploadHttpClient` (OkHttp SSL setup), built in `startUploadServer`              | Native media upload is on                        |
+| `DiskReadViolation`                                            | `GutenbergView.startUploadServer` (`context.cacheDir`)                                         | Native media upload is on                        |
+| `DiskReadViolation`                                            | `HttpServer.start` → `TempFileOwner.cleanOrphans`                                              | Native media upload is on                        |
+| Several `DiskReadViolation`s, `CustomViolation: newSSLContext` | `GutenbergView.prepareAndLoadEditor` → `EditorService.create`, launched on the main dispatcher | The editor starts without prepared dependencies  |
+
+### Expected `VmPolicy` noise
+
+-   `UntaggedSocketViolation` — logged for most network requests (WebView,
+    OkHttp, wordpress-rs). The sockets aren't tagged with
+    `TrafficStats.setThreadStatsTag()`. Harmless; ignore it.
 
 ## Reading violations
 
@@ -100,23 +133,21 @@ adb logcat -s StrictMode
 ```
 
 Each violation prints a stack trace; the topmost app/library frame is the
-actual call site. With `penaltyDeath` enabled, the violation also raises
-`FATAL EXCEPTION: main` — `adb logcat -s AndroidRuntime` will show the crash.
+actual call site.
 
 ## Verified flows
 
-The following flows were exercised on a Pixel 9 (Android 16) and an Android
-14 emulator with **zero** `ThreadPolicy` violations:
+Exercised on an API 36 emulator, with only the violations listed above:
 
--   App cold launch.
--   Tap **Standalone editor** → **Prepare Editor** → **Start**.
--   Type into the editor.
+-   App cold launch, including signing in with `make login-android-app`.
+-   **Standalone editor** → **Prepare Editor** → **Start**, then type.
+-   A connected site → **Prepare Editor** → **Browse** → open a post, then type.
+-   A connected site → **Browse** → open a post, without preparing first.
+-   Native inserter sheet: category tabs and search.
+-   Background the app, then resume it.
 
-The full demo flow listed in [#488](https://github.com/wordpress-mobile/GutenbergKit/issues/488)
-(connected sites, native inserter sheet, photo permission paths, search,
-overflow menu, backgrounding) wasn't exercised end-to-end. As new flows are
-walked through and StrictMode flags new call sites, fix or wrap them at the
-demo-app level rather than adding library-side permits.
+Not yet walked: **Save** (writes to the site), the inserter's media strip and
+its photo permission prompts, and the camera tile.
 
 ## Adding new code
 
@@ -124,9 +155,10 @@ When introducing demo-app code that touches disk, network, or shared
 resources:
 
 1. Run the demo in debug mode.
-2. Walk through the new code path end-to-end.
-3. If the app crashes with `RuntimeException: StrictMode ThreadPolicy
-   violation`, the offending call is in the stack trace — wrap it in
-   `withContext(Dispatchers.IO)` (or move it into a coroutine).
+2. Walk through the new code path end-to-end with `adb logcat -s StrictMode`
+   open.
+3. If a new `ThreadPolicy` violation shows up, the offending call is in the
+   stack trace — wrap it in `withContext(Dispatchers.IO)` (or move it into a
+   coroutine).
 4. **Never** suppress with `StrictMode.allowThreadDiskReads()` inside the
    library — that hides the violation from host apps.
