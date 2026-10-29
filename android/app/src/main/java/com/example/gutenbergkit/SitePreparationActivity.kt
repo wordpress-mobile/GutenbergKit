@@ -214,16 +214,20 @@ class SitePreparationActivity : ComponentActivity() {
         configuration: EditorConfiguration,
         dependencies: EditorDependencies?
     ) {
-        startActivity(
-            PostsListActivity.createIntent(
-                this,
-                accountId,
-                postType.details,
-                postType.pluralLabel,
-                configuration,
-                dependencies
-            )
-        )
+        lifecycleScope.launch {
+            // createIntent writes the dependencies to disk.
+            val intent = withContext(Dispatchers.IO) {
+                PostsListActivity.createIntent(
+                    this@SitePreparationActivity,
+                    accountId,
+                    postType.details,
+                    postType.pluralLabel,
+                    configuration,
+                    dependencies
+                )
+            }
+            startActivity(intent)
+        }
     }
 }
 

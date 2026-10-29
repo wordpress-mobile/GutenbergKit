@@ -84,22 +84,10 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
         // Only a fresh launch signs in. A recreated activity, or one reopened from Recents, is handed the
         // original intent again, which would add back a site that was deleted in the meantime.
-        val signInFromExtras = savedInstanceState == null &&
-            (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
-
-        // Load saved accounts off the main thread; the encrypted store is on
-        // disk and reads decrypt every account via Keystore.
-        lifecycleScope.launch {
-            val accounts = gutenbergKitApp.withAccountRepository { repo ->
-                if (signInFromExtras) {
-                    signInFromLaunchExtrasIfNeeded(repo)
-                }
-                repo.all()
-            }
-            configurations.addAll(
-                accounts.map { ConfigurationItem.ConfiguredEditor.fromAccount(it) }
-            )
-        }
+        loadSavedAccounts(
+            signInFromExtras = savedInstanceState == null &&
+                (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
+        )
 
         setContent {
             AppTheme {
@@ -141,6 +129,24 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     onDismissAuthError = { authError.value = null }
                 )
             }
+        }
+    }
+
+    /**
+     * Loads saved accounts off the main thread; the encrypted store is on
+     * disk and reads decrypt every account via Keystore.
+     */
+    private fun loadSavedAccounts(signInFromExtras: Boolean) {
+        lifecycleScope.launch {
+            val accounts = gutenbergKitApp.withAccountRepository { repo ->
+                if (signInFromExtras) {
+                    signInFromLaunchExtrasIfNeeded(repo)
+                }
+                repo.all()
+            }
+            configurations.addAll(
+                accounts.map { ConfigurationItem.ConfiguredEditor.fromAccount(it) }
+            )
         }
     }
 

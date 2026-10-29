@@ -170,8 +170,12 @@ class SitePreparationViewModel(
             _uiState.update { it.copy(isLoading = true, error = null) }
 
             try {
-                val dependencies = editorService.prepare { progress ->
-                    _uiState.update { it.copy(loadingProgress = progress.fractionCompleted.toFloat()) }
+                // prepare() runs its periodic cleanup, which reads the disk, on
+                // the caller's thread.
+                val dependencies = withContext(Dispatchers.IO) {
+                    editorService.prepare { progress ->
+                        _uiState.update { it.copy(loadingProgress = progress.fractionCompleted.toFloat()) }
+                    }
                 }
 
                 _uiState.update {

@@ -122,8 +122,11 @@ class GutenbergKitApplication : Application() {
      * through `/wp/v2/sites/{blogId}/...` instead of the self-hosted layout. Otherwise,
      * the resolver double-prefixes paths and the WP.com REST API returns
      * `rest_no_route`.
+     *
+     * Suspends because the request executor builds an OkHttp client, whose SSL
+     * setup is slow work that StrictMode forbids on the main thread.
      */
-    fun createApiClient(account: Account): WpApiClient {
+    suspend fun createApiClient(account: Account): WpApiClient {
         val auth = when (account) {
             is Account.SelfHostedSite -> wpAuthenticationFromUsernameAndPassword(
                 account.username,
@@ -132,10 +135,12 @@ class GutenbergKitApplication : Application() {
             is Account.WpCom -> WpAuthentication.Bearer(token = account.token)
         }
         val authProvider = WpAuthenticationProvider.staticWithAuth(auth)
-        val requestExecutor = WpRequestExecutor(
-            interceptors = emptyList(),
-            networkAvailabilityProvider = networkAvailabilityProvider
-        )
+        val requestExecutor = withContext(Dispatchers.IO) {
+            WpRequestExecutor(
+                interceptors = emptyList(),
+                networkAvailabilityProvider = networkAvailabilityProvider
+            )
+        }
 
         val apiUrlResolver = when (account) {
             is Account.WpCom -> {
