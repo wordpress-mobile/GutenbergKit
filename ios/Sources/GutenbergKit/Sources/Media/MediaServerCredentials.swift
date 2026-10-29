@@ -33,8 +33,8 @@ enum MediaServerCredentials {
     ///
     /// - A ``MediaProcessor`` only enhances GutenbergKit-owned uploads. With no
     ///   credentials there is nothing to deliver through, so nothing to process — the
-    ///   server simply stays down and uploads fall to the default WebView path. That
-    ///   is ``areUsable``'s job, at the point the server would start.
+    ///   upload scheme stays disabled and uploads fall to the default WebView path.
+    ///   That is ``areUsable``'s job, when the upload service is built.
     ///
     /// - A ``MediaUploader`` means the host is *taking over* uploads, and falling back
     ///   would drop that whole stack — its queueing, its retries — while media appeared

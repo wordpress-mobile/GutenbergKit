@@ -83,11 +83,9 @@ public enum ProcessedProxyFile: Sendable {
 public protocol MediaProcessor: Sendable {
     /// Whether this processor might transform a file with the given metadata.
     ///
-    /// A cheap, metadata-only gate the server consults *before* materializing the
-    /// upload to a temp file. Return `false` to decline a file by type — e.g. an
-    /// image-only processor returning `false` for a video — so the server forwards
-    /// the original upload to WordPress without first copying a file the processor
-    /// won't touch.
+    /// A cheap, metadata-only gate checked before `processFile`. Return `false` to
+    /// decline a file by type — e.g. an image-only processor returning `false` for a
+    /// video — so the original upload goes to WordPress unprocessed.
     ///
     /// With a ``MediaUploader`` set this can't decline the upload itself — an
     /// uploader delivers every file, so there is no passthrough to fall to — but it

@@ -333,7 +333,7 @@ if you put it there.
 That happens when you conform the object that already holds the editor in order to drive
 it. The editor holds the processor strongly in return — deliberately, so an in-flight upload
 can't lose it mid-request — which closes a retain cycle ARC cannot break. The editor is
-never deallocated, and on Android each one also strands a bound loopback listener.
+never deallocated.
 
 ```swift
 // Leaks: coordinator -> editor -> mediaProcessor -> coordinator

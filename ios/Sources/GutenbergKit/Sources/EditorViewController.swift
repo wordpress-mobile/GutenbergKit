@@ -274,7 +274,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         isWarmupMode: Bool = false
     ) {
         // A `mediaUploader` needs site credentials for its media deletes. Check it here,
-        // where the host hands it over, rather than at server start: the stack trace
+        // where the host hands it over, rather than at page load: the stack trace
         // names the caller's own line, and the mistake can't hide until the page loads.
         MediaServerCredentials.requireCredentialsForUploader(
             siteApiRoot: configuration.siteApiRoot,
