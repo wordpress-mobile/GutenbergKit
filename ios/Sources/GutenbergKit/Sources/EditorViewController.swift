@@ -593,7 +593,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///
     /// `InternalMediaClient` needs a site root and an auth header (every host provides
     /// one; the web view has no auth cookies). Without them, uploads stay on the page's
-    /// path. A `mediaUploader` without them already trapped in `init`.
+    /// path. A `mediaUploader` without them already trapped in `init` or
+    /// ``updateConfiguration(_:)``.
     private static func makeMediaUploadService(
         configuration: EditorConfiguration,
         httpClient: any EditorHTTPClientProtocol,
@@ -691,8 +692,19 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         }
     }
 
-    /// Updates the editor configuration
+    /// Updates the editor configuration.
+    ///
+    /// Traps if the editor has a ``mediaUploader`` and the new configuration has no
+    /// usable site credentials, the same as `init`.
     public func updateConfiguration(_ newConfiguration: EditorConfiguration) {
+        // The upload handlers are rebuilt from this configuration at load, so an
+        // uploader that passed the check in `init` could otherwise lose its
+        // credentials here and never be called.
+        MediaServerCredentials.requireCredentialsForUploader(
+            siteApiRoot: newConfiguration.siteApiRoot,
+            authHeader: newConfiguration.authHeader,
+            hasUploader: mediaUploader != nil
+        )
         self.configuration = newConfiguration
     }
 

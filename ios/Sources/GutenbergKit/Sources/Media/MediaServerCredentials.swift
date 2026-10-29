@@ -50,7 +50,8 @@ enum MediaServerCredentials {
     ///
     /// Called from `EditorViewController.init`, where the host hands the uploader over,
     /// so the host's own call site is in the stack trace instead of a page-load
-    /// callback that names only GutenbergKit.
+    /// callback that names only GutenbergKit. `updateConfiguration(_:)` calls it too,
+    /// since it can replace the credentials `init` checked.
     ///
     /// (Android enforces this in `GutenbergView.mediaUploader`'s setter — the earliest
     /// point available there, since it takes its handlers as mutable properties rather
