@@ -321,6 +321,27 @@ struct RestRelayHandleTests {
         #expect(exchange.upstream.httpMethod == "POST")
     }
 
+    @Test("sends a POST body that has no type as application/octet-stream")
+    func typesUntypedPostBody() async throws {
+        let exchange = try await relay(method: "POST", body: Data("raw bytes".utf8))
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Content-Type") == "application/octet-stream")
+        #expect(exchange.sentBody == Data("raw bytes".utf8))
+    }
+
+    @Test(
+        "leaves Content-Type alone when URLSession adds none",
+        arguments: [
+            ("PUT", Data("raw bytes".utf8)),
+            ("POST", Data()),
+        ]
+    )
+    func leavesOtherBodiesUntyped(method: String, body: Data) async throws {
+        let exchange = try await relay(method: method, body: body)
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Content-Type") == nil)
+    }
+
     // MARK: - Response rewriting
 
     @Test("strips the upstream CORS headers that would override the policy's")
