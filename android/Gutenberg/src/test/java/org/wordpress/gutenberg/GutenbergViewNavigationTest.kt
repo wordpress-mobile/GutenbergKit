@@ -1,5 +1,6 @@
 package org.wordpress.gutenberg
 
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.os.Handler
@@ -102,7 +103,7 @@ class GutenbergViewNavigationTest {
 
     @Test
     fun `shouldOverrideUrlLoading allows local documents in subframes`() {
-        // The block inserter previews patterns in `blob` and `data` iframes.
+        // Gutenberg's `Iframe` component loads its document from a `blob` URL.
         val siteView = configuredSiteView()
         listOf(
             "blob:https://example.com/0b8f1e2a",
@@ -133,6 +134,35 @@ class GutenbergViewNavigationTest {
         val result = opensExternally(configuredSiteView(), "unknown-scheme://example")
 
         assertTrue("the URL should still be kept from the editor", result)
+    }
+
+    @Test
+    fun `shouldOverrideUrlLoading tolerates an app refusing the URL`() {
+        val refusingContext = object : ContextWrapper(RuntimeEnvironment.getApplication()) {
+            override fun startActivity(intent: Intent) {
+                throw SecurityException("Permission denial")
+            }
+        }
+        val siteView = GutenbergView(
+            EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/").build(),
+            EditorDependencies.empty,
+            testScope,
+            refusingContext
+        )
+
+        val result = opensExternally(siteView, "https://example.org/a-page")
+
+        assertTrue("the URL should still be kept from the editor", result)
+    }
+
+    @Test
+    fun `a new window closed by its script is discarded without opening anything`() {
+        val popup = openWindow(configuredSiteView())
+
+        shadowOf(popup).webChromeClient.onCloseWindow(popup)
+        popup.webViewClient.shouldOverrideUrlLoading(popup, request("https://example.org/preview"))
+
+        assertNull("a closed window should not open the browser", nextStartedActivity())
     }
 
     @Test
@@ -203,6 +233,24 @@ class GutenbergViewNavigationTest {
             shadowOf(webView).lastLoadedUrl
         )
         assertTrue("the host should be told the editor is unavailable", unavailable)
+    }
+
+    @Test
+    fun `onPageStarted stops loading the editor again over a page that keeps replacing it`() {
+        val siteView = configuredSiteView()
+        val webView = siteView.editorWebView
+        val pageUrl = "https://example.com/a-page/"
+        val replaceEditor = {
+            webView.loadUrl(pageUrl)
+            webView.webViewClient.onPageStarted(webView, pageUrl, null)
+            idle()
+            shadowOf(webView).lastLoadedUrl
+        }
+        val editorUrl = editorUrlFor("https://example.com")
+
+        repeat(3) { assertEquals("the editor should recover", editorUrl, replaceEditor()) }
+
+        assertEquals("the editor should stop reloading", pageUrl, replaceEditor())
     }
 
     @Test

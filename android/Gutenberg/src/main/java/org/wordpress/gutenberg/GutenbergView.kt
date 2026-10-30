@@ -142,6 +142,7 @@ class GutenbergView : FrameLayout {
 
     /** Web views created for new windows that have not navigated yet. */
     private val popupWebViews = mutableSetOf<WebView>()
+    private var editorRestoreCount = 0
 
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
@@ -586,8 +587,8 @@ class GutenbergView : FrameLayout {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
                 val url = request.url
 
-                // Local documents load in subframes, such as the block inserter's
-                // previews. In the main frame they would replace the editor, and no
+                // Local documents load in subframes, such as Gutenberg's `Iframe`
+                // component. In the main frame they would replace the editor, and no
                 // other app can open them.
                 if (url.scheme in LOCAL_DOCUMENT_SCHEMES) {
                     return request.isForMainFrame
@@ -689,13 +690,18 @@ class GutenbergView : FrameLayout {
         showErrorPhase(Exception(editorLoadErrorMessage(url, reason, isDevServer)))
     }
 
-    /** Opens [url] in another app, such as the browser, when one can open it. */
+    /**
+     * Opens [url] in another app, such as the browser, when one can open it. The
+     * page chooses the URL, so no URL may crash the host app: besides no app
+     * matching, the matched app can refuse the intent or the URL can exceed its limit.
+     */
+    @Suppress("TooGenericExceptionCaught")
     private fun openExternally(url: Uri) {
         val intent = Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "No app can open the ${url.scheme} URL", e)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Unable to open the ${url.scheme} URL", e)
         }
     }
 
@@ -703,6 +709,7 @@ class GutenbergView : FrameLayout {
      * Creates a hidden web view for a new window. Its first navigation opens in the
      * browser when it is http(s) and is dropped otherwise.
      */
+    @SuppressLint("SetJavaScriptEnabled")
     private fun createPopupWebView(): WebView {
         val popup = WebView(context)
         popupWebViews.add(popup)
@@ -719,13 +726,20 @@ class GutenbergView : FrameLayout {
                 closePopup(popup, Uri.parse(url))
             }
         }
+        // Without JavaScript, `window.close()` never reaches `onCloseWindow`.
+        popup.settings.javaScriptEnabled = true
+        popup.webChromeClient = object : WebChromeClient() {
+            override fun onCloseWindow(window: WebView?) {
+                closePopup(popup, url = null)
+            }
+        }
         return popup
     }
 
-    private fun closePopup(popup: WebView, url: Uri) {
+    private fun closePopup(popup: WebView, url: Uri?) {
         // A navigation can reach both callbacks.
         if (!popupWebViews.remove(popup)) return
-        if (url.scheme == "http" || url.scheme == "https") {
+        if (url?.scheme == "http" || url?.scheme == "https") {
             openExternally(url)
         }
         // The popup is still dispatching the callback that closes it.
@@ -886,8 +900,16 @@ class GutenbergView : FrameLayout {
      * editor is unavailable until it reports itself loaded.
      */
     private fun restoreEditorDocument() {
-        Log.w(TAG, "Another page replaced the editor document, so the editor is reloading")
-        reloadEditor()
+        // A script that navigates on every load would otherwise reload forever.
+        if (editorRestoreCount < MAX_EDITOR_RESTORES) {
+            editorRestoreCount++
+            Log.w(TAG, "Another page replaced the editor document, so the editor is reloading")
+            reloadEditor()
+        } else {
+            Log.e(TAG, "Another page keeps replacing the editor document, so the editor stopped reloading")
+            webView.stopLoading()
+            showEditorCrashPhase()
+        }
         handler.post {
             // Picks made in an open inserter can no longer reach the editor.
             blockInserterDialog?.dismiss()
@@ -1275,7 +1297,10 @@ class GutenbergView : FrameLayout {
                 titleResId = R.string.gbk_editor_crashed_title,
                 descriptionResId = R.string.gbk_editor_crashed_description,
                 actionResId = R.string.gbk_editor_crashed_reload,
-                onAction = { reloadEditor() }
+                onAction = {
+                    editorRestoreCount = 0
+                    reloadEditor()
+                }
             )
         }
     }
@@ -1675,6 +1700,9 @@ class GutenbergView : FrameLayout {
 
         /** Schemes of documents the WebView creates or reads itself, without a server. */
         private val LOCAL_DOCUMENT_SCHEMES = setOf("about", "blob", "data", "file")
+
+        /** How many times the editor reloads over other pages before asking the user to reload. */
+        private const val MAX_EDITOR_RESTORES = 3
 
         /**
          * Returns [url]'s origin authority: its host, plus its port when that port
