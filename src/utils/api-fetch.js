@@ -667,8 +667,9 @@ function rejectUnreachableUpload( connectionError, options ) {
  * @param {(options: Object) => Promise<unknown>} next      The next middleware, for a refused deletion.
  * @return {?Promise} The relayed deletion, or `null` if not applicable.
  *
- * @todo Remove: `withCrossOriginRealMethod` lets the editor send this deletion
- * directly, even cross-origin.
+ * @todo Consider removing, as `withCrossOriginRealMethod` lets the editor send
+ * this deletion directly, even cross-origin. See
+ * https://github.com/wordpress-mobile/GutenbergKit/issues/860.
  */
 function nativeMediaDelete( options, transport, next ) {
 	if ( options.method?.toUpperCase() !== 'DELETE' || ! options.path ) {
