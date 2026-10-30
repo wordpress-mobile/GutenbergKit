@@ -330,7 +330,7 @@ struct RestRelayHandleTests {
     }
 
     @Test(
-        "leaves Content-Type alone when URLSession adds none",
+        "leaves a PUT body and an empty POST body untyped",
         arguments: [
             ("PUT", Data("raw bytes".utf8)),
             ("POST", Data()),

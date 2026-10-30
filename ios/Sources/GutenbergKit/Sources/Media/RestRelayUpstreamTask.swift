@@ -154,11 +154,6 @@ extension RestRelay {
                 body?.finish(throwing: error)
                 return
             }
-            // No error doesn't always mean the whole body arrived. If an HTTP/1.1
-            // server closes the connection partway through a chunked body,
-            // `URLSession` reports no error, and nothing it passes on shows the
-            // body was cut off. See `docs/code/media-uploads.md`.
-            //
             // No response arrived, which shouldn't happen over HTTP. Fail the
             // caller rather than leave it waiting.
             head?.resume(throwing: URLError(.badServerResponse))
@@ -168,6 +163,11 @@ extension RestRelay {
             if redirectGuard.refusal == nil, let response = task.response {
                 observer?.didPerformRequest(request, response: response, data: .bytes(received))
             }
+
+            // No error doesn't always mean the whole body arrived. If an HTTP/1.1
+            // server closes the connection partway through a chunked body,
+            // `URLSession` reports no error, and nothing it passes on shows the
+            // body was cut off. See `docs/code/media-uploads.md`.
             body?.finish()
         }
     }
