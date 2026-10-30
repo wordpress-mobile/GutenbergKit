@@ -6,6 +6,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -185,17 +189,23 @@ class SitePreparationActivity : ComponentActivity() {
         dependencies: EditorDependencies?,
         enableNativeMediaUpload: Boolean
     ) {
-        val intent = Intent(this, EditorActivity::class.java).apply {
-            putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
-            putExtra(EditorActivity.EXTRA_ENABLE_NATIVE_MEDIA_UPLOAD, enableNativeMediaUpload)
+        lifecycleScope.launch {
+            val filePath = if (dependencies != null) {
+                withContext(Dispatchers.IO) {
+                    EditorDependenciesSerializer.writeToDisk(
+                        this@SitePreparationActivity,
+                        dependencies
+                    )
+                }
+            } else null
 
-            // Serialize dependencies to disk and pass the file path
-            if (dependencies != null) {
-                val filePath = EditorDependenciesSerializer.writeToDisk(this@SitePreparationActivity, dependencies)
-                putExtra(EditorActivity.EXTRA_DEPENDENCIES_PATH, filePath)
+            val intent = Intent(this@SitePreparationActivity, EditorActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_CONFIGURATION, configuration)
+                putExtra(EditorActivity.EXTRA_ENABLE_NATIVE_MEDIA_UPLOAD, enableNativeMediaUpload)
+                filePath?.let { putExtra(EditorActivity.EXTRA_DEPENDENCIES_PATH, it) }
             }
+            startActivity(intent)
         }
-        startActivity(intent)
     }
 
     private fun launchPostsList(
@@ -204,16 +214,20 @@ class SitePreparationActivity : ComponentActivity() {
         configuration: EditorConfiguration,
         dependencies: EditorDependencies?
     ) {
-        startActivity(
-            PostsListActivity.createIntent(
-                this,
-                accountId,
-                postType.details,
-                postType.pluralLabel,
-                configuration,
-                dependencies
-            )
-        )
+        lifecycleScope.launch {
+            // createIntent writes the dependencies to disk.
+            val intent = withContext(Dispatchers.IO) {
+                PostsListActivity.createIntent(
+                    this@SitePreparationActivity,
+                    accountId,
+                    postType.details,
+                    postType.pluralLabel,
+                    configuration,
+                    dependencies
+                )
+            }
+            startActivity(intent)
+        }
     }
 }
 

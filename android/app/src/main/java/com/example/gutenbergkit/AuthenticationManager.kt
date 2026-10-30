@@ -27,11 +27,10 @@ import uniffi.wp_api.WpComSiteIdentifier
 import uniffi.wp_api.applicationPasswordsUrl
 import uniffi.wp_api.wordpressComOauth2Configuration
 import uniffi.wp_mobile.Account
-import uniffi.wp_mobile.AccountRepository
 
 class AuthenticationManager(
     private val context: Context,
-    private val accountRepository: AccountRepository,
+    private val app: GutenbergKitApplication,
     private val networkAvailabilityProvider: NetworkAvailabilityProvider,
     private val scope: CoroutineScope
 ) {
@@ -135,6 +134,7 @@ class AuthenticationManager(
      */
     private suspend fun reuseStoredWpComToken(success: AutoDiscoveryAttemptSuccess): Account? {
         val host = success.parsedSiteUrl.toURL().toURI().host
+        val accountRepository = app.accountRepository()
         val tokens = accountRepository.all().filterIsInstance<Account.WpCom>().map { it.token }.distinct()
 
         for (token in tokens) {
@@ -205,32 +205,39 @@ class AuthenticationManager(
         data: Uri,
         callback: AuthenticationCallback
     ) {
-        try {
-            val siteUrl = data.getQueryParameter("site_url")
-                ?: throw IllegalStateException("site_url is missing from authentication")
-            val username = data.getQueryParameter("user_login")
-                ?: throw IllegalStateException("username is missing from authentication")
-            val password = data.getQueryParameter("password")
-                ?: throw IllegalStateException("password is missing from authentication")
+        scope.launch {
+            try {
+                val siteUrl = data.getQueryParameter("site_url")
+                    ?: throw IllegalStateException("site_url is missing from authentication")
+                val username = data.getQueryParameter("user_login")
+                    ?: throw IllegalStateException("username is missing from authentication")
+                val password = data.getQueryParameter("password")
+                    ?: throw IllegalStateException("password is missing from authentication")
 
-            val discoverySuccess = currentDiscoverySuccess
-                ?: throw IllegalStateException("API discovery result is not available")
-            val siteApiRoot = discoverySuccess.apiRootUrl.toURL().toString()
+                val discoverySuccess = currentDiscoverySuccess
+                    ?: throw IllegalStateException("API discovery result is not available")
+                val siteApiRoot = discoverySuccess.apiRootUrl.toURL().toString()
 
-            val account = Account.SelfHostedSite(
-                id = 0u,
-                domain = siteUrl,
-                username = username,
-                password = password,
-                siteApiRoot = siteApiRoot
-            )
-            accountRepository.store(account)
-
-            val stored = accountRepository.all().last()
-            currentDiscoverySuccess = null
-            callback.onAuthenticationSuccess(stored)
-        } catch (e: Exception) {
-            callback.onAuthenticationFailure("Authentication error: ${e.message}")
+                val account = Account.SelfHostedSite(
+                    id = 0u,
+                    domain = siteUrl,
+                    username = username,
+                    password = password,
+                    siteApiRoot = siteApiRoot
+                )
+                val stored = app.withAccountRepository { repo ->
+                    repo.store(account)
+                    repo.all().last()
+                }
+                currentDiscoverySuccess = null
+                withContext(Dispatchers.Main) {
+                    callback.onAuthenticationSuccess(stored)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    callback.onAuthenticationFailure("Authentication error: ${e.message}")
+                }
+            }
         }
     }
 
@@ -261,35 +268,17 @@ class AuthenticationManager(
                     client.oauth2().requestToken(tokenParams)
                 }
 
-                withContext(Dispatchers.Main) {
-                    when (tokenResult) {
-                        is WpRequestResult.Success -> {
-                            val tokenResponse = tokenResult.response.data
-                            val blogId = tokenResponse.blogId
-                                ?: throw OAuthException.MissingBlogId()
-                            val discoverySuccess = currentDiscoverySuccess
-                            val siteHost = discoverySuccess?.parsedSiteUrl?.toURL()?.toURI()?.host
-                                ?: throw OAuthException.MissingSiteHost()
-
-                            val siteApiRoot = wordPressComSiteApiRoot(blogId)
-
-                            val account = Account.WpCom(
-                                id = 0u,
-                                username = siteHost,
-                                token = tokenResponse.accessToken,
-                                siteApiRoot = siteApiRoot
-                            )
-
-                            accountRepository.store(account)
-                            val stored = accountRepository.all().last()
-
-                            currentOAuthConfig = null
-                            currentOAuthState = null
-                            currentDiscoverySuccess = null
-
+                when (tokenResult) {
+                    is WpRequestResult.Success -> {
+                        val token = tokenResult.response.data
+                        val blogId = token.blogId ?: throw OAuthException.MissingBlogId()
+                        val stored = persistOAuthAccount(blogId, token.accessToken)
+                        withContext(Dispatchers.Main) {
                             callback.onAuthenticationSuccess(stored)
                         }
-                        else -> {
+                    }
+                    else -> {
+                        withContext(Dispatchers.Main) {
                             callback.onAuthenticationFailure("Token exchange failed")
                         }
                     }
@@ -300,6 +289,35 @@ class AuthenticationManager(
                 }
             }
         }
+    }
+
+    /**
+     * Persists an [Account.WpCom] derived from the given OAuth blogId and
+     * access token via [GutenbergKitApplication.withAccountRepository] (off
+     * the main thread) and clears OAuth scratch state. Returns the stored
+     * [Account].
+     */
+    private suspend fun persistOAuthAccount(blogId: ULong, accessToken: String): Account {
+        val siteHost = currentDiscoverySuccess?.parsedSiteUrl?.toURL()?.toURI()?.host
+            ?: throw OAuthException.MissingSiteHost()
+
+        val account = Account.WpCom(
+            id = 0u,
+            username = siteHost,
+            token = accessToken,
+            siteApiRoot = wordPressComSiteApiRoot(blogId)
+        )
+
+        val stored = app.withAccountRepository { repo ->
+            repo.store(account)
+            repo.all().last()
+        }
+
+        currentOAuthConfig = null
+        currentOAuthState = null
+        currentDiscoverySuccess = null
+
+        return stored
     }
 
     private fun loadOAuthCredentials(): OAuthCredentials? {

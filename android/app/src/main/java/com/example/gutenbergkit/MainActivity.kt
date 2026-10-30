@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.wordpress.gutenberg.BuildConfig
 import uniffi.wp_mobile.Account
+import uniffi.wp_mobile.AccountRepository
 
 class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCallback {
     private val configurations = mutableStateListOf<ConfigurationItem>()
@@ -59,7 +61,6 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     private val isLoadingCapabilities = mutableStateOf(false)
     private val authError = mutableStateOf<String?>(null)
     private val gutenbergKitApp by lazy { application as GutenbergKitApplication }
-    private val accountRepository by lazy { gutenbergKitApp.accountRepository }
     private val networkAvailabilityProvider by lazy { gutenbergKitApp.networkAvailabilityProvider }
     private lateinit var authenticationManager: AuthenticationManager
     private val siteCapabilitiesDiscovery = SiteCapabilitiesDiscovery()
@@ -73,7 +74,7 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        authenticationManager = AuthenticationManager(this, accountRepository, networkAvailabilityProvider, lifecycleScope)
+        authenticationManager = AuthenticationManager(this, gutenbergKitApp, networkAvailabilityProvider, lifecycleScope)
 
         // Add default bundled editor configuration
         configurations.add(ConfigurationItem.BundledEditor)
@@ -83,13 +84,9 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
 
         // Only a fresh launch signs in. A recreated activity, or one reopened from Recents, is handed the
         // original intent again, which would add back a site that was deleted in the meantime.
-        if (savedInstanceState == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
-            signInFromLaunchExtrasIfNeeded()
-        }
-
-        // Load saved accounts
-        configurations.addAll(
-            accountRepository.all().map { ConfigurationItem.ConfiguredEditor.fromAccount(it) }
+        loadSavedAccounts(
+            signInFromExtras = savedInstanceState == null &&
+                (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
         )
 
         setContent {
@@ -116,7 +113,9 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
                     },
                     onDeleteConfiguration = { config ->
                         if (config is ConfigurationItem.ConfiguredEditor) {
-                            accountRepository.remove(config.accountId)
+                            lifecycleScope.launch {
+                                gutenbergKitApp.withAccountRepository { it.remove(config.accountId) }
+                            }
                         }
                         configurations.remove(config)
                     },
@@ -134,10 +133,28 @@ class MainActivity : ComponentActivity(), AuthenticationManager.AuthenticationCa
     }
 
     /**
+     * Loads saved accounts off the main thread; the encrypted store is on
+     * disk and reads decrypt every account via Keystore.
+     */
+    private fun loadSavedAccounts(signInFromExtras: Boolean) {
+        lifecycleScope.launch {
+            val accounts = gutenbergKitApp.withAccountRepository { repo ->
+                if (signInFromExtras) {
+                    signInFromLaunchExtrasIfNeeded(repo)
+                }
+                repo.all()
+            }
+            configurations.addAll(
+                accounts.map { ConfigurationItem.ConfiguredEditor.fromAccount(it) }
+            )
+        }
+    }
+
+    /**
      * Stores the sites in the `accounts` launch extra as accounts, replacing any account already stored for the
      * same site. Lets an emulator be signed in without a login flow – see `bin/demo-app-login.sh`.
      */
-    private fun signInFromLaunchExtrasIfNeeded() {
+    private fun signInFromLaunchExtrasIfNeeded(accountRepository: AccountRepository) {
         val json = intent.getStringExtra(ACCOUNTS_EXTRA) ?: return
 
         for (account in accountsFromJson(json)) {
