@@ -297,11 +297,12 @@ struct RestRelayHandleTests {
             "Connection": "keep-alive",
             "Accept-Encoding": "gzip, deflate",
             "X-GBK-Relay-Timeout": "500",
+            "X-GBK-Relay-Upload": "upload-1",
         ])
 
         for header in [
             "Origin", "Referer", "Sec-Fetch-Site", "Sec-Fetch-Mode",
-            "Cookie", "Connection", "X-GBK-Relay-Timeout",
+            "Cookie", "Connection", "X-GBK-Relay-Timeout", "X-GBK-Relay-Upload",
         ] {
             #expect(
                 exchange.upstream.value(forHTTPHeaderField: header) == nil,
@@ -837,21 +838,119 @@ struct RestRelaySchemeHandlerTests {
         #expect(task.finished)
     }
 
+    // MARK: - Upload progress
+
+    /// Large enough that it can't all fit in the connection's buffers while the server
+    /// isn't reading.
+    private static let uploadSize = 64_000_000
+
+    @Test("reports an upload's progress while its body is sent")
+    func reportsUploadProgress() async throws {
+        // WebKit fires no upload `progress` events for a request this answers.
+        let server = try await StalledUploadServer.start()
+        defer { server.stop() }
+        let site = "http://127.0.0.1:\(server.port)"
+        let handler = makeHandler(site: site, uploadProgressInterval: .zero)
+        let task = FakeSchemeTask(request: Self.uploadRequest(to: site, naming: "upload-1"))
+        let reports = ProgressRecorder()
+
+        handler.start(task) { reports.add($0) }
+        try await waitUntil { !reports.all.isEmpty }
+        #expect(reports.all.allSatisfy { $0.sent < $0.total }, "reported the whole body before the server read it")
+        server.resume()
+        // The page completes the upload on this report, before the response.
+        try await waitUntil { reports.all.contains { $0.sent == $0.total } }
+        server.answer()
+        await task.waitUntilAnswered()
+
+        #expect(task.status == 201)
+        for report in reports.all {
+            #expect(report.id == "upload-1")
+            #expect(report.total == Int64(Self.uploadSize))
+            #expect(report.sent > 0)
+        }
+    }
+
+    @Test("reports an upload's progress no more often than the interval")
+    func throttlesUploadProgress() async throws {
+        let server = try await StalledUploadServer.start()
+        defer { server.stop() }
+        let site = "http://127.0.0.1:\(server.port)"
+        let handler = makeHandler(site: site, uploadProgressInterval: .seconds(3600))
+        let task = FakeSchemeTask(request: Self.uploadRequest(to: site, naming: "upload-1"))
+        let reports = ProgressRecorder()
+
+        handler.start(task) { reports.add($0) }
+        try await waitUntil { !reports.all.isEmpty }
+        server.resume()
+        try await waitUntil { reports.all.contains { $0.sent == $0.total } }
+        server.answer()
+        await task.waitUntilAnswered()
+
+        // The first report, and the one for the whole body, which always goes.
+        #expect(reports.all.count == 2)
+    }
+
+    @Test("reports no progress for a request that names no upload")
+    func reportsNoProgressWithoutAnUpload() async throws {
+        let server = try await StalledUploadServer.start()
+        defer { server.stop() }
+        let site = "http://127.0.0.1:\(server.port)"
+        let handler = makeHandler(site: site, uploadProgressInterval: .zero)
+        let task = FakeSchemeTask(request: Self.uploadRequest(to: site, naming: nil))
+        let reports = ProgressRecorder()
+
+        handler.start(task) { reports.add($0) }
+        // Long enough for part of the body to be sent.
+        try await Task.sleep(for: .milliseconds(200))
+        server.resume()
+        server.answer()
+        await task.waitUntilAnswered()
+
+        #expect(task.status == 201)
+        #expect(reports.all.isEmpty)
+    }
+
+    /// The page's request to upload a body to `site`, naming the upload `id`.
+    private static func uploadRequest(to site: String, naming id: String?) -> URLRequest {
+        var request = URLRequest(url: RestRelayHandleTests.relayURL(for: "\(site)/wp-json/wp/v2/media"))
+        request.httpMethod = "POST"
+        request.httpBody = Data(count: uploadSize)
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue(id, forHTTPHeaderField: RestRelaySchemeHandler.uploadHeader)
+        return request
+    }
+
+    /// The upload progress reports a handler gave.
+    @MainActor
+    private final class ProgressRecorder {
+        private(set) var all: [RestRelaySchemeHandler.UploadProgress] = []
+
+        func add(_ report: RestRelaySchemeHandler.UploadProgress) {
+            all.append(report)
+        }
+    }
+
     private func makeHandler(
-        session: URLSession,
-        siteApiRoot: String = "https://example.com/wp-json/",
-        observer: (any EditorHTTPClientDelegate)? = nil
+        session: URLSession? = nil,
+        site: String = "https://example.com",
+        siteApiRoot: String? = nil,
+        observer: (any EditorHTTPClientDelegate)? = nil,
+        uploadProgressInterval: Duration = .milliseconds(50)
     ) -> RestRelaySchemeHandler {
-        RestRelaySchemeHandler(relay: RestRelay(
-            configuration: EditorConfigurationBuilder(
-                postType: .post,
-                siteURL: URL(string: "https://example.com")!,
-                siteApiRoot: URL(string: siteApiRoot)!,
-                authHeader: "Bearer test-token"
-            ).build(),
-            session: session,
-            observer: observer
-        ))
+        RestRelaySchemeHandler(
+            relay: RestRelay(
+                configuration: EditorConfigurationBuilder(
+                    postType: .post,
+                    siteURL: URL(string: site)!,
+                    siteApiRoot: URL(string: siteApiRoot ?? "\(site)/wp-json/")!,
+                    authHeader: "Bearer test-token"
+                ).build(),
+                session: session,
+                observer: observer
+            ),
+            uploadProgressInterval: uploadProgressInterval
+        )
     }
 
     /// Waits for `condition` without giving up the main actor, so nothing else runs on

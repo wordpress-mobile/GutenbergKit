@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
 	createRelayXMLHttpRequest,
 	installXMLHttpRequestRelay,
+	reportUploadProgress,
 } from './xhr-relay';
 import { getGBKit } from './bridge';
 
@@ -108,6 +109,18 @@ class FakeXMLHttpRequest extends EventTarget {
 	}
 
 	/**
+	 * The headers set, apart from the upload's name, which only the upload
+	 * progress tests look at.
+	 *
+	 * @return {Array} Each header's name and value.
+	 */
+	headersSet() {
+		return this.callsTo( 'setRequestHeader' ).filter(
+			( [ name ] ) => name !== 'X-GBK-Relay-Upload'
+		);
+	}
+
+	/**
 	 * The calls of one kind.
 	 *
 	 * @param {string} name The method or property.
@@ -174,7 +187,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			);
 			xhr.send( 'action=x' );
 
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+			expect( xhr.headersSet() ).toEqual( [
 				[ 'Authorization', 'Bearer own-token' ],
 				[ 'Content-Type', 'application/x-www-form-urlencoded' ],
 			] );
@@ -197,7 +210,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			const [ [ body ] ] = xhr.callsTo( 'send' );
 			expect( body ).toBeInstanceOf( ArrayBuffer );
 			expect( new TextDecoder().decode( body ) ).toBe( 'chunk bytes' );
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+			expect( xhr.headersSet() ).toEqual( [
 				[ 'Content-Type', 'application/offset+octet-stream' ],
 			] );
 		} );
@@ -208,7 +221,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.send( new NodeBlob( [ '{}' ], { type: 'application/json' } ) );
 			await settle();
 
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+			expect( xhr.headersSet() ).toEqual( [
 				[ 'Content-Type', 'application/json' ],
 			] );
 		} );
@@ -245,7 +258,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			expect( xhr.callsTo( 'send' ) ).toEqual( [
 				[ serialized.buffer ],
 			] );
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+			expect( xhr.headersSet() ).toEqual( [
 				[ 'Content-Type', 'multipart/form-data; boundary=xyz' ],
 			] );
 		} );
@@ -298,7 +311,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.timeout = 500;
 			xhr.send();
 
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+			expect( xhr.headersSet() ).toEqual( [
 				[ 'X-GBK-Relay-Timeout', '500' ],
 			] );
 		} );
@@ -316,7 +329,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 				vi.useRealTimers();
 			}
 
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toContainEqual( [
+			expect( xhr.headersSet() ).toContainEqual( [
 				'X-GBK-Relay-Timeout',
 				'300',
 			] );
@@ -327,7 +340,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.open( 'GET', 'https://example.org/a' );
 			xhr.send();
 
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [] );
+			expect( xhr.headersSet() ).toEqual( [] );
 		} );
 	} );
 
@@ -493,6 +506,250 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.receiveHeaders();
 
 			expect( events ).toEqual( [ [ 'readystatechange', 2 ] ] );
+		} );
+	} );
+
+	describe( 'upload progress from native code', () => {
+		/**
+		 * The upload `progress` events a request fires, with their sizes.
+		 *
+		 * @param {XMLHttpRequest} xhr The request.
+		 * @return {Array} Each event's `loaded` and `total`.
+		 */
+		function recordProgress( xhr ) {
+			const events = [];
+			xhr.upload.addEventListener( 'progress', ( event ) =>
+				events.push( [
+					event.loaded,
+					event.total,
+					event.lengthComputable,
+				] )
+			);
+			return events;
+		}
+
+		/**
+		 * The name the request gave its upload, from the header it sent.
+		 *
+		 * @param {XMLHttpRequest} xhr The request.
+		 * @return {string|undefined} The upload's name.
+		 */
+		function uploadID( xhr ) {
+			return xhr
+				.callsTo( 'setRequestHeader' )
+				.find( ( [ name ] ) => name === 'X-GBK-Relay-Upload' )?.[ 1 ];
+		}
+
+		it( 'names each relayed upload in a header', () => {
+			const first = new RelayXMLHttpRequest();
+			recordProgress( first );
+			first.open( 'POST', 'https://example.org/upload' );
+			first.send( 'one' );
+			const second = new RelayXMLHttpRequest();
+			recordProgress( second );
+			second.open( 'POST', 'https://example.org/upload' );
+			second.send( 'two' );
+
+			expect( uploadID( first ) ).toEqual( expect.any( String ) );
+			expect( uploadID( second ) ).toEqual( expect.any( String ) );
+			expect( uploadID( first ) ).not.toBe( uploadID( second ) );
+		} );
+
+		it( 'names no upload for a request without a body, or one not relayed', () => {
+			const get = new RelayXMLHttpRequest();
+			recordProgress( get );
+			get.open( 'GET', 'https://example.org/a' );
+			get.send();
+			const notRelayed = new RelayXMLHttpRequest();
+			recordProgress( notRelayed );
+			notRelayed.open( 'POST', 'gbk-upload://upload/sessions' );
+			notRelayed.send( '{}' );
+
+			expect( uploadID( get ) ).toBeUndefined();
+			expect( uploadID( notRelayed ) ).toBeUndefined();
+		} );
+
+		it( 'fires progress for each report, before the upload finishes', () => {
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordProgress( xhr );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x'.repeat( 100 ) );
+			const id = uploadID( xhr );
+
+			reportUploadProgress( id, 25, 100 );
+			reportUploadProgress( id, 60, 100 );
+			xhr.receiveHeaders();
+
+			expect( events ).toEqual( [
+				[ 25, 100, true ],
+				[ 60, 100, true ],
+				[ 100, 100, true ],
+			] );
+		} );
+
+		it( 'finishes the upload when the whole body is sent, before the response', () => {
+			// As the browser does for a request it sends itself.
+			const xhr = new RelayXMLHttpRequest();
+			const events = [];
+			for ( const type of [ 'progress', 'load', 'loadend' ] ) {
+				xhr.upload.addEventListener( type, ( event ) =>
+					events.push( [ type, event.loaded, xhr.readyState ] )
+				);
+			}
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x'.repeat( 100 ) );
+			const id = uploadID( xhr );
+
+			reportUploadProgress( id, 60, 100 );
+			reportUploadProgress( id, 100, 100 );
+			xhr.receiveHeaders();
+			reportUploadProgress( id, 100, 100 );
+
+			expect( events ).toEqual( [
+				[ 'progress', 60, 1 ],
+				[ 'progress', 100, 1 ],
+				[ 'load', 100, 1 ],
+				[ 'loadend', 100, 1 ],
+			] );
+		} );
+
+		it( 'passes on the upload events of a request that failed while sending', () => {
+			const xhr = new RelayXMLHttpRequest();
+			const events = [];
+			for ( const type of [ 'abort', 'loadend' ] ) {
+				xhr.upload.addEventListener( type, () => events.push( type ) );
+			}
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x'.repeat( 100 ) );
+			reportUploadProgress( uploadID( xhr ), 60, 100 );
+			xhr.upload.dispatchEvent( new ProgressEvent( 'abort' ) );
+			xhr.upload.dispatchEvent( new ProgressEvent( 'loadend' ) );
+
+			expect( events ).toEqual( [ 'abort', 'loadend' ] );
+		} );
+
+		it( 'fires no upload events unless the caller read upload before send', () => {
+			// The browser fires none for a listener added after `send()`.
+			const xhr = new RelayXMLHttpRequest();
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x'.repeat( 100 ) );
+			const events = recordProgress( xhr );
+			xhr.receiveHeaders();
+
+			expect( uploadID( xhr ) ).toBeUndefined();
+			expect( events ).toEqual( [] );
+		} );
+
+		it( 'fires no upload events for a listener added before an abort during the read', () => {
+			// The stand-in request that ends it would otherwise fire them.
+			const xhr = new RelayXMLHttpRequest();
+			xhr.open( 'PATCH', 'https://example.org/files/abc' );
+			xhr.send( new NodeBlob( [ 'chunk bytes' ] ) );
+			const events = [];
+			for ( const type of [ 'loadstart', 'abort', 'loadend' ] ) {
+				xhr.upload.addEventListener( type, () => events.push( type ) );
+			}
+			xhr.abort();
+			for ( const type of [ 'loadstart', 'abort', 'loadend' ] ) {
+				xhr.upload.dispatchEvent( new ProgressEvent( type ) );
+			}
+
+			expect( events ).toEqual( [] );
+		} );
+
+		it( 'fires the upload events of an abort during the read to a listener added before send', () => {
+			const xhr = new RelayXMLHttpRequest();
+			const events = [];
+			for ( const type of [ 'abort', 'loadend' ] ) {
+				xhr.upload.addEventListener( type, () => events.push( type ) );
+			}
+			xhr.open( 'PATCH', 'https://example.org/files/abc' );
+			xhr.send( new NodeBlob( [ 'chunk bytes' ] ) );
+			xhr.abort();
+			for ( const type of [ 'abort', 'loadend' ] ) {
+				xhr.upload.dispatchEvent( new ProgressEvent( type ) );
+			}
+
+			expect( events ).toEqual( [ 'abort', 'loadend' ] );
+		} );
+
+		it( 'fires no upload events for a listener added while the body is read', async () => {
+			const xhr = new RelayXMLHttpRequest();
+			xhr.open( 'PATCH', 'https://example.org/files/abc' );
+			xhr.send( new NodeBlob( [ 'chunk bytes' ] ) );
+			const events = recordProgress( xhr );
+			await settle();
+			xhr.receiveHeaders();
+
+			expect( uploadID( xhr ) ).toBeUndefined();
+			expect( events ).toEqual( [] );
+		} );
+
+		it( 'gives a body read before sending a name, once it is sent', async () => {
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordProgress( xhr );
+			xhr.open( 'PATCH', 'https://example.org/files/abc' );
+			xhr.send( new NodeBlob( [ 'chunk bytes' ] ) );
+			await settle();
+
+			reportUploadProgress( uploadID( xhr ), 4, 11 );
+
+			expect( events ).toEqual( [ [ 4, 11, true ] ] );
+		} );
+
+		it( 'drops a report that arrives out of order', () => {
+			// Native code reports from several threads, so reports can arrive
+			// out of order.
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordProgress( xhr );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x'.repeat( 100 ) );
+			const id = uploadID( xhr );
+
+			reportUploadProgress( id, 60, 100 );
+			reportUploadProgress( id, 25, 100 );
+			reportUploadProgress( id, 60, 100 );
+
+			expect( events ).toEqual( [ [ 60, 100, true ] ] );
+		} );
+
+		it( 'drops a report that arrives after the response', () => {
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordProgress( xhr );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x'.repeat( 100 ) );
+			const id = uploadID( xhr );
+			xhr.receiveHeaders();
+
+			reportUploadProgress( id, 60, 100 );
+
+			expect( events ).toEqual( [ [ 100, 100, true ] ] );
+		} );
+
+		it( 'drops a report for a request that ended, or was opened again', () => {
+			const ended = new RelayXMLHttpRequest();
+			const endedEvents = recordProgress( ended );
+			ended.open( 'POST', 'https://example.org/upload' );
+			ended.send( 'x'.repeat( 100 ) );
+			ended.dispatchEvent( new Event( 'loadend' ) );
+			reportUploadProgress( uploadID( ended ), 60, 100 );
+
+			const reopened = new RelayXMLHttpRequest();
+			const reopenedEvents = recordProgress( reopened );
+			reopened.open( 'POST', 'https://example.org/upload' );
+			reopened.send( 'x'.repeat( 100 ) );
+			const id = uploadID( reopened );
+			reopened.open( 'POST', 'https://example.org/upload' );
+			reportUploadProgress( id, 60, 100 );
+
+			expect( endedEvents ).toEqual( [] );
+			expect( reopenedEvents ).toEqual( [] );
+		} );
+
+		it( 'ignores a report for an upload it doesn’t know', () => {
+			expect( () =>
+				reportUploadProgress( 'unknown', 1, 2 )
+			).not.toThrow();
 		} );
 	} );
 
@@ -698,7 +955,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.send( 'x' );
 			xhr.setRequestHeader( 'Content-Type', 'text/plain' );
 
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+			expect( xhr.headersSet() ).toEqual( [
 				[ 'Content-Type', 'text/plain' ],
 			] );
 		} );
@@ -761,7 +1018,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.setRequestHeader( 'Content-Type', 'application/json' );
 			xhr.send( body );
 
-			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+			expect( xhr.headersSet() ).toEqual( [
 				[ 'Content-Type', 'application/json' ],
 			] );
 			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ body ] ] );
@@ -796,5 +1053,23 @@ describe( 'installXMLHttpRequestRelay', () => {
 		expect( installed ).not.toBe( original );
 		expect( window.XMLHttpRequest ).toBe( installed );
 		expect( Object.getPrototypeOf( installed ) ).toBe( original );
+	} );
+
+	it( 'gives native code a function to report upload progress', () => {
+		getGBKit.mockReturnValue( { restRelay: REST_RELAY } );
+		installXMLHttpRequestRelay();
+
+		expect( window.editor.relayUploadProgress ).toBe(
+			reportUploadProgress
+		);
+	} );
+
+	it( 'adds nothing to XMLHttpRequest that the browser’s lacks', () => {
+		getGBKit.mockReturnValue( { restRelay: REST_RELAY } );
+		installXMLHttpRequestRelay();
+
+		expect( Object.getOwnPropertyNames( window.XMLHttpRequest ) ).toEqual(
+			expect.not.arrayContaining( [ 'reportUploadProgress' ] )
+		);
 	} );
 } );

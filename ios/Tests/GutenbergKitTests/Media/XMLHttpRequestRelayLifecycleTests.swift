@@ -23,6 +23,7 @@ struct XMLHttpRequestRelayLifecycleTests {
         "getJSON",
         "postString",
         "postStringWithoutUploadListener",
+        "postStringWithLateUploadListener",
         "postArrayBuffer",
         "postEmptyString",
         "postEmptyArrayBuffer",
@@ -33,6 +34,7 @@ struct XMLHttpRequestRelayLifecycleTests {
         "abortFromUploadProgress",
         "abortFromUploadLoad",
         "abortWhileBlobIsRead",
+        "abortWhileBlobIsReadWithLateUploadListener",
         "abortWhileFormDataIsRead",
         "timeoutBeforeResponse",
         "timeoutAfterHeaders",
@@ -178,6 +180,7 @@ private final class LifecyclePage {
         const warn = () => {};
         \(modules.joined(separator: "\n"))
         window.XMLHttpRequestRelay = createRelayXMLHttpRequest( XMLHttpRequest, { restRelay } );
+        window.editor = { relayUploadProgress: reportUploadProgress };
         })()
         """
     }

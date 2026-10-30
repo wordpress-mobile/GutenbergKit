@@ -90,6 +90,12 @@ const scenarios = {
 		xhr.open( 'POST', `${ origin }/echo` );
 		xhr.send( 'a string body' );
 	},
+	postStringWithLateUploadListener() {
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( 'a string body' );
+		// The browser fires no upload events to a listener added now.
+		recordUpload();
+	},
 	postArrayBuffer() {
 		recordUpload();
 		xhr.open( 'PUT', `${ origin }/echo` );
@@ -150,6 +156,12 @@ const scenarios = {
 		recordUpload();
 		xhr.open( 'POST', `${ origin }/echo` );
 		xhr.send( new Blob( [ 'a blob body' ] ) );
+		xhr.abort();
+	},
+	abortWhileBlobIsReadWithLateUploadListener() {
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( new Blob( [ 'a blob body' ] ) );
+		recordUpload();
 		xhr.abort();
 	},
 	abortWhileFormDataIsRead() {
