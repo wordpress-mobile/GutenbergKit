@@ -174,6 +174,7 @@ copy-ios-dist:
 	@mkdir -p ./ios/Sources/GutenbergKitResources/Gutenberg
 	@cp -r ./dist/. ./ios/Sources/GutenbergKitResources/Gutenberg/
 	@touch ./ios/Sources/GutenbergKitResources/Gutenberg/.gitkeep
+	@node bin/generate-supported-locales.js
 
 .PHONY: copy-android-dist
 copy-android-dist:
