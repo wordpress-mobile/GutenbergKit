@@ -24,8 +24,8 @@ const HEADERS_RECEIVED = 2;
  */
 const TIMEOUT_HEADER = 'X-GBK-Relay-Timeout';
 
-/** The upload events the relay fires itself, which WebKit doesn't. */
-const OWN_UPLOAD_EVENTS = new WeakSet();
+/** The events the relay fires itself, in place of or as well as WebKit's. */
+const OWN_EVENTS = new WeakSet();
 
 /**
  * A `data:` URL that fails to decode. A request for it fails as a network
@@ -83,11 +83,11 @@ export function installXMLHttpRequestRelay() {
  *   a browser refuses to pair with a credentialed request.
  * - A `Blob` or `FormData` body is read into an `ArrayBuffer` before it is sent,
  *   because WebKit drops those bodies on the way to native code (see
- *   `bufferedBody`). The request starts once the body is read, so its
- *   `loadstart` comes later than `send()`. A synchronous request can't wait for
- *   the read, so its body is read synchronously instead (see
- *   `readSynchronously`). An `abort()` during the read ends the request with
- *   the events an abort fires.
+ *   `bufferedBody`). Its `loadstart` events still fire at `send()`, as the
+ *   browser's do, and the browser's own are stopped once the body is read and
+ *   sent. A synchronous request can't wait for the read, so its body is read
+ *   synchronously instead (see `readSynchronously`). An `abort()` during the
+ *   read ends the request with the events an abort fires.
  * - WebKit doesn't apply `timeout` to a request native code answers, so native
  *   code enforces it. It is read when the request is sent, so a change to it
  *   after `send()` has no effect.
@@ -148,10 +148,10 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		#responseHidden = false;
 
 		/**
-		 * The body size the upload's `loadstart` gives while a request stands in
-		 * for one that was never sent, or `undefined`.
+		 * Whether the relay fired the `loadstart` events at `send()`, so the
+		 * browser's own are stopped when it sends the request.
 		 */
-		#standInSize = undefined;
+		#startFired = false;
 
 		constructor() {
 			super();
@@ -169,6 +169,12 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 				this.#completeUpload();
 				if ( this.#ended !== ended ) {
 					this.#forgetResponse( event );
+				}
+			} );
+			// Added first, so the caller's listeners never hear it.
+			this.addEventListener( 'loadstart', ( event ) => {
+				if ( this.#startFired && ! OWN_EVENTS.has( event ) ) {
+					event.stopImmediatePropagation();
 				}
 			} );
 		}
@@ -193,6 +199,7 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			this.#uploadSize = undefined;
 			this.#uploadComplete = false;
 			this.#responseHidden = false;
+			this.#startFired = false;
 			this.#ended++;
 			super.withCredentials = target ? false : this.#withCredentials;
 		}
@@ -281,6 +288,9 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 
 			const pending = { body: sent };
 			this.#pending = pending;
+			if ( ! this.#fireLoadStart( sent, pending ) ) {
+				return;
+			}
 			const headers = new Headers();
 			for ( const type of this.#contentTypes ) {
 				headers.append( 'Content-Type', type );
@@ -337,22 +347,15 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 					upload.addEventListener( type, ( event ) => {
 						if (
 							this.#uploadComplete &&
-							! OWN_UPLOAD_EVENTS.has( event )
+							! OWN_EVENTS.has( event )
 						) {
 							event.stopImmediatePropagation();
 						}
 					} );
 				}
 				upload.addEventListener( 'loadstart', ( event ) => {
-					const size = this.#standInSize;
-					if (
-						size !== undefined &&
-						! OWN_UPLOAD_EVENTS.has( event )
-					) {
+					if ( this.#startFired && ! OWN_EVENTS.has( event ) ) {
 						event.stopImmediatePropagation();
-						upload.dispatchEvent(
-							ownProgressEvent( 'loadstart', 0, size )
-						);
 					}
 				} );
 			}
@@ -383,6 +386,37 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		}
 
 		/**
+		 * Fires the `loadstart` events the browser fires at `send()`, for a
+		 * request that waits for its body to be read first.
+		 *
+		 * The upload's goes out only when the caller has reached the upload
+		 * object. Without that, it can have no listeners to hear it.
+		 *
+		 * @param {Blob|FormData} body    The caller's body.
+		 * @param {Object}        pending The `send()` waiting for the body.
+		 * @return {boolean} Whether the request is still waiting to be sent: a
+		 *                   listener can end it or open it again.
+		 */
+		#fireLoadStart( body, pending ) {
+			this.#startFired = true;
+			this.dispatchEvent( ownProgressEvent( 'loadstart', 0, 0 ) );
+			if ( this.#pending !== pending ) {
+				return false;
+			}
+			if ( this.#uploadGuarded ) {
+				// Every boundary WebKit makes is the same length, so this
+				// one gives the size WebKit's would.
+				const size = isBlob( body )
+					? body.size
+					: multipartBody( body, formBoundary() ).size;
+				super.upload.dispatchEvent(
+					ownProgressEvent( 'loadstart', 0, size )
+				);
+			}
+			return this.#pending === pending;
+		}
+
+		/**
 		 * Sends a relayed asynchronous request, with what native code needs to
 		 * stand in for the browser.
 		 *
@@ -403,7 +437,11 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			// The browser fires no upload `progress`, `load` or `loadend` for an
 			// empty body.
 			this.#uploadSize = size === 0 ? undefined : size;
-			super.send( body );
+			try {
+				super.send( body );
+			} finally {
+				this.#startFired = false;
+			}
 		}
 
 		/**
@@ -473,22 +511,18 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		 * fail.
 		 *
 		 * WebKit drops a `Blob` sent to a `data:` URL, so an empty body goes in
-		 * its place, and the upload's `loadstart` is given the `Blob`'s size.
+		 * its place. The `loadstart` events already fired at `send()`, with the
+		 * body's size, so the ones this request fires are stopped.
 		 *
 		 * @param {string}  url  The `data:` URL to send it to.
 		 * @param {unknown} body The caller's body.
 		 */
 		#endWithoutSending( url, body ) {
 			super.open( 'POST', url );
-			if ( ! isBlob( body ) ) {
-				super.send( body );
-				return;
-			}
-			this.#standInSize = body.size;
 			try {
-				super.send( '' );
+				super.send( isBlob( body ) ? '' : body );
 			} finally {
-				this.#standInSize = undefined;
+				this.#startFired = false;
 			}
 		}
 	};
@@ -705,8 +739,7 @@ function byteSize( body ) {
 }
 
 /**
- * An upload progress event the relay fires itself, which its guard on the
- * upload lets through.
+ * A progress event the relay fires itself, which its guards let through.
  *
  * @param {string} type   The event type.
  * @param {number} loaded The bytes sent.
@@ -720,7 +753,7 @@ function ownProgressEvent( type, loaded, total ) {
 		loaded,
 		total,
 	} );
-	OWN_UPLOAD_EVENTS.add( event );
+	OWN_EVENTS.add( event );
 	return event;
 }
 
