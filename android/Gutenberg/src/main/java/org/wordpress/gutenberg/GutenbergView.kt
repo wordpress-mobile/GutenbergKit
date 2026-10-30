@@ -1016,16 +1016,17 @@ class GutenbergView : FrameLayout {
      * [EditorAvailableListener.onEditorAvailable] when the editor crashes before
      * it finishes loading.
      *
-     * The editor's error boundary caught an error and replaced the editor with an
-     * error message. React unmounted the editor, which deleted every JavaScript
-     * `editor` API, so calls to them are refused from this point until the editor
-     * reloads.
+     * Either the editor's error boundary caught an error and React unmounted the
+     * editor, or the web view's renderer process died. Both remove every
+     * JavaScript `editor` API, so calls to them are refused from this point until
+     * the editor reloads.
      *
-     * GutenbergKit covers the editor with a notice offering to reload it. Until it
-     * reloads, hosts should disable the controls that depend on the editor —
-     * history, editor mode — while leaving those that read from their own
-     * persisted copy, such as saving and closing, available. Re-enable them the
-     * next time [EditorAvailableListener.onEditorAvailable] is called.
+     * GutenbergKit either reloads the editor automatically after a renderer death
+     * or covers it with a notice offering to reload it. Until it reloads, hosts
+     * should disable the controls that depend on the editor — history, editor
+     * mode — while leaving those that read from their own persisted copy, such as
+     * saving and closing, available. Re-enable them the next time
+     * [EditorAvailableListener.onEditorAvailable] is called.
      */
     fun interface EditorUnavailableListener {
         fun onEditorUnavailable(view: GutenbergView?)
