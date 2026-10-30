@@ -544,7 +544,6 @@ class GutenbergView : FrameLayout {
                 onEditorPageStarted(url)
             }
 
-            // Android only calls this from API 26, where it was added.
             @RequiresApi(Build.VERSION_CODES.O)
             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                 if (view === webView) onEditorRenderProcessGone(detail?.didCrash() == true)
