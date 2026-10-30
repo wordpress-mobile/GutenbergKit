@@ -190,6 +190,27 @@ removing it there would protect nothing, because the page already holds the cred
 can send it anywhere. Without Lockdown Mode the editor page can already read those responses;
 the second group couldn't.
 
+### Where a relayed request differs from the browser's
+
+Both come from `URLSession`, and neither can be changed through its public API. Measured on
+iOS 27.0 and macOS 27.2.
+
+-   **A POST body with no type reaches the server as `application/octet-stream`.** The
+    browser sends no `Content-Type` for such a body, such as a `Blob` with no type.
+    `URLSession` adds `application/x-www-form-urlencoded` to any POST with a body and no
+    `Content-Type`, and PHP would parse those bytes as form fields. Removing the header or
+    setting it to `nil` doesn't stop it, and an empty value sends an empty header. So the
+    relay names the body as plain bytes instead. Other methods, and a POST with an empty
+    body, get no `Content-Type`, as in the browser.
+-   **An HTTP/1.1 chunked response that is cut off partway reaches the page as a success.**
+    If the server closes the connection before the last chunk, WebKit fails the request,
+    but `URLSession` reports a normal finish. It even reports the response as not chunked.
+    So the page gets the status and the part of the body that arrived. A JSON response then
+    fails to parse, so api-fetch still reports an error, but a streamed response looks
+    complete. Over HTTP/2, a closed connection, a reset stream and a `GOAWAY` all fail the
+    request, as they should. So does an HTTP/1.1 response with a `Content-Length` that is cut
+    off.
+
 ## Background and timeouts
 
 -   Uploads in flight share one `performExpiringActivity` assertion, which keeps the app

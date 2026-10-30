@@ -227,6 +227,18 @@ struct RestRelay: Sendable {
         )
         upstreamRequest.httpBody = request.httpBody
 
+        // A POST body without a type, such as a `Blob` with no type, would reach
+        // the server as `application/x-www-form-urlencoded`: `URLSession` adds
+        // that to any POST with a body and no `Content-Type`, and it can't be
+        // stopped. PHP would then parse the bytes as form fields. The browser
+        // sends no `Content-Type` here. The nearest the relay can get is to
+        // name the body as plain bytes.
+        if upstreamRequest.httpMethod?.uppercased() == "POST",
+           upstreamRequest.httpBody?.isEmpty == false,
+           upstreamRequest.value(forHTTPHeaderField: "Content-Type") == nil {
+            upstreamRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        }
+
         // `URLSession` follows redirects on its own. Without `RedirectGuard`, a
         // site API request could be redirected to any host, and the relay would
         // pass that host's response back. The guard keeps a site API request

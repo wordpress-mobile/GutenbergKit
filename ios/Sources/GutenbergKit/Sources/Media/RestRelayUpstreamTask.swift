@@ -163,6 +163,11 @@ extension RestRelay {
             if redirectGuard.refusal == nil, let response = task.response {
                 observer?.didPerformRequest(request, response: response, data: .bytes(received))
             }
+
+            // No error doesn't always mean the whole body arrived. If an HTTP/1.1
+            // server closes the connection partway through a chunked body,
+            // `URLSession` reports no error, and nothing it passes on shows the
+            // body was cut off. See `docs/code/media-uploads.md`.
             body?.finish()
         }
     }
