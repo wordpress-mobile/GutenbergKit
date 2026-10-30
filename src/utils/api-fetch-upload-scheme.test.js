@@ -15,6 +15,9 @@ vi.mock( './logger', () => ( {
 	error: vi.fn(),
 } ) );
 
+// Loading the real core-data store in vitest trips on its ESM dependencies.
+vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
+
 const BASE = 'gbk-upload://upload';
 const SESSION = '0f8fad5b-d9cb-469f-a165-70867728950e';
 

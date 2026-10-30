@@ -8,7 +8,14 @@ import {
 	vi,
 } from 'vitest';
 import apiFetch from '@wordpress/api-fetch';
-import { configureApiFetch, withRateLimitRetry } from './api-fetch';
+import { select } from '@wordpress/data';
+import {
+	configureApiFetch,
+	persistedPostOverlayMiddleware,
+	postTypesFallbackMiddleware,
+	withEditedPostType,
+	withRateLimitRetry,
+} from './api-fetch';
 import * as bridge from './bridge';
 import * as logger from './logger';
 
@@ -20,6 +27,9 @@ vi.mock( './bridge', async ( importOriginal ) => {
 	};
 } );
 vi.mock( './logger' );
+// Loading the real core-data store in vitest trips on its ESM dependencies.
+vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
+vi.mock( '@wordpress/data', () => ( { select: vi.fn() } ) );
 
 describe( 'api-fetch credentials handling', () => {
 	let originalFetch;
@@ -36,6 +46,7 @@ describe( 'api-fetch credentials handling', () => {
 
 	beforeEach( () => {
 		vi.clearAllMocks();
+		select.mockReturnValue( { hasFinishedResolution: () => false } );
 		originalFetch = global.fetch;
 		global.fetch = vi.fn( () =>
 			Promise.resolve( {
@@ -115,73 +126,319 @@ describe( 'api-fetch credentials handling', () => {
 		expect( options.headers.Authorization ).toBe( 'Bearer override-token' );
 	} );
 
-	describe( 'filterEndpointsMiddleware', () => {
-		it( 'filters the post endpoint when restBase and restNamespace are provided', async () => {
-			bridge.getGBKit.mockReturnValue( {
-				siteApiRoot: 'https://example.com/wp-json/',
-				siteApiNamespace: [ 'wp/v2' ],
-				namespaceExcludedPaths: [],
-				post: {
-					id: 42,
-					restBase: 'posts',
-					restNamespace: 'wp/v2',
-				},
-			} );
+	describe( 'blockPostWritesMiddleware', () => {
+		const gbkit = {
+			siteApiRoot: 'https://example.com/wp-json/',
+			siteApiNamespace: [ 'wp/v2' ],
+			namespaceExcludedPaths: [],
+			post: {
+				id: 42,
+				restBase: 'posts',
+				restNamespace: 'wp/v2',
+			},
+		};
 
-			const result = await apiFetch( { path: '/wp/v2/posts/42' } );
+		it.each( [
+			[ 'PUT', '/wp/v2/posts/42' ],
+			[ 'post', '/wp/v2/posts/42?_locale=user' ],
+			[ 'DELETE', '/wp/v2/posts/42' ],
+			[ 'POST', '/wp/v2/posts/42/autosaves' ],
+		] )( 'rejects %s %s', async ( method, path ) => {
+			bridge.getGBKit.mockReturnValue( gbkit );
 
+			await expect( apiFetch( { path, method } ) ).rejects.toMatchObject(
+				{ code: 'gutenberg_kit_post_write_blocked' }
+			);
 			expect( global.fetch ).not.toHaveBeenCalled();
-			expect( result ).toEqual( [] );
+			expect( logger.warn ).toHaveBeenCalled();
+		} );
+
+		it.each( [
+			[ 'GET', '/wp/v2/posts/42' ],
+			[ 'OPTIONS', '/wp/v2/posts/42' ],
+			[ 'PUT', '/wp/v2/posts/421' ],
+			[ 'POST', '/wp/v2/posts' ],
+			[ 'POST', '/wp/v2/pages/42' ],
+		] )( 'lets %s %s through', async ( method, path ) => {
+			bridge.getGBKit.mockReturnValue( gbkit );
+
+			await apiFetch( { path, method } );
+
+			expect( global.fetch ).toHaveBeenCalled();
 		} );
 
 		it( 'falls back to default restBase and restNamespace when omitted from the payload', async () => {
 			bridge.getGBKit.mockReturnValue( {
-				siteApiRoot: 'https://example.com/wp-json/',
-				siteApiNamespace: [ 'wp/v2' ],
-				namespaceExcludedPaths: [],
+				...gbkit,
 				post: {
 					id: 7,
 					// restBase and restNamespace intentionally omitted
 				},
 			} );
 
-			const result = await apiFetch( { path: '/wp/v2/posts/7' } );
-
+			await expect(
+				apiFetch( { path: '/wp/v2/posts/7', method: 'PUT' } )
+			).rejects.toMatchObject( {
+				code: 'gutenberg_kit_post_write_blocked',
+			} );
 			expect( global.fetch ).not.toHaveBeenCalled();
-			expect( result ).toEqual( [] );
 		} );
 
-		it( 'lets the request through when post id is undefined', async () => {
-			bridge.getGBKit.mockReturnValue( {
-				siteApiRoot: 'https://example.com/wp-json/',
-				siteApiNamespace: [ 'wp/v2' ],
-				namespaceExcludedPaths: [],
-				post: {},
-			} );
-
-			try {
-				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch {
-				// Ignore errors from the actual fetch
-			}
-
-			expect( global.fetch ).toHaveBeenCalled();
-		} );
-
-		it( 'lets the request through when no post payload is present', async () => {
+		it( 'lets writes through when no post payload is present', async () => {
 			bridge.getGBKit.mockReturnValue( {
 				siteApiRoot: 'https://example.com/wp-json/',
 				siteApiNamespace: [ 'wp/v2' ],
 				namespaceExcludedPaths: [],
 			} );
 
-			try {
-				await apiFetch( { path: '/wp/v2/posts/99' } );
-			} catch {
-				// Ignore errors from the actual fetch
-			}
+			await apiFetch( { path: '/wp/v2/posts/99', method: 'PUT' } );
 
 			expect( global.fetch ).toHaveBeenCalled();
+		} );
+	} );
+
+	describe( 'withEditedPostType', () => {
+		const typesPath = '/wp/v2/types?context=view';
+		const preloadData = {
+			[ typesPath ]: {
+				body: { post: { slug: 'post', rest_base: 'posts' } },
+				headers: { Allow: 'GET' },
+			},
+			'/wp/v2/settings': { body: {} },
+		};
+
+		it( 'adds a post type missing from the preloaded types', () => {
+			bridge.getGBKit.mockReturnValue( {
+				post: {
+					type: 'book',
+					restBase: 'books',
+					restNamespace: 'library/v1',
+				},
+			} );
+
+			const result = withEditedPostType( preloadData );
+
+			expect( result[ typesPath ] ).toEqual( {
+				body: {
+					post: { slug: 'post', rest_base: 'posts' },
+					book: {
+						name: 'book',
+						slug: 'book',
+						taxonomies: [],
+						rest_base: 'books',
+						rest_namespace: 'library/v1',
+					},
+				},
+				headers: { Allow: 'GET' },
+			} );
+			expect( result[ '/wp/v2/settings' ] ).toBe(
+				preloadData[ '/wp/v2/settings' ]
+			);
+			expect( preloadData[ typesPath ].body.book ).toBeUndefined();
+		} );
+
+		it( 'falls back to default restBase and restNamespace when omitted from the payload', () => {
+			bridge.getGBKit.mockReturnValue( { post: { type: 'book' } } );
+
+			const result = withEditedPostType( preloadData );
+
+			expect( result[ typesPath ].body.book ).toMatchObject( {
+				rest_base: 'posts',
+				rest_namespace: 'wp/v2',
+			} );
+		} );
+
+		it.each( [
+			[
+				'the post type is already preloaded',
+				{ post: { type: 'post' } },
+			],
+			[ 'no post payload is present', {} ],
+		] )( 'leaves the preload data unchanged when %s', ( _, gbkit ) => {
+			bridge.getGBKit.mockReturnValue( gbkit );
+
+			expect( withEditedPostType( preloadData ) ).toBe( preloadData );
+		} );
+
+		it( 'leaves the preload data unchanged when post types are not preloaded', () => {
+			bridge.getGBKit.mockReturnValue( { post: { type: 'book' } } );
+			const data = { '/wp/v2/settings': { body: {} } };
+
+			expect( withEditedPostType( data ) ).toBe( data );
+		} );
+	} );
+
+	describe( 'postTypesFallbackMiddleware', () => {
+		const typesPath = '/wp/v2/types?context=view';
+
+		it( 'answers a failed post types request with the built-in types', async () => {
+			bridge.getGBKit.mockReturnValue( { post: { type: 'book' } } );
+			const next = vi.fn( () =>
+				Promise.reject( new Error( 'Offline' ) )
+			);
+
+			const types = await postTypesFallbackMiddleware(
+				{ path: typesPath },
+				next
+			);
+
+			expect( Object.keys( types ) ).toEqual(
+				expect.arrayContaining( [
+					'post',
+					'page',
+					'attachment',
+					'wp_block',
+					'book',
+				] )
+			);
+			expect( logger.warn ).toHaveBeenCalled();
+		} );
+
+		it( 'returns the post types the site sends', async () => {
+			const types = { post: { slug: 'post' } };
+			const next = vi.fn( () => Promise.resolve( types ) );
+
+			await expect(
+				postTypesFallbackMiddleware( { path: typesPath }, next )
+			).resolves.toBe( types );
+		} );
+
+		it.each( [
+			[ 'other paths', { path: '/wp/v2/types/post?context=edit' } ],
+			[ 'unparsed requests', { path: typesPath, parse: false } ],
+		] )( 'lets failures of %s through', async ( _, options ) => {
+			const failure = new Error( 'Offline' );
+			const next = vi.fn( () => Promise.reject( failure ) );
+
+			await expect(
+				postTypesFallbackMiddleware( options, next )
+			).rejects.toBe( failure );
+		} );
+	} );
+
+	describe( 'persistedPostOverlayMiddleware', () => {
+		const persisted = {
+			id: 42,
+			title: { raw: 'Host title' },
+			content: { raw: '<p>Host content</p>' },
+		};
+		const serverRecord = {
+			id: 42,
+			title: { raw: 'Server title', rendered: 'Server title' },
+			content: {
+				raw: '<p>Server content</p>',
+				rendered: '<p>Server content</p>',
+			},
+			_embedded: { author: [] },
+		};
+		const overlaidRecord = {
+			...serverRecord,
+			title: { raw: 'Host title', rendered: 'Server title' },
+			content: {
+				raw: '<p>Host content</p>',
+				rendered: '<p>Server content</p>',
+			},
+		};
+		let getEntityRecord;
+
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( {
+				post: { id: 42, type: 'post' },
+			} );
+			getEntityRecord = vi.fn( () => persisted );
+			select.mockReturnValue( {
+				hasFinishedResolution: () => true,
+				getEntityRecord,
+			} );
+		} );
+
+		it( "keeps the persisted title and content in the post's record", async () => {
+			const next = vi.fn( () => Promise.resolve( serverRecord ) );
+
+			await expect(
+				persistedPostOverlayMiddleware(
+					{ path: '/wp/v2/posts/42?_embed=1' },
+					next
+				)
+			).resolves.toEqual( overlaidRecord );
+			expect( getEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'post',
+				42
+			);
+		} );
+
+		it( 'keeps the persisted title and content in a list including the post', async () => {
+			const other = { id: 7, title: { raw: 'Other' } };
+			const next = vi.fn( () =>
+				Promise.resolve( [ other, serverRecord ] )
+			);
+
+			const records = await persistedPostOverlayMiddleware(
+				{ path: '/wp/v2/posts?include=42' },
+				next
+			);
+
+			expect( records ).toEqual( [ other, overlaidRecord ] );
+			expect( records[ 0 ] ).toBe( other );
+		} );
+
+		it( 'overlays unparsed responses', async () => {
+			const next = vi.fn( () =>
+				Promise.resolve(
+					new Response( JSON.stringify( [ serverRecord ] ), {
+						status: 200,
+						headers: { 'X-WP-Total': '1' },
+					} )
+				)
+			);
+
+			const response = await persistedPostOverlayMiddleware(
+				{ path: '/wp/v2/posts?per_page=100', parse: false },
+				next
+			);
+
+			expect( response.headers.get( 'X-WP-Total' ) ).toBe( '1' );
+			await expect( response.json() ).resolves.toEqual( [
+				overlaidRecord,
+			] );
+		} );
+
+		it( 'returns responses without the post unchanged', async () => {
+			const records = [ { id: 7, title: { raw: 'Other' } } ];
+			const next = vi.fn( () => Promise.resolve( records ) );
+
+			await expect(
+				persistedPostOverlayMiddleware( { path: '/wp/v2/posts' }, next )
+			).resolves.toBe( records );
+		} );
+
+		it( 'leaves responses alone before the post is seeded', async () => {
+			select.mockReturnValue( {
+				hasFinishedResolution: () => false,
+				getEntityRecord,
+			} );
+			const next = vi.fn( () => Promise.resolve( serverRecord ) );
+
+			await expect(
+				persistedPostOverlayMiddleware(
+					{ path: '/wp/v2/posts/42' },
+					next
+				)
+			).resolves.toBe( serverRecord );
+			expect( getEntityRecord ).not.toHaveBeenCalled();
+		} );
+
+		it.each( [
+			[ 'sub-resources', { path: '/wp/v2/posts/42/autosaves' } ],
+			[ 'other posts', { path: '/wp/v2/posts/421' } ],
+			[ 'writes', { path: '/wp/v2/posts/42', method: 'PUT' } ],
+		] )( 'ignores %s', async ( _, options ) => {
+			const next = vi.fn( () => Promise.resolve( serverRecord ) );
+
+			await expect(
+				persistedPostOverlayMiddleware( options, next )
+			).resolves.toBe( serverRecord );
 		} );
 	} );
 

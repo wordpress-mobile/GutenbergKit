@@ -13,6 +13,9 @@ vi.mock( './logger', () => ( {
 	error: vi.fn(),
 } ) );
 
+// Loading the real core-data store in vitest trips on its ESM dependencies.
+vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
+
 function makeNext() {
 	return vi.fn( () => Promise.resolve( { passthrough: true } ) );
 }

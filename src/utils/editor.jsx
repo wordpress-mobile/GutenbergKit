@@ -1,5 +1,6 @@
 import { createRoot, StrictMode } from '@wordpress/element';
-import { dispatch } from '@wordpress/data';
+import { dispatch, select } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
 import { registerCoreBlocks } from '@wordpress/block-library';
@@ -7,6 +8,7 @@ import Layout from '../components/layout';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
 import { getDefaultEditorSettings } from './editor-settings';
+import { primePostEntity } from './prime-post-entity';
 
 /**
  * Configure editor settings and styles, and render the editor.
@@ -41,6 +43,19 @@ export async function initializeEditor( {
 	unregisterDisallowedBlocks( allowedBlockTypes );
 
 	const post = await getPost();
+	await primePostEntity( post );
+
+	// Like core's edit-post, set up the editor before the first render, so that
+	// hooks see the post on mount rather than a later change. `EditorProvider`
+	// then skips its own setup.
+	const record = select( coreStore ).getEntityRecord(
+		'postType',
+		post.type,
+		post.id
+	);
+	if ( record ) {
+		dispatch( editorStore ).setupEditor( record, {} );
+	}
 
 	createRoot( document.getElementById( 'root' ) ).render(
 		<StrictMode>
