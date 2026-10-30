@@ -37,6 +37,9 @@ const RETRY_DELAYS_MS = [ 500, 2000 ];
 /** Longest `Retry-After` delay worth waiting for; longer ones fail at once. */
 const MAX_RETRY_AFTER_MS = 10_000;
 
+/** Header api-fetch's `httpV1Middleware` sets when sending a write as POST. */
+const METHOD_OVERRIDE_HEADER = 'X-HTTP-Method-Override';
+
 /**
  * Initializes the API fetch configuration and middleware.
  *
@@ -93,7 +96,9 @@ export function configureApiFetch() {
 	// Registered last so it runs first, covering preloaded responses too.
 	apiFetch.use( persistedPostOverlayMiddleware );
 	apiFetch.setFetchHandler(
-		withRateLimitRetry( apiFetch.defaultFetchHandler )
+		withRateLimitRetry(
+			withCrossOriginRealMethod( apiFetch.defaultFetchHandler )
+		)
 	);
 }
 
@@ -645,12 +650,8 @@ function rejectUnreachableUpload( connectionError, options ) {
  * through to its normal handling.
  *
  * Core's media upload middleware deletes the orphaned attachment when every
- * `post-process` retry fails. That request cannot be made directly from a
- * cross-origin editor: `@wordpress/api-fetch` tunnels `DELETE` as a `POST`
- * carrying `X-HTTP-Method-Override`, and core's `rest_allowed_cors_headers`
- * does not list that header, so the browser blocks it at preflight and the
- * orphan survives. Relaying through native code — which sets its own CORS
- * policy — is what lets the cleanup complete.
+ * `post-process` retry fails. Native code relays that deletion, as it does the
+ * upload.
  *
  * This runs before `X-HTTP-Method-Override` exists: api-fetch's `httpV1`
  * middleware adds it further down the chain, so the method here is still a
@@ -665,6 +666,10 @@ function rejectUnreachableUpload( connectionError, options ) {
  * @param {NativeUploadTransport}                 transport How to reach native code.
  * @param {(options: Object) => Promise<unknown>} next      The next middleware, for a refused deletion.
  * @return {?Promise} The relayed deletion, or `null` if not applicable.
+ *
+ * @todo Consider removing, as `withCrossOriginRealMethod` lets the editor send
+ * this deletion directly, even cross-origin. See
+ * https://github.com/wordpress-mobile/GutenbergKit/issues/860.
  */
 function nativeMediaDelete( options, transport, next ) {
 	if ( options.method?.toUpperCase() !== 'DELETE' || ! options.path ) {
@@ -1311,6 +1316,60 @@ async function parseResponse( response, isOk ) {
 		throw withResponseStatus( body, response.status );
 	}
 	return body;
+}
+
+/**
+ * Wraps a fetch handler to send cross-origin writes with their real method, as
+ * WordPress's CORS preflight rejects api-fetch's `X-HTTP-Method-Override`. The
+ * `_method` query parameter fails too: WordPress applies it to the preflight,
+ * which carries no credentials.
+ *
+ * Exported for testing only.
+ *
+ * @param {FetchHandler} fetchHandler The handler performing the request.
+ * @return {FetchHandler} The handler with cross-origin methods restored.
+ */
+export function withCrossOriginRealMethod( fetchHandler ) {
+	return ( options ) => {
+		const method = options.headers?.[ METHOD_OVERRIDE_HEADER ];
+		if (
+			! method ||
+			! options.url ||
+			! isCrossOriginFromHttpPage( options.url )
+		) {
+			return fetchHandler( options );
+		}
+
+		const { [ METHOD_OVERRIDE_HEADER ]: _header, ...headers } =
+			options.headers;
+		// `fetch` uppercases `put` and `delete` but not `patch`, and the
+		// preflight compares methods case-sensitively.
+		return fetchHandler( {
+			...options,
+			method: method.toUpperCase(),
+			headers,
+		} );
+	};
+}
+
+/**
+ * Whether a request from this page to the URL is cross-origin under CORS;
+ * `file:` pages, like the iOS editor's, are exempt.
+ *
+ * @param {string} url The request URL.
+ * @return {boolean} True when the page is HTTP(S) and the URL is cross-origin.
+ */
+function isCrossOriginFromHttpPage( url ) {
+	const { protocol, origin, href } = window.location;
+	if ( protocol !== 'http:' && protocol !== 'https:' ) {
+		return false;
+	}
+
+	try {
+		return new URL( url, href ).origin !== origin;
+	} catch {
+		return false;
+	}
 }
 
 const defaultPreloadData = {

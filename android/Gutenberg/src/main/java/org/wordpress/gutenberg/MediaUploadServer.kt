@@ -336,10 +336,9 @@ internal class MediaUploadServer(
      * Relays the editor's orphan cleanup to WordPress.
      *
      * Core's media upload middleware deletes the attachment when every
-     * `post-process` retry fails. A cross-origin editor cannot issue that
-     * request directly — api-fetch tunnels `DELETE` as a `POST` carrying
-     * `X-HTTP-Method-Override`, which core's CORS allow-list omits, so the
-     * browser blocks it at preflight. Relaying it here lets the cleanup run.
+     * `post-process` retry fails. The editor can now send that request directly,
+     * even cross-origin, so this route may no longer be needed. See
+     * https://github.com/wordpress-mobile/GutenbergKit/issues/860.
      */
     private suspend fun handleDelete(attachmentId: String, query: String): HttpResponse {
         val client = internalClient ?: return errorResponse(500, "No internal media client configured")
