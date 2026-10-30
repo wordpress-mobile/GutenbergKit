@@ -725,6 +725,14 @@ class GutenbergView : FrameLayout {
                 if (url == null || url == "about:blank") return
                 closePopup(popup, Uri.parse(url))
             }
+
+            @RequiresApi(Build.VERSION_CODES.O)
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                closePopup(popup, url = null)
+                // Popups share the editor's renderer, and any web view leaving this
+                // unhandled kills the app.
+                return true
+            }
         }
         // Without JavaScript, `window.close()` never reaches `onCloseWindow`.
         popup.settings.javaScriptEnabled = true
@@ -904,7 +912,7 @@ class GutenbergView : FrameLayout {
         if (editorRestoreCount < MAX_EDITOR_RESTORES) {
             editorRestoreCount++
             Log.w(TAG, "Another page replaced the editor document, so the editor is reloading")
-            reloadEditor()
+            loadEditorDocumentAgain()
         } else {
             Log.e(TAG, "Another page keeps replacing the editor document, so the editor stopped reloading")
             webView.stopLoading()
@@ -1297,26 +1305,33 @@ class GutenbergView : FrameLayout {
                 titleResId = R.string.gbk_editor_crashed_title,
                 descriptionResId = R.string.gbk_editor_crashed_description,
                 actionResId = R.string.gbk_editor_crashed_reload,
-                onAction = {
-                    editorRestoreCount = 0
-                    reloadEditor()
-                }
+                onAction = { reloadEditor() }
             )
         }
     }
 
     /**
-     * Reloads the editor after it has crashed or another page replaced it.
+     * Reloads the editor at the user's request, which also lets automatic recovery
+     * run again.
+     */
+    internal fun reloadEditor() {
+        hasRecoveredAutomatically = false
+        editorRestoreCount = 0
+        loadEditorDocumentAgain()
+    }
+
+    /**
+     * Loads the editor document again, after it has crashed or another page
+     * replaced it.
      *
      * The reloaded editor starts from the content [LatestContentProvider]
      * returns, or from the content it was opened with when there is none.
      * Readiness is reset immediately and restored only once the editor emits
      * `onEditorLoaded` again.
      */
-    internal fun reloadEditor() {
+    private fun loadEditorDocumentAgain() {
         val editorUrl = editorUri?.toString() ?: return
         isEditorLoaded = false
-        hasRecoveredAutomatically = false
         // The reload replaces the page these reads were sent to, so their results
         // may never arrive.
         failPendingTitleAndContentReads()

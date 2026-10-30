@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import kotlinx.coroutines.test.TestScope
@@ -166,6 +167,17 @@ class GutenbergViewNavigationTest {
     }
 
     @Test
+    fun `a new window handles its renderer dying and is discarded`() {
+        val popup = openWindow(configuredSiteView())
+
+        val handled = popup.webViewClient.onRenderProcessGone(popup, mock(RenderProcessGoneDetail::class.java))
+        popup.webViewClient.shouldOverrideUrlLoading(popup, request("https://example.org/preview"))
+
+        assertTrue("an unhandled renderer death kills the app", handled)
+        assertNull("a discarded window should not open the browser", nextStartedActivity())
+    }
+
+    @Test
     fun `a new window opens web pages in the browser`() {
         val popup = openWindow(configuredSiteView())
 
@@ -251,6 +263,11 @@ class GutenbergViewNavigationTest {
         repeat(3) { assertEquals("the editor should recover", editorUrl, replaceEditor()) }
 
         assertEquals("the editor should stop reloading", pageUrl, replaceEditor())
+
+        siteView.reloadEditor()
+        idle()
+
+        assertEquals("the user's reload should allow recovery again", editorUrl, replaceEditor())
     }
 
     @Test
