@@ -31,6 +31,9 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         var gate: Gate?
         var rest = Data()
         var restFailure: (any Error)?
+        /// Redirects by path. A request for a path in here gets a `302` to the
+        /// URL it maps to, which may be relative, and the session follows it.
+        var redirects: [String: String] = [:]
     }
 
     /// Holds back the rest of a stubbed response until the test calls `open()`.
@@ -181,6 +184,20 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
             // until it times out.
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+
+        if let location = registration.stub.redirects[request.url!.path],
+           let target = URL(string: location, relativeTo: request.url)?.absoluteURL {
+            let redirect = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 302,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": target.absoluteString]
+            )!
+            var next = request
+            next.url = target
+            client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: redirect)
             return
         }
 

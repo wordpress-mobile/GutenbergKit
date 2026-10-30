@@ -70,7 +70,7 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
     private func answer(_ key: ActiveSchemeTasks.Key, relaying request: URLRequest, through relay: RestRelay) async {
         do {
             let response = try await relay.handle(request)
-            guard let task = active.respond(key, status: response.status, headers: response.headers) else { return }
+            guard let task = active.respond(key, status: response.status, headers: response.headers, url: response.url) else { return }
             for try await chunk in response.body {
                 // WebKit stopped the task while this chunk was on its way. Sending it now
                 // would raise an exception.

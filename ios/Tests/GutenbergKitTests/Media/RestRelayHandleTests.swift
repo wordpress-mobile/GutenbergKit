@@ -8,8 +8,7 @@ import GutenbergKitHTTP
 ///
 /// The header rewriting on both sides of the hop is the part of the relay that
 /// fails silently: an upstream `Access-Control-Allow-Origin` that survives is
-/// honored by WebKit over the policy's own, and a surviving `Content-Encoding`
-/// makes WebKit decode an already-decoded body.
+/// honored by WebKit over the policy's own.
 @Suite("RestRelay request handling")
 struct RestRelayHandleTests {
 
@@ -333,15 +332,9 @@ struct RestRelayHandleTests {
             "Access-Control-Allow-Origin": "",
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Expose-Headers": "X-Upstream",
-            "Vary": "Origin",
         ])
 
-        for header in ["Access-Control-Allow-Credentials", "Vary"] {
-            #expect(
-                exchange.response.header(header) == nil,
-                "\(header) should not reach the web view"
-            )
-        }
+        #expect(exchange.response.header("Access-Control-Allow-Credentials") == nil)
         // The relay's own headers replace the upstream's, rather than both
         // arriving and the browser reading whichever came first.
         #expect(exchange.response.header("Access-Control-Allow-Origin") == "*")
@@ -361,15 +354,19 @@ struct RestRelayHandleTests {
         #expect(exchange.response.header("Set-Cookie") == nil)
     }
 
-    @Test("strips Content-Encoding and Content-Length, which URLSession already acted on")
-    func stripsContentEncoding() async throws {
-        // `URLSession` decompresses transparently, so advertising the upstream
-        // encoding makes WebKit decode plain bytes a second time, and the
-        // upstream length is the compressed one.
-        let exchange = try await relay(responseHeaders: ["Content-Encoding": "gzip", "Content-Length": "12"])
+    @Test("relays Content-Encoding, Content-Length and Vary as the server sent them")
+    func relaysEncodingHeaders() async throws {
+        // `fetch` shows the server's values over the decoded body, and WebKit
+        // acts on neither header in a scheme response.
+        let exchange = try await relay(
+            responseHeaders: ["Content-Encoding": "gzip", "Content-Length": "12", "Vary": "Origin"],
+            responseBody: Data(String(repeating: "x", count: 100).utf8)
+        )
 
-        #expect(exchange.response.header("Content-Encoding") == nil)
-        #expect(exchange.response.header("Content-Length") == nil)
+        #expect(exchange.response.header("Content-Encoding") == "gzip")
+        #expect(exchange.response.header("Content-Length") == "12")
+        #expect(exchange.response.header("Vary") == "Origin")
+        #expect(exchange.response.body.count == 100)
     }
 
     @Test("sends the page's body on, and exposes a block's own response headers")
@@ -462,6 +459,33 @@ struct RestRelayHandleTests {
 
         #expect(exchange.response.status == 403)
         #expect(exchange.sentRequest == nil, "nothing should have been sent upstream")
+        // The relay's own answer keeps the relay's URL.
+        #expect(exchange.url == nil)
+    }
+
+    // MARK: - The response's URL
+
+    @Test("answers with the URL the page asked for, not the one built for the site")
+    func answersWithRequestedURL() async throws {
+        // The page asked for the `www.` alias, which the relay sends to the
+        // configured host. `fetch` leaves the fragment out of a response's URL.
+        let exchange = try await relay(target: Self.relayTarget("https://www.example.com/wp-json/wp/v2/posts?page=2#top"))
+
+        #expect(exchange.upstream.url?.absoluteString == "https://example.com/wp-json/wp/v2/posts?page=2")
+        #expect(exchange.url?.absoluteString == "https://www.example.com/wp-json/wp/v2/posts?page=2")
+    }
+
+    @Test("answers with the URL a redirect led to")
+    func answersWithRedirectTarget() async throws {
+        let exchange = try await relay(
+            target: Self.relayTarget("https://example.com/start"),
+            responseBody: Data("final".utf8),
+            redirects: ["/start": "/final"]
+        )
+
+        #expect(exchange.upstream.url?.absoluteString == "https://example.com/final")
+        #expect(String(decoding: exchange.response.body, as: UTF8.self) == "final")
+        #expect(exchange.url?.absoluteString == "https://example.com/final")
     }
 
     // MARK: - Helpers
@@ -485,6 +509,10 @@ struct RestRelayHandleTests {
         let sentBody: Data?
         let response: SchemeResponse
 
+        /// The URL the page reads as the response's `url`, or `nil` for the
+        /// relay's own.
+        let url: URL?
+
         /// The request that reached the stub. Fails the test if none did.
         var upstream: URLRequest {
             guard let sentRequest else {
@@ -506,6 +534,7 @@ struct RestRelayHandleTests {
         responseBody: Data = Data(),
         failure: (any Error)? = nil,
         redirect: String? = nil,
+        redirects: [String: String] = [:],
         observer: (any EditorHTTPClientDelegate)? = nil,
         siteApiRoot: String = "https://example.com/wp-json/",
         siteURL: String = "https://example.com"
@@ -515,7 +544,8 @@ struct RestRelayHandleTests {
             headers: responseHeaders,
             body: responseBody,
             failure: failure,
-            redirect: redirect.map { URL(string: $0)! }
+            redirect: redirect.map { URL(string: $0)! },
+            redirects: redirects
         )
         let stubbed = StubURLProtocol.makeSession(stub: stub)
         defer { stubbed.finish() }
@@ -535,9 +565,15 @@ struct RestRelayHandleTests {
         request.httpMethod = method
         request.allHTTPHeaderFields = headers
         request.httpBody = body
-        let response = try await relay.handle(request).collected()
+        let relayed = try await relay.handle(request)
+        let response = try await relayed.collected()
 
-        return Exchange(sentRequest: stubbed.recorder.request, sentBody: stubbed.recorder.request?.httpBody, response: response)
+        return Exchange(
+            sentRequest: stubbed.recorder.request,
+            sentBody: stubbed.recorder.request?.httpBody,
+            response: response,
+            url: relayed.url
+        )
     }
 }
 
@@ -588,6 +624,20 @@ struct RestRelaySchemeHandlerTests {
 
         #expect(task.status == 403)
         #expect(task.failure == nil)
+        #expect(task.response?.url == task.request.url, "a refusal keeps the relay's URL")
+    }
+
+    @Test("answers with the URL the page asked for")
+    func answersWithRequestedURL() async throws {
+        let stubbed = StubURLProtocol.makeSession(stub: .init())
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
+
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect(task.response?.url?.absoluteString == "https://example.com/wp-json/wp/v2/posts")
     }
 
     /// WebKit can create a new request at the address of one it just stopped. Starting the
