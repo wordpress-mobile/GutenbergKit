@@ -13,7 +13,7 @@ import {
 	configureApiFetch,
 	persistedPostOverlayMiddleware,
 	postTypesFallbackMiddleware,
-	withCrossOriginMethodOverride,
+	withCrossOriginRealMethod,
 	withEditedPostType,
 	withRateLimitRetry,
 } from './api-fetch';
@@ -1029,7 +1029,7 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 	} );
 
-	describe( 'withCrossOriginMethodOverride', () => {
+	describe( 'withCrossOriginRealMethod', () => {
 		// The editor page is `http://localhost:3000` in jsdom, so the configured
 		// `https://example.com` root is cross-origin.
 		beforeEach( () => {
@@ -1050,42 +1050,27 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 
 		it.each( [ 'PUT', 'PATCH', 'DELETE' ] )(
-			'sends a cross-origin %s override as a query parameter',
+			'sends a cross-origin %s with its real method',
 			async ( method ) => {
 				await apiFetch( { path: '/wp/v2/posts/1', method } );
 
 				const [ url, options ] = global.fetch.mock.calls[ 0 ];
-				const { origin, pathname, searchParams } = new URL( url );
-				expect( `${ origin }${ pathname }` ).toBe(
-					'https://example.com/wp-json/wp/v2/posts/1'
+				expect( new URL( url ).pathname ).toBe(
+					'/wp-json/wp/v2/posts/1'
 				);
-				expect( searchParams.get( '_method' ) ).toBe( method );
-				expect( options.method ).toBe( 'POST' );
+				expect( options.method ).toBe( method );
 				expect( options.headers ).not.toHaveProperty(
 					'X-HTTP-Method-Override'
+				);
+				expect( options.headers[ 'Content-Type' ] ).toBe(
+					'application/json'
 				);
 			}
 		);
 
-		it( 'appends to an existing query string', () => {
-			const fetchHandler = vi.fn();
-			const handler = withCrossOriginMethodOverride( fetchHandler );
-
-			handler(
-				overriddenPut(
-					'https://example.com/?rest_route=%2Fwp%2Fv2%2Fposts%2F1'
-				)
-			);
-
-			const [ { url } ] = fetchHandler.mock.calls[ 0 ];
-			const { searchParams } = new URL( url );
-			expect( searchParams.get( 'rest_route' ) ).toBe( '/wp/v2/posts/1' );
-			expect( searchParams.get( '_method' ) ).toBe( 'PUT' );
-		} );
-
 		it( 'keeps the header on a same-origin request', () => {
 			const fetchHandler = vi.fn();
-			const handler = withCrossOriginMethodOverride( fetchHandler );
+			const handler = withCrossOriginRealMethod( fetchHandler );
 			const options = overriddenPut(
 				`${ window.location.origin }/wp-json/wp/v2/posts/1`
 			);
@@ -1100,17 +1085,17 @@ describe( 'api-fetch credentials handling', () => {
 			async ( method ) => {
 				await apiFetch( { path: '/wp/v2/posts', method } );
 
-				const [ url, options ] = global.fetch.mock.calls[ 0 ];
-				expect( new URL( url ).searchParams.has( '_method' ) ).toBe(
-					false
-				);
+				const [ , options ] = global.fetch.mock.calls[ 0 ];
 				expect( options.method ).toBe( method );
+				expect( options.headers ).not.toHaveProperty(
+					'X-HTTP-Method-Override'
+				);
 			}
 		);
 
 		it( 'keeps the header when the page is not served over HTTP', () => {
 			const fetchHandler = vi.fn();
-			const handler = withCrossOriginMethodOverride( fetchHandler );
+			const handler = withCrossOriginRealMethod( fetchHandler );
 			const options = overriddenPut(
 				'https://example.com/wp-json/wp/v2/posts/1'
 			);

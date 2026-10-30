@@ -2,7 +2,6 @@ import apiFetch from '@wordpress/api-fetch';
 import { store as coreStore } from '@wordpress/core-data';
 import { select } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
-import { addQueryArgs } from '@wordpress/url';
 import { getGBKit, getPostPath, getPostReference } from './bridge';
 import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
@@ -98,7 +97,7 @@ export function configureApiFetch() {
 	apiFetch.use( persistedPostOverlayMiddleware );
 	apiFetch.setFetchHandler(
 		withRateLimitRetry(
-			withCrossOriginMethodOverride( apiFetch.defaultFetchHandler )
+			withCrossOriginRealMethod( apiFetch.defaultFetchHandler )
 		)
 	);
 }
@@ -1320,14 +1319,14 @@ async function parseResponse( response, isOk ) {
 }
 
 /**
- * Wraps a fetch handler to move the method override of cross-origin requests
- * from a header to the `_method` query parameter.
+ * Wraps a fetch handler to send cross-origin writes with their real method.
  *
  * api-fetch sends PUT, PATCH and DELETE as POST with an override header, for
- * servers that block those methods. WordPress's CORS preflight response does
- * not allow that header, so a cross-origin write would fail before it is sent.
- * WordPress reads `_method` as the same override, and a query parameter needs
- * no preflight approval. Same-origin requests keep the header, as in WP Admin.
+ * servers that block those methods. WordPress's CORS preflight response allows
+ * those methods but not that header, so a cross-origin write would fail before
+ * it is sent. The `_method` query parameter is no alternative: WordPress also
+ * applies it to the preflight, which then fails authentication. Same-origin
+ * requests keep the header, as in WP Admin.
  *
  * As a fetch handler, it sees the final URL, after every middleware has run,
  * including api-fetch's own `httpV1Middleware`.
@@ -1335,9 +1334,9 @@ async function parseResponse( response, isOk ) {
  * Exported for testing only.
  *
  * @param {FetchHandler} fetchHandler The handler performing the request.
- * @return {FetchHandler} The handler with cross-origin overrides moved.
+ * @return {FetchHandler} The handler with cross-origin methods restored.
  */
-export function withCrossOriginMethodOverride( fetchHandler ) {
+export function withCrossOriginRealMethod( fetchHandler ) {
 	return ( options ) => {
 		const method = options.headers?.[ METHOD_OVERRIDE_HEADER ];
 		if ( ! method || ! options.url || ! isPreflighted( options.url ) ) {
@@ -1346,11 +1345,7 @@ export function withCrossOriginMethodOverride( fetchHandler ) {
 
 		const { [ METHOD_OVERRIDE_HEADER ]: _header, ...headers } =
 			options.headers;
-		return fetchHandler( {
-			...options,
-			url: addQueryArgs( options.url, { _method: method } ),
-			headers,
-		} );
+		return fetchHandler( { ...options, method, headers } );
 	};
 }
 
