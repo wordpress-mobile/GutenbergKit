@@ -96,6 +96,28 @@ class GutenbergViewRenderProcessGoneTest {
     }
 
     @Test
+    fun `a renderer death reports the editor's open dialogs closed`() {
+        val view = loadedSiteView()
+        val closed = mutableListOf<String>()
+        view.setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
+            override fun onModalDialogOpened(dialogType: String) = Unit
+
+            override fun onModalDialogClosed(dialogType: String) {
+                closed += dialogType
+            }
+        })
+        view.onModalDialogOpened("block-inspector")
+        view.onModalDialogOpened("block-inserter")
+        view.onModalDialogClosed("block-inserter")
+        shadowOf(Looper.getMainLooper()).idle()
+        closed.clear()
+
+        killRenderer(view)
+
+        assertEquals("the host would keep its navigation disabled", listOf("block-inspector"), closed)
+    }
+
+    @Test
     fun `a renderer death after the editor loaded loads it again`() {
         val view = loadedSiteView()
 

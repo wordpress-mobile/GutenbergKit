@@ -257,6 +257,9 @@ class GutenbergView : FrameLayout {
     private var logJsExceptionListener: LogJsExceptionListener? = null
     private var autocompleterTriggeredListener: AutocompleterTriggeredListener? = null
     private var modalDialogStateListener: ModalDialogStateListener? = null
+
+    /** Modal dialogs the editor reports open, so a renderer death can report them closed. */
+    private val openModalDialogs = mutableSetOf<String>()
     private var networkRequestListener: NetworkRequestListener? = null
     private var latestContentProvider: LatestContentProvider? = null
     private var blockInserterDialog: BlockPickerDialog? = null
@@ -1247,6 +1250,10 @@ class GutenbergView : FrameLayout {
         failPendingTitleAndContentReads()
         replaceWebView()
         blockInserterDialog?.dismiss()
+        // The dead renderer can't unmount the editor's open dialogs to report
+        // them closed, so report them here rather than leave navigation blocked.
+        openModalDialogs.forEach { modalDialogStateListener?.onModalDialogClosed(it) }
+        openModalDialogs.clear()
         editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
         if (wasEditorLoaded && !hasRecoveredAutomatically) {
             hasRecoveredAutomatically = true
@@ -1418,6 +1425,7 @@ class GutenbergView : FrameLayout {
     @JavascriptInterface
     fun onModalDialogOpened(dialogType: String) {
         handler.post {
+            openModalDialogs.add(dialogType)
             modalDialogStateListener?.onModalDialogOpened(dialogType)
         }
     }
@@ -1425,6 +1433,7 @@ class GutenbergView : FrameLayout {
     @JavascriptInterface
     fun onModalDialogClosed(dialogType: String) {
         handler.post {
+            openModalDialogs.remove(dialogType)
             modalDialogStateListener?.onModalDialogClosed(dialogType)
         }
     }
