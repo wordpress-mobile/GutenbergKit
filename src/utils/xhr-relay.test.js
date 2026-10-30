@@ -10,6 +10,23 @@ vi.mock( './bridge', () => ( {
 	getGBKit: vi.fn(),
 } ) );
 
+/**
+ * The body reads the relay has started, so a test can wait for them to finish.
+ */
+const { bodyReads } = vi.hoisted( () => ( { bodyReads: [] } ) );
+
+vi.mock( './fetch-relay', async ( importOriginal ) => {
+	const actual = await importOriginal();
+	return {
+		...actual,
+		bufferedBody: ( ...args ) => {
+			const read = actual.bufferedBody( ...args );
+			bodyReads.push( read );
+			return read;
+		},
+	};
+} );
+
 vi.mock( './logger', () => ( {
 	debug: vi.fn(),
 	info: vi.fn(),
@@ -103,9 +120,15 @@ class FakeXMLHttpRequest extends EventTarget {
 	}
 }
 
-/** Lets a pending body read finish. */
-function settle() {
-	return new Promise( ( resolve ) => setTimeout( resolve ) );
+/**
+ * Lets every pending body read finish, and the relay act on it.
+ *
+ * Waits for the reads themselves, not a set number of timer turns: a read can
+ * take more than one turn when other reads are running, as in a full test run.
+ */
+async function settle() {
+	await Promise.allSettled( bodyReads );
+	await new Promise( ( resolve ) => setTimeout( resolve ) );
 }
 
 describe( 'createRelayXMLHttpRequest', () => {
