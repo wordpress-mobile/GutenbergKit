@@ -25,6 +25,12 @@ const HEADERS_RECEIVED = 2;
 const TIMEOUT_HEADER = 'X-GBK-Relay-Timeout';
 
 /**
+ * The request header that names an upload, so native code can report its
+ * progress. `RestRelaySchemeHandler.uploadHeader` in native code.
+ */
+const UPLOAD_HEADER = 'X-GBK-Relay-Upload';
+
+/**
  * The largest body read for a synchronous request, in bytes. The read holds
  * several times the body in memory. Failing the request is better than the
  * system ending the web view, which the page can't catch.
@@ -67,7 +73,32 @@ export function installXMLHttpRequestRelay() {
 	);
 	RelayXMLHttpRequest[ INSTALLED ] = true;
 	window.XMLHttpRequest = RelayXMLHttpRequest;
+	// Native code calls this as an upload's body is sent.
+	window.editor = window.editor || {};
+	window.editor.relayUploadProgress = reportUploadProgress;
 	debug( `Relaying XMLHttpRequests through ${ restRelay.endpoint }` );
+}
+
+/**
+ * The relayed requests whose body native code is sending, by the upload name
+ * each sent in `UPLOAD_HEADER`. Each takes native code's progress reports.
+ *
+ * Kept outside the class, so the class has no members the browser's own lacks.
+ *
+ * @type {Map<string, function(number, number): void>}
+ */
+const uploads = new Map();
+
+/**
+ * Passes native code's progress report to the upload it names. Native code
+ * calls this, as `window.editor.relayUploadProgress`, as the body is sent.
+ *
+ * @param {string} id    The upload's name.
+ * @param {number} sent  The bytes of the body sent so far.
+ * @param {number} total The body's size in bytes.
+ */
+export function reportUploadProgress( id, sent, total ) {
+	uploads.get( id )?.( sent, total );
 }
 
 /**
@@ -100,12 +131,18 @@ export function installXMLHttpRequestRelay() {
  *   code enforces it. It is read when the request is sent, so a change to it
  *   after `send()` has no effect.
  * - WebKit fires no upload `progress`, `load` or `loadend` for a request native
- *   code answers. They are fired once the response's headers arrive, by which
- *   time native code has sent the whole body. An upload's progress jumps from
- *   nothing to done. WebKit still counts the upload as unfinished, so an abort,
- *   timeout or error after that would fire upload events a second time. Those
- *   are stopped before the caller's listeners hear them. As in the browser, an
- *   empty body gets none.
+ *   code answers. Native code reports how much of the body it has sent, and
+ *   each report fires `progress`. The report for the whole body fires the last
+ *   `progress`, then `load` and `loadend`. If the response's headers arrive
+ *   first, they fire those instead. As in the browser, none fire for an empty
+ *   body, or for a listener added after `send()`. WebKit still counts the
+ *   upload as unfinished, so an abort, timeout or error after that would fire
+ *   upload events a second time. Those are stopped before the caller's
+ *   listeners hear them.
+ * - The browser fires upload events only if a listener exists at `send()`. This
+ *   class can't see listeners, so it goes by whether the caller read `upload`
+ *   before `send()`, as adding a listener does. A caller that read it then and
+ *   added a listener afterwards hears events the browser wouldn't fire.
  * - The response has no `Content-Length`, because native code drops it. So
  *   download `progress` events have `lengthComputable` false and a `total` of 0.
  *
@@ -140,6 +177,12 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		 */
 		#uploadSize = undefined;
 
+		/** The upload's name in `uploads`, while native code is sending it. */
+		#uploadID = null;
+
+		/** The bytes of the body the last `progress` event reported. */
+		#uploadLoaded = 0;
+
 		/** Whether this fired the upload's `load` for the current request. */
 		#uploadComplete = false;
 
@@ -161,6 +204,12 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		 */
 		#standInSize = undefined;
 
+		/**
+		 * Whether the upload events of the current request are stopped, because
+		 * the caller hadn't read `upload` when it called `send()`.
+		 */
+		#uploadSilenced = false;
+
 		constructor() {
 			super();
 			// Added first, so the upload events go out before the caller's own
@@ -179,6 +228,11 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 					this.#forgetResponse( event );
 				}
 			} );
+			// The request failed. Added first, so a caller's listener can send
+			// it again without its new upload being forgotten.
+			for ( const type of [ 'abort', 'error', 'timeout' ] ) {
+				this.addEventListener( type, () => this.#forgetUpload() );
+			}
 		}
 
 		open( method, url, ...rest ) {
@@ -199,8 +253,10 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			this.#sent = false;
 			this.#pending = null;
 			this.#uploadSize = undefined;
+			this.#forgetUpload();
 			this.#uploadComplete = false;
 			this.#responseHidden = false;
+			this.#uploadSilenced = false;
 			this.#ended++;
 			super.withCredentials = target ? false : this.#withCredentials;
 		}
@@ -289,6 +345,8 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			}
 
 			const startedAt = Date.now();
+			// A listener added after `send()` hears no upload events.
+			this.#uploadSilenced = ! this.#uploadGuarded;
 			if ( ! isReadBeforeSending( sent ) ) {
 				for ( const type of this.#contentTypes ) {
 					super.setRequestHeader( 'Content-Type', type );
@@ -346,6 +404,23 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			// it runs before any listener the caller adds.
 			if ( ! this.#uploadGuarded ) {
 				this.#uploadGuarded = true;
+				// A listener added after `send()` hears no upload events in
+				// the browser, even from a request that stands in for it.
+				for ( const type of [
+					'loadstart',
+					'progress',
+					'abort',
+					'error',
+					'timeout',
+					'load',
+					'loadend',
+				] ) {
+					upload.addEventListener( type, ( event ) => {
+						if ( this.#uploadSilenced ) {
+							event.stopImmediatePropagation();
+						}
+					} );
+				}
 				for ( const type of [
 					'abort',
 					'error',
@@ -417,16 +492,70 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 				);
 			}
 			const size =
-				body === null || body === undefined ? 0 : byteSize( body );
+				this.#uploadSilenced || body === null || body === undefined
+					? 0
+					: byteSize( body );
 			// The browser fires no upload `progress`, `load` or `loadend` for an
 			// empty body.
 			this.#uploadSize = size === 0 ? undefined : size;
+			if ( this.#uploadSize !== undefined ) {
+				// Hard to guess: any frame can reach the relay, and native code
+				// reports the name it is given to this page.
+				this.#uploadID = crypto
+					.getRandomValues( new Uint32Array( 4 ) )
+					.join( '-' );
+				this.#uploadLoaded = 0;
+				uploads.set( this.#uploadID, ( sent, total ) =>
+					this.#reportUploadProgress( sent, total )
+				);
+				super.setRequestHeader( UPLOAD_HEADER, this.#uploadID );
+			}
 			super.send( body );
 		}
 
 		/**
+		 * Fires `progress` on the upload, for a report from native code. The
+		 * report for the whole body completes the upload.
+		 *
+		 * Reports can arrive out of order, so one that doesn't move the upload
+		 * forward is dropped.
+		 *
+		 * @param {number} sent  The bytes of the body sent so far.
+		 * @param {number} total The body's size in bytes.
+		 */
+		#reportUploadProgress( sent, total ) {
+			if ( this.#uploadSize === undefined ) {
+				return;
+			}
+			// A body whose size the page couldn't tell, such as a `Document`,
+			// gets its size from native code.
+			this.#uploadSize ??= total;
+			if ( sent >= this.#uploadSize ) {
+				this.#completeUpload();
+				return;
+			}
+			if ( sent <= this.#uploadLoaded ) {
+				return;
+			}
+			this.#uploadLoaded = sent;
+			this.upload.dispatchEvent(
+				ownProgressEvent( 'progress', sent, this.#uploadSize )
+			);
+		}
+
+		/** Stops taking native code's progress reports for the upload. */
+		#forgetUpload() {
+			if ( this.#uploadID !== null ) {
+				uploads.delete( this.#uploadID );
+				this.#uploadID = null;
+			}
+		}
+
+		/**
 		 * Fires the upload events WebKit leaves out: a final `progress`, then
-		 * `load` and `loadend`, in the browser's order.
+		 * `load` and `loadend`, in the browser's order. Runs once per upload:
+		 * when native code reports the whole body sent, or when the response's
+		 * headers arrive, whichever is first.
 		 *
 		 * A `progress` listener that ends the request gets the upload's `abort`
 		 * from WebKit instead of `load`. After `progress`, the upload is
@@ -435,6 +564,7 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		#completeUpload() {
 			const size = this.#uploadSize;
 			this.#uploadSize = undefined;
+			this.#forgetUpload();
 			const ended = this.#ended;
 			const event = ( type ) =>
 				ownProgressEvent( type, size ?? 0, size ?? 0 );
