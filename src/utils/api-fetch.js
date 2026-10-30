@@ -650,12 +650,8 @@ function rejectUnreachableUpload( connectionError, options ) {
  * through to its normal handling.
  *
  * Core's media upload middleware deletes the orphaned attachment when every
- * `post-process` retry fails. That request cannot be made directly from a
- * cross-origin editor: `@wordpress/api-fetch` tunnels `DELETE` as a `POST`
- * carrying `X-HTTP-Method-Override`, and core's `rest_allowed_cors_headers`
- * does not list that header, so the browser blocks it at preflight and the
- * orphan survives. Relaying through native code — which sets its own CORS
- * policy — is what lets the cleanup complete.
+ * `post-process` retry fails. Native code relays that deletion, as it does the
+ * upload.
  *
  * This runs before `X-HTTP-Method-Override` exists: api-fetch's `httpV1`
  * middleware adds it further down the chain, so the method here is still a
@@ -670,6 +666,9 @@ function rejectUnreachableUpload( connectionError, options ) {
  * @param {NativeUploadTransport}                 transport How to reach native code.
  * @param {(options: Object) => Promise<unknown>} next      The next middleware, for a refused deletion.
  * @return {?Promise} The relayed deletion, or `null` if not applicable.
+ *
+ * @todo Remove: `withCrossOriginRealMethod` lets the editor send this deletion
+ * directly, even cross-origin.
  */
 function nativeMediaDelete( options, transport, next ) {
 	if ( options.method?.toUpperCase() !== 'DELETE' || ! options.path ) {

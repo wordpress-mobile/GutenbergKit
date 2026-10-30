@@ -528,9 +528,7 @@ describe( 'nativeMediaUploadMiddleware', () => {
 		} );
 
 		it( 'routes an attachment deletion through the native server', async () => {
-			// api-fetch tunnels DELETE as POST + `X-HTTP-Method-Override`, which
-			// core's CORS allow-list omits, so a cross-origin editor cannot make
-			// this request directly. Relaying it keeps the orphan cleanup working.
+			// The native server relays the deletion, as it does the upload.
 			global.fetch = vi.fn( () =>
 				Promise.resolve(
 					new Response( '{"deleted":true}', { status: 200 } )
