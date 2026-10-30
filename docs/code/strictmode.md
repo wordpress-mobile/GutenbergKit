@@ -5,12 +5,8 @@ disk I/O on the main thread, leaked closables, registration leaks, and similar
 issues introduced inside the GutenbergKit library surface during local
 development.
 
-For now, violations are **logged, not fatal**. The library still reads the disk
-on the main thread while the editor page loads (see
-[What's still in the library](#whats-still-in-the-library)), so crashing on
-violations would crash every editor launch. Switching `ThreadPolicy` to
-`penaltyDeath()` is tracked in
-[#848](https://github.com/wordpress-mobile/GutenbergKit/issues/848).
+`ThreadPolicy` violations **crash the demo**, so new main-thread disk or network
+work fails loudly during development. `VmPolicy` violations are logged only.
 
 ## Configuration
 
@@ -22,6 +18,7 @@ StrictMode.setThreadPolicy(
     StrictMode.ThreadPolicy.Builder()
         .detectAll()
         .penaltyLog()
+        .penaltyDeath()
         .build()
 )
 StrictMode.setVmPolicy(
@@ -42,7 +39,9 @@ Configuration notes:
     `detectFileUriExposure`, `detectCleartextNetwork`, etc.
 -   **`Application.onCreate()`** is the right place — earlier is better so the
     policy covers everything that follows.
--   **`VmPolicy` stays on `penaltyLog()`, even after #848.** VM violations like
+-   **`ThreadPolicy` keeps `penaltyLog()` alongside `penaltyDeath()`.** The log
+    prints the full violation before the crash.
+-   **`VmPolicy` stays on `penaltyLog()`.** VM violations like
     `LeakedClosableObject` fire during GC and would crash at unpredictable
     times unrelated to the offending code path, which is unhelpful as a signal.
 -   **`penaltyDialog()` is deliberately not enabled.** It interrupts manual
@@ -103,20 +102,13 @@ exposes a `suspend` API:
 -   `EditorDependenciesSerializer.writeToDisk` /
     `EditorDependenciesSerializer.readFromDisk`.
 
-### Not wrappable — tracked in #848
+### Editor load
 
-Most of these run on the main thread inside `GutenbergView.onEditorPageStarted`,
-which `WebViewClient.onPageStarted` calls. The last one runs from the
-`GutenbergView` constructor. The host has no call site to move, so the demo
-logs them on every editor launch:
-
-| Violation                                                      | Where                                                                                          | When                                             |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `DiskReadViolation`                                            | `EditorAssetBundle.getEditorRepresentation`, via `GBKitGlobal.fromConfiguration`               | Every editor launched with prepared dependencies |
-| `CustomViolation: newSSLContext`                               | `GutenbergView.uploadHttpClient` (OkHttp SSL setup), built in `startUploadServer`              | Native media upload is on                        |
-| `DiskReadViolation`                                            | `GutenbergView.startUploadServer` (`context.cacheDir`)                                         | Native media upload is on                        |
-| `DiskReadViolation`                                            | `HttpServer.start` → `TempFileOwner.cleanOrphans`                                              | Native media upload is on                        |
-| Several `DiskReadViolation`s, `CustomViolation: newSSLContext` | `GutenbergView.prepareAndLoadEditor` → `EditorService.create`, launched on the main dispatcher | The editor starts without prepared dependencies  |
+`GutenbergView` starts the upload server and builds the editor globals on
+`Dispatchers.IO` before it loads the editor page. When the host passes no
+prepared dependencies, it also creates and prepares its `EditorService` there.
+Opening the editor does no disk or SSL work on the main thread
+([#848](https://github.com/wordpress-mobile/GutenbergKit/issues/848)).
 
 ### Expected `VmPolicy` noise
 
@@ -137,12 +129,14 @@ actual call site.
 
 ## Verified flows
 
-Exercised on an API 36 emulator, with only the violations listed above:
+Exercised on an API 36 emulator, with only the `VmPolicy` noise listed above:
 
 -   App cold launch, including signing in with `make login-android-app`.
 -   **Standalone editor** → **Prepare Editor** → **Start**, then type.
 -   A connected site → **Prepare Editor** → **Browse** → open a post, then type.
 -   A connected site → **Browse** → open a post, without preparing first.
+-   A connected site → **Start**, with and without **Prepare Editor**, and with
+    **Enable Native Media Upload** on and off.
 -   Native inserter sheet: category tabs and search.
 -   Background the app, then resume it.
 
@@ -157,8 +151,8 @@ resources:
 1. Run the demo in debug mode.
 2. Walk through the new code path end-to-end with `adb logcat -s StrictMode`
    open.
-3. If a new `ThreadPolicy` violation shows up, the offending call is in the
-   stack trace — wrap it in `withContext(Dispatchers.IO)` (or move it into a
-   coroutine).
+3. If the demo crashes with a `ThreadPolicy` violation, the offending call is
+   in the stack trace — wrap it in `withContext(Dispatchers.IO)` (or move it
+   into a coroutine).
 4. **Never** suppress with `StrictMode.allowThreadDiskReads()` inside the
    library — that hides the violation from host apps.
