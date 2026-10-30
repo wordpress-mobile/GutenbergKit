@@ -653,6 +653,95 @@ describe( 'createRelayXMLHttpRequest', () => {
 		} );
 	} );
 
+	describe( 'loadstart for a body read before sending', () => {
+		/** Fires `loadstart` in `send()`, as the browser does. */
+		class StartingXMLHttpRequest extends FakeXMLHttpRequest {
+			send( ...args ) {
+				super.send( ...args );
+				const start = () =>
+					new ProgressEvent( 'loadstart', { loaded: 0, total: 0 } );
+				this.dispatchEvent( start() );
+				this.upload.dispatchEvent( start() );
+			}
+		}
+		const Relay = createRelayXMLHttpRequest( StartingXMLHttpRequest, {
+			restRelay: REST_RELAY,
+		} );
+
+		/**
+		 * The `loadstart` events a request fires, with their sizes.
+		 *
+		 * @param {XMLHttpRequest} xhr The request.
+		 * @return {Array} Each event's target, `loaded`, `total` and
+		 *                 `lengthComputable`.
+		 */
+		function recordStarts( xhr ) {
+			const starts = [];
+			const record = ( name ) => ( event ) =>
+				starts.push( [
+					name,
+					event.loaded,
+					event.total,
+					event.lengthComputable,
+				] );
+			xhr.addEventListener( 'loadstart', record( 'request' ) );
+			xhr.upload.addEventListener( 'loadstart', record( 'upload' ) );
+			return starts;
+		}
+
+		it( 'fires them at send(), before the body is read', () => {
+			const xhr = new Relay();
+			const starts = recordStarts( xhr );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( new NodeBlob( [ 'eleven byte' ] ) );
+
+			expect( xhr.callsTo( 'send' ) ).toEqual( [] );
+			expect( starts ).toEqual( [
+				[ 'request', 0, 0, false ],
+				[ 'upload', 0, 11, true ],
+			] );
+		} );
+
+		it( 'stops the browser’s own when the body is sent', async () => {
+			const xhr = new Relay();
+			const starts = recordStarts( xhr );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( new NodeBlob( [ 'eleven byte' ] ) );
+			await settle();
+
+			expect( xhr.callsTo( 'send' ) ).toHaveLength( 1 );
+			expect( starts ).toHaveLength( 2 );
+		} );
+
+		it( 'gives FormData the size WebKit sends it as', () => {
+			const form = new FormData();
+			form.append( 'title', 'Hello' );
+			form.append( 'file', new Blob( [ 'file bytes' ] ), 'a.txt' );
+			const xhr = new Relay();
+			const starts = recordStarts( xhr );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( form );
+
+			// What WebKit gives the upload's `loadstart` for this form data,
+			// measured in the iOS 27.0 Simulator.
+			expect( starts[ 1 ] ).toEqual( [ 'upload', 0, 300, true ] );
+		} );
+
+		it( 'stops when a listener aborts there, as the browser does', async () => {
+			const xhr = new Relay();
+			const starts = recordStarts( xhr );
+			xhr.addEventListener( 'loadstart', () => xhr.abort(), {
+				once: true,
+			} );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( new NodeBlob( [ 'x' ] ) );
+			await settle();
+
+			expect( starts ).toEqual( [ [ 'request', 0, 0, false ] ] );
+			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ '' ] ] );
+		} );
+	} );
+
 	describe( 'withCredentials', () => {
 		it( 'sends a relayed request without cookies, but reads back as set', () => {
 			// The relay answers `Access-Control-Allow-Origin: *`, which a
