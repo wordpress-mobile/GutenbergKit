@@ -5,11 +5,8 @@ disk I/O on the main thread, leaked closables, registration leaks, and similar
 issues introduced inside the GutenbergKit library surface during local
 development.
 
-For now, violations are **logged, not fatal**. The library still reads the disk
-on the main thread while the editor page loads, so crashing on violations would
-crash every editor launch.
-[#848](https://github.com/wordpress-mobile/GutenbergKit/issues/848) lists those
-violations and tracks switching `ThreadPolicy` to `penaltyDeath()`.
+`ThreadPolicy` violations **crash the demo**, so new main-thread disk or network
+work fails loudly during development. `VmPolicy` violations are logged only.
 
 Some other library calls do disk or SSL work on the caller's thread, so the demo
 makes them on `Dispatchers.IO`.
@@ -25,6 +22,7 @@ StrictMode.setThreadPolicy(
     StrictMode.ThreadPolicy.Builder()
         .detectAll()
         .penaltyLog()
+        .penaltyDeath()
         .build()
 )
 StrictMode.setVmPolicy(
@@ -45,7 +43,7 @@ Configuration notes:
     `detectFileUriExposure`, `detectCleartextNetwork`, etc.
 -   **`Application.onCreate()`** is the right place — earlier is better so the
     policy covers everything that follows.
--   **`VmPolicy` stays on `penaltyLog()`, even after #848.** VM violations like
+-   **`VmPolicy` stays on `penaltyLog()`.** VM violations like
     `LeakedClosableObject` fire during GC and would crash at unpredictable
     times unrelated to the offending code path, which is unhelpful as a signal.
 -   **`penaltyDialog()` is deliberately not enabled.** It interrupts manual
