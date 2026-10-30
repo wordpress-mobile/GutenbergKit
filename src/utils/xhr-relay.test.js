@@ -38,9 +38,11 @@ class FakeXMLHttpRequest extends EventTarget {
 
 	timeout = 0;
 
-	upload = new EventTarget();
+	responseType = '';
 
 	calls = [];
+
+	#upload = new EventTarget();
 
 	#withCredentials = false;
 
@@ -60,6 +62,11 @@ class FakeXMLHttpRequest extends EventTarget {
 	abort() {
 		this.calls.push( [ 'abort' ] );
 		this.readyState = 0;
+	}
+
+	// An accessor on the prototype, as the browser's is.
+	get upload() {
+		return this.#upload;
 	}
 
 	get withCredentials() {
@@ -358,6 +365,87 @@ describe( 'createRelayXMLHttpRequest', () => {
 			expect( events ).toEqual( [ [ 'readystatechange', 2 ] ] );
 		} );
 
+		it( 'keeps the browser from firing the upload\u2019s end again', () => {
+			// WebKit counts the upload as unfinished, so an abort, timeout or
+			// error after the headers would end it a second time.
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordUpload( xhr );
+			xhr.upload.addEventListener( 'abort', () =>
+				events.push( [ 'abort' ] )
+			);
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x' );
+			xhr.receiveHeaders();
+			xhr.upload.dispatchEvent( new ProgressEvent( 'abort' ) );
+			xhr.upload.dispatchEvent( new ProgressEvent( 'loadend' ) );
+
+			expect( events ).toEqual( [
+				[ 'progress', 1, 1 ],
+				[ 'load', 1, 1 ],
+				[ 'loadend', 1, 1 ],
+				[ 'readystatechange', 2 ],
+			] );
+		} );
+
+		it( 'lets the browser end the upload of a request opened again', () => {
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordUpload( xhr );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x' );
+			xhr.receiveHeaders();
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x' );
+			events.length = 0;
+			xhr.upload.dispatchEvent( new ProgressEvent( 'loadend' ) );
+
+			expect( events ).toEqual( [ [ 'loadend', 0, 0 ] ] );
+		} );
+
+		it( 'stops at progress when a listener aborts there', () => {
+			// The browser fires the upload's abort instead of its load.
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordUpload( xhr );
+			xhr.upload.addEventListener( 'progress', () => xhr.abort(), {
+				once: true,
+			} );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x' );
+			xhr.receiveHeaders();
+
+			expect( events ).toEqual( [ [ 'progress', 1, 1 ] ] );
+		} );
+
+		it( 'hides the response from a caller that aborts on the upload\u2019s load', () => {
+			// The browser fires it before any of the response arrives.
+			class ArrivingXMLHttpRequest extends FakeXMLHttpRequest {
+				get responseText() {
+					return 'arrived anyway';
+				}
+
+				get responseURL() {
+					return relayed( 'https://example.org/upload' );
+				}
+			}
+			const Relay = createRelayXMLHttpRequest( ArrivingXMLHttpRequest, {
+				restRelay: REST_RELAY,
+			} );
+			const xhr = new Relay();
+			const events = recordUpload( xhr );
+			xhr.upload.addEventListener( 'load', () => xhr.abort() );
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( 'x' );
+			xhr.receiveHeaders();
+
+			expect( events ).toEqual( [
+				[ 'progress', 1, 1 ],
+				[ 'load', 1, 1 ],
+				[ 'loadend', 1, 1 ],
+			] );
+			expect( xhr.responseText ).toBe( '' );
+			expect( xhr.response ).toBe( '' );
+			expect( xhr.responseURL ).toBe( '' );
+		} );
+
 		it( 'fires none for a request that is not relayed', () => {
 			const xhr = new RelayXMLHttpRequest();
 			const events = recordUpload( xhr );
@@ -439,6 +527,50 @@ describe( 'createRelayXMLHttpRequest', () => {
 			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ '' ] ] );
 		} );
 
+		it( 'gives the upload\u2019s loadstart the size of the body', () => {
+			// WebKit drops a `Blob` sent to a `data:` URL, so an empty body
+			// stands in for it.
+			class StartingXMLHttpRequest extends FakeXMLHttpRequest {
+				send( ...args ) {
+					super.send( ...args );
+					this.upload.dispatchEvent(
+						new ProgressEvent( 'loadstart', {
+							loaded: 0,
+							total: 0,
+						} )
+					);
+				}
+			}
+			const Relay = createRelayXMLHttpRequest( StartingXMLHttpRequest, {
+				restRelay: REST_RELAY,
+			} );
+			const xhr = new Relay();
+			const starts = [];
+			xhr.upload.addEventListener( 'loadstart', ( event ) =>
+				starts.push( [
+					event.loaded,
+					event.total,
+					event.lengthComputable,
+				] )
+			);
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( new NodeBlob( [ 'eleven byte' ] ) );
+			xhr.abort();
+
+			expect( starts ).toEqual( [ [ 0, 11, true ] ] );
+		} );
+
+		it( 'sends a FormData body to the stand-in, for its size', () => {
+			const form = new FormData();
+			form.append( 'title', 'Hello' );
+			const xhr = new RelayXMLHttpRequest();
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( form );
+			xhr.abort();
+
+			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ form ] ] );
+		} );
+
 		it( 'never sends the body when the request is opened again', async () => {
 			const xhr = new RelayXMLHttpRequest();
 			xhr.open( 'POST', 'https://example.org/upload' );
@@ -491,6 +623,10 @@ describe( 'createRelayXMLHttpRequest', () => {
 			} ).toThrow(
 				expect.objectContaining( { name: 'InvalidStateError' } )
 			);
+			expect( () => xhr.setRequestHeader( 'X-Late', '1' ) ).toThrow(
+				expect.objectContaining( { name: 'InvalidStateError' } )
+			);
+			expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [] );
 		} );
 
 		it( 'lets a listener the browser calls during send open the request again', () => {
