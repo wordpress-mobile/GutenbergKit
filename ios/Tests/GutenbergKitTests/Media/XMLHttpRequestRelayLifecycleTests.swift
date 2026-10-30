@@ -39,6 +39,12 @@ struct XMLHttpRequestRelayLifecycleTests {
         "unreachable",
         "cutAfterHeaders",
         "callsAfterSend",
+        "callsWhileBlobIsRead",
+        "callsWhileFormDataIsRead",
+        "startOfBlob",
+        "startOfFormData",
+        "startOfEmptyBlob",
+        "abortFromBlobLoadStart",
         "synchronousGet",
         "synchronousPost",
         "reopenFromSynchronousLoad",
@@ -50,20 +56,6 @@ struct XMLHttpRequestRelayLifecycleTests {
         let relayed = try await page.run(scenario, relayed: true)
 
         #expect(relayed == direct)
-    }
-
-    @Test("reports the request as sent only once the body is read", arguments: ["callsWhileBlobIsRead"])
-    func startsAfterTheBodyIsRead(_ scenario: String) async throws {
-        let page = try await LifecyclePage.shared()
-
-        let direct = try await page.run(scenario, relayed: false)
-        let relayed = try await page.run(scenario, relayed: true)
-
-        // A `Blob` or `FormData` body is read before the request is sent, and the
-        // browser fires `loadstart` when it is sent.
-        withKnownIssue {
-            #expect(relayed == direct)
-        }
     }
 
     @Test("pre-existing relay differences", arguments: ["postUntypedBlob", "cutChunkedAfterHeaders"])
