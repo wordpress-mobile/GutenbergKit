@@ -52,13 +52,14 @@ jobs:
               uses: github/codeql-action/init@v4
               with:
                   languages: java-kotlin
+                  build-mode: manual
 
             # The :Gutenberg Gradle build generates `SupportedLocales.kt` from
             # `src/main/assets/supported-locales.json`, which is emitted by the
             # JS build's Vite plugin. Without it, the Gradle build fails before
             # any Kotlin sources are extracted.
             - name: Set up Node.js
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v7
               with:
                   node-version-file: '.nvmrc'
                   cache: 'npm'
@@ -90,7 +91,7 @@ jobs:
               run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
             - name: Cache SPM dependencies
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: |
                       ~/Library/Caches/org.swift.swiftpm/repositories
@@ -98,10 +99,16 @@ jobs:
                   restore-keys: |
                       spm-${{ runner.os }}-
 
+            # Resolve before CodeQL starts tracing. Resolution under the tracer
+            # took ~10 minutes; outside it, it takes seconds.
+            - name: Resolve Swift packages
+              run: swift package resolve
+
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
               with:
                   languages: swift
+                  build-mode: manual
 
             - name: Build Swift package
               run: swift build
