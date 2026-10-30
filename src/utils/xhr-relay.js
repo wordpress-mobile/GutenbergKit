@@ -88,13 +88,17 @@ export function installXMLHttpRequestRelay() {
  *   the read, so its `Blob` or `FormData` body is sent as it is. An `abort()`
  *   during the read ends the request with the events an abort fires.
  * - WebKit doesn't apply `timeout` to a request native code answers, so native
- *   code enforces it. It is read when the request is sent.
+ *   code enforces it. It is read when the request is sent, so a change to it
+ *   after `send()` has no effect.
  * - WebKit fires no upload `progress`, `load` or `loadend` for a request native
  *   code answers. They are fired once the response's headers arrive, by which
  *   time native code has sent the whole body. An upload's progress jumps from
  *   nothing to done. WebKit still counts the upload as unfinished, so an abort,
  *   timeout or error after that would fire upload events a second time. Those
- *   are stopped before the caller's listeners hear them.
+ *   are stopped before the caller's listeners hear them. As in the browser, an
+ *   empty body gets none.
+ * - The response has no `Content-Length`, because native code drops it. So
+ *   download `progress` events have `lengthComputable` false and a `total` of 0.
  *
  * @param {typeof XMLHttpRequest}        Base             The class to extend.
  * @param {Object}                       config           Relay configuration.
@@ -380,10 +384,11 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 					String( Math.max( remaining, 1 ) )
 				);
 			}
-			this.#uploadSize =
-				body === null || body === undefined
-					? undefined
-					: byteSize( body );
+			const size =
+				body === null || body === undefined ? 0 : byteSize( body );
+			// The browser fires no upload `progress`, `load` or `loadend` for an
+			// empty body.
+			this.#uploadSize = size === 0 ? undefined : size;
 			super.send( body );
 		}
 

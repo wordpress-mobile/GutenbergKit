@@ -365,6 +365,22 @@ describe( 'createRelayXMLHttpRequest', () => {
 			expect( events ).toEqual( [ [ 'readystatechange', 2 ] ] );
 		} );
 
+		it.each( [
+			[ 'an empty string', () => '' ],
+			[ 'an empty ArrayBuffer', () => new ArrayBuffer( 0 ) ],
+			[ 'an empty Blob', () => new NodeBlob( [] ) ],
+		] )( 'fires none for %s', async ( _, body ) => {
+			// WebKit fires only the upload's `loadstart` for an empty body.
+			const xhr = new RelayXMLHttpRequest();
+			const events = recordUpload( xhr );
+			xhr.open( 'POST', 'https://example.org/a' );
+			xhr.send( body() );
+			await settle();
+			xhr.receiveHeaders();
+
+			expect( events ).toEqual( [ [ 'readystatechange', 2 ] ] );
+		} );
+
 		it( 'keeps the browser from firing the upload\u2019s end again', () => {
 			// WebKit counts the upload as unfinished, so an abort, timeout or
 			// error after the headers would end it a second time.

@@ -95,6 +95,16 @@ const scenarios = {
 		xhr.open( 'PUT', `${ origin }/echo` );
 		xhr.send( new Uint8Array( 300 ).fill( 7 ).buffer );
 	},
+	postEmptyString() {
+		recordUpload();
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( '' );
+	},
+	postEmptyArrayBuffer() {
+		recordUpload();
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( new ArrayBuffer( 0 ) );
+	},
 	postBlob() {
 		recordUpload();
 		xhr.open( 'PATCH', `${ origin }/echo` );

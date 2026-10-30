@@ -24,6 +24,8 @@ struct XMLHttpRequestRelayLifecycleTests {
         "postString",
         "postStringWithoutUploadListener",
         "postArrayBuffer",
+        "postEmptyString",
+        "postEmptyArrayBuffer",
         "postBlob",
         "postFormData",
         "abortBeforeResponse",
