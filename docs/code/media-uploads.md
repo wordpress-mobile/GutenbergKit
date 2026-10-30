@@ -88,8 +88,15 @@ differences measured in the iOS 27.0 Simulator:
 -   WebKit doesn't apply the request's `timeout`: one set to 500 ms was still waiting
     seconds later. The page sends it in an `X-GBK-Relay-Timeout` header, and native code
     fails the task with `URLError(.timedOut)`, which the page sees as a `timeout` event.
--   WebKit fires no upload `progress`, `load` or `loadend`. The page fires them when the
-    response's headers arrive, so an upload's progress jumps from nothing to done.
+-   WebKit fires no upload `progress`, `load` or `loadend`. The page names each upload in
+    an `X-GBK-Relay-Upload` header, which is never sent on. Native code reports how much of
+    the body `URLSession` has sent, at most every 50 ms, and the page fires `progress` for
+    each report. The report for the whole body always goes, and the page fires the last
+    `progress`, `load` and `loadend` on it, or on the response's headers if they arrive
+    first. As in the browser, the page fires none unless the caller read `xhr.upload`
+    before `send()`. WebKit never sees the upload complete, so if the request fails
+    afterwards it fires the upload's `abort`, `timeout` or `error` and a second
+    `loadend`; the page stops those.
 
 The streamed `fetch` case depends on where the file came from, and every failure is silent, so
 the page always sends the file as 4 MB `ArrayBuffer` chunks:

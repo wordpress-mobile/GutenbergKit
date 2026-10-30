@@ -184,7 +184,12 @@ struct RestRelay: Sendable {
     ///   adding an upload listener does, has its body delivered as
     ///   `httpBodyStream` instead. The table of what was measured is in
     ///   `docs/code/media-uploads.md`.
-    func handle(_ request: URLRequest) async throws -> Response {
+    /// - Parameter onUploadProgress: Called as the body is sent to the server, with
+    ///   the bytes sent so far and the body's size.
+    func handle(
+        _ request: URLRequest,
+        onUploadProgress: (@Sendable (_ sent: Int64, _ total: Int64) -> Void)? = nil
+    ) async throws -> Response {
         guard let requestedURL = request.url.flatMap(Self.requestedURL(in:)) else {
             Logger.restRelay.error("Refusing to relay a request without an http or https URL")
             return Response(Self.errorResponse(
@@ -240,7 +245,12 @@ struct RestRelay: Sendable {
             apiRoot: isSiteAPI ? apiRoot : nil,
             authorization: upstreamRequest.value(forHTTPHeaderField: "Authorization")
         )
-        let upstream = UpstreamTask(upstreamRequest, redirectGuard: redirectGuard, observer: observer)
+        let upstream = UpstreamTask(
+            upstreamRequest,
+            redirectGuard: redirectGuard,
+            observer: observer,
+            onUploadProgress: onUploadProgress
+        )
         let (response, body): (URLResponse, AsyncThrowingStream<Data, any Error>)
         do {
             (response, body) = try await upstream.start(on: session)
@@ -545,6 +555,7 @@ struct RestRelay: Sendable {
         "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user",
         "cookie", "authorization",
         RestRelaySchemeHandler.timeoutHeader.lowercased(),
+        RestRelaySchemeHandler.uploadHeader.lowercased(),
     ]
 
     /// Upstream response headers dropped from relayed responses.
