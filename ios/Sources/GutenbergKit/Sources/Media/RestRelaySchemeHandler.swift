@@ -14,6 +14,15 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
     /// query parameter.
     nonisolated static let endpoint = "\(scheme)://relay\(RestRelay.route)"
 
+    /// The request header that carries an `XMLHttpRequest`'s `timeout`, in
+    /// milliseconds. Never sent on.
+    ///
+    /// WebKit doesn't apply that timeout to a request a scheme handler answers:
+    /// one that was never answered was still waiting long after it (iOS 27.0
+    /// Simulator). A task failed with `URLError(.timedOut)` does make the page's
+    /// request fire `timeout`, so the relay enforces it here.
+    nonisolated static let timeoutHeader = "X-GBK-Relay-Timeout"
+
     /// The relay requests go through. The editor replaces it when its page loads, so it
     /// relays for the configuration the page was given.
     var relay: RestRelay
@@ -49,6 +58,19 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
+    /// Fails the task under `key` as timed out after the time its request asks for, if
+    /// it is still unanswered. Cancels the request to the site.
+    private func enforceTimeout(of request: URLRequest, for key: ActiveSchemeTasks.Key) -> Task<Void, Never>? {
+        guard let value = request.value(forHTTPHeaderField: Self.timeoutHeader),
+              let milliseconds = Int(value), milliseconds > 0 else {
+            return nil
+        }
+        return Task { [weak self] in
+            guard (try? await Task.sleep(for: .milliseconds(milliseconds))) != nil else { return }
+            self?.active.abandon(key, failingWith: URLError(.timedOut))
+        }
+    }
+
     /// `webView(_:stop:)` without the web view, for tests. Cancels the request to the site.
     func stop(_ task: any WKURLSchemeTask) {
         active.stop(task)
@@ -68,6 +90,8 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
     ///
     /// Returning early drops the body, which cancels the request to the server.
     private func answer(_ key: ActiveSchemeTasks.Key, relaying request: URLRequest, through relay: RestRelay) async {
+        let timeout = enforceTimeout(of: request, for: key)
+        defer { timeout?.cancel() }
         do {
             let response = try await relay.handle(request)
             guard let task = active.respond(key, status: response.status, headers: response.headers) else { return }

@@ -296,11 +296,12 @@ struct RestRelayHandleTests {
             "Cookie": "wordpress_logged_in_abc=1",
             "Connection": "keep-alive",
             "Accept-Encoding": "gzip, deflate",
+            "X-GBK-Relay-Timeout": "500",
         ])
 
         for header in [
             "Origin", "Referer", "Sec-Fetch-Site", "Sec-Fetch-Mode",
-            "Cookie", "Connection",
+            "Cookie", "Connection", "X-GBK-Relay-Timeout",
         ] {
             #expect(
                 exchange.upstream.value(forHTTPHeaderField: header) == nil,
@@ -392,6 +393,22 @@ struct RestRelayHandleTests {
         #expect(exchange.response.status == 204)
         #expect(exchange.response.header("x-videopress-upload-guid") == "eDeLfBNN")
         #expect(exchange.response.header("Access-Control-Expose-Headers")?.hasPrefix("*") == true)
+    }
+
+    @Test("sends a body WebKit delivered as a stream")
+    func relaysStreamedBodies() async throws {
+        // WebKit delivers the body of an `XMLHttpRequest` whose `upload` was read
+        // as `httpBodyStream`, as `tus-js-client` sends each chunk.
+        let body = Data((0..<200_000).map { UInt8($0 % 251) })
+        let exchange = try await relay(
+            target: Self.relayTarget("https://example.org/files/abc"),
+            method: "PATCH",
+            headers: ["Content-Type": "application/offset+octet-stream"],
+            bodyStream: body
+        )
+
+        #expect(exchange.sentBody == body)
+        #expect(exchange.upstream.httpBodyStream == nil, "a streamed upstream body goes without a Content-Length")
     }
 
     @Test("relays the status, body, and the headers the editor reads")
@@ -501,6 +518,7 @@ struct RestRelayHandleTests {
         method: String = "GET",
         headers: [String: String] = [:],
         body: Data? = nil,
+        bodyStream: Data? = nil,
         status: Int = 200,
         responseHeaders: [String: String] = [:],
         responseBody: Data = Data(),
@@ -535,6 +553,9 @@ struct RestRelayHandleTests {
         request.httpMethod = method
         request.allHTTPHeaderFields = headers
         request.httpBody = body
+        if let bodyStream {
+            request.httpBodyStream = InputStream(data: bodyStream)
+        }
         let response = try await relay.handle(request).collected()
 
         return Exchange(sentRequest: stubbed.recorder.request, sentBody: stubbed.recorder.request?.httpBody, response: response)
@@ -720,6 +741,50 @@ struct RestRelaySchemeHandlerTests {
         #expect(task.failure != nil)
         #expect(!task.finished, "finished the page's request with part of the body")
         #expect(task.body == Data("data: one\n\n".utf8))
+    }
+
+    @Test("fails the page's request as timed out when it outlasts the timeout it asks for")
+    func enforcesTheRequestTimeout() async throws {
+        // WebKit doesn't apply an `XMLHttpRequest`'s `timeout` to a request this
+        // answers, but fires `timeout` for a task failed this way.
+        let gate = StubURLProtocol.Gate()
+        let stubbed = StubURLProtocol.makeSession(stub: .init(
+            headers: Self.eventStream,
+            body: Data("data: one\n\n".utf8),
+            gate: gate,
+            rest: Data("data: two\n\n".utf8)
+        ))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        var request = URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query"))
+        request.setValue("100", forHTTPHeaderField: RestRelaySchemeHandler.timeoutHeader)
+        let task = FakeSchemeTask(request: request)
+
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect((task.failure as? URLError)?.code == .timedOut)
+        #expect(!task.finished)
+        #expect(handler.activeRequestCount == 0)
+        try await waitUntil { stubbed.recorder.wasStopped }
+        gate.open()
+    }
+
+    @Test("finishes a request that answers within its timeout")
+    func answersWithinTheTimeout() async throws {
+        let stubbed = StubURLProtocol.makeSession(stub: .init(body: Data("[]".utf8)))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        var request = URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts"))
+        request.setValue("60000", forHTTPHeaderField: RestRelaySchemeHandler.timeoutHeader)
+        let task = FakeSchemeTask(request: request)
+
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect(task.failure == nil)
+        #expect(task.finished)
+        #expect(task.body == Data("[]".utf8))
     }
 
     @Test("fails the page's request when the response breaks off partway")

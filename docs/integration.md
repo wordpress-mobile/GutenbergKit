@@ -140,9 +140,9 @@ The editor reports its network requests in two places:
     the request ends.
 -   **Requests native code sends**: give the editor an `EditorHTTPClient` with an
     `EditorHTTPClientDelegate`. That covers loading the editor and its assets, media
-    uploads and deletes, and the page's `fetch` requests, which native code relays. Those
-    go to the site's REST API and to any other host the page calls, such as a plugin's own
-    service, so don't assume a request is for the site.
+    uploads and deletes, and the page's `fetch` and `XMLHttpRequest` requests, which native
+    code relays. Those go to the site's REST API and to any other host the page calls, such
+    as a plugin's own service, so don't assume a request is for the site.
 
 The delegate's task callbacks take `URLSession`'s own types, and arrive for every request,
 whatever becomes of it: `didCreateTask(_:)` when it starts, `task(_:didFinishCollecting:)`

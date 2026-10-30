@@ -103,6 +103,14 @@ struct ActiveSchemeTasks {
         remove(key)?.didFailWithError(error)
     }
 
+    /// Fails the task under `key` with `error`, stops tracking it, and cancels its work,
+    /// unless WebKit has stopped it.
+    mutating func abandon(_ key: Key, failingWith error: any Error) {
+        guard let entry = removeEntry(key) else { return }
+        entry.work?.cancel()
+        entry.task.didFailWithError(error)
+    }
+
     /// Stops tracking the task under `key` and returns its entry.
     private mutating func removeEntry(_ key: Key) -> Entry? {
         guard let entry = entries.removeValue(forKey: key) else { return nil }
