@@ -1068,6 +1068,16 @@ describe( 'api-fetch credentials handling', () => {
 			}
 		);
 
+		it.each( [ 'put', 'patch', 'delete' ] )(
+			'uppercases a cross-origin %s method',
+			async ( method ) => {
+				await apiFetch( { path: '/wp/v2/posts/1', method } );
+
+				const [ , options ] = global.fetch.mock.calls[ 0 ];
+				expect( options.method ).toBe( method.toUpperCase() );
+			}
+		);
+
 		it( 'keeps the header on a same-origin request', () => {
 			const fetchHandler = vi.fn();
 			const handler = withCrossOriginRealMethod( fetchHandler );

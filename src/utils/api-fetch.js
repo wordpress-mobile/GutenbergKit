@@ -1345,7 +1345,13 @@ export function withCrossOriginRealMethod( fetchHandler ) {
 
 		const { [ METHOD_OVERRIDE_HEADER ]: _header, ...headers } =
 			options.headers;
-		return fetchHandler( { ...options, method, headers } );
+		// `fetch` uppercases `put` and `delete` but not `patch`, and the
+		// preflight compares methods case-sensitively.
+		return fetchHandler( {
+			...options,
+			method: method.toUpperCase(),
+			headers,
+		} );
 	};
 }
 
