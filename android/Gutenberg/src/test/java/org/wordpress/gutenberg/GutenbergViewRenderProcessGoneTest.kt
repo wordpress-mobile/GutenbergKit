@@ -156,6 +156,23 @@ class GutenbergViewRenderProcessGoneTest {
     }
 
     @Test
+    fun `an automatic reload over a replacing page does not allow another automatic recovery`() {
+        val view = loadedSiteView()
+        killRenderer(view)
+        view.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val webView = view.editorWebView
+        webView.webViewClient.onPageStarted(webView, "https://example.com/a-page/", null)
+        shadowOf(Looper.getMainLooper()).idle()
+        view.onEditorLoaded()
+        shadowOf(Looper.getMainLooper()).idle()
+        killRenderer(view)
+
+        assertNull("only the user's reload allows another recovery", shadowOf(view.editorWebView).lastLoadedUrl)
+    }
+
+    @Test
     fun `reloading from the crash notice allows another automatic recovery`() {
         val view = loadedSiteView()
         killRenderer(view)

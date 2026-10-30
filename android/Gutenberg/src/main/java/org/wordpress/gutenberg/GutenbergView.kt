@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -13,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.security.NetworkSecurityPolicy
 import android.util.Log
 import android.view.Gravity
@@ -137,6 +139,11 @@ class GutenbergView : FrameLayout {
 
     /** The editor document [loadEditor] loaded, the only page given the editor globals. */
     private var editorUri: Uri? = null
+
+    /** Web views created for new windows that have not navigated yet. */
+    private val popupWebViews = mutableSetOf<WebView>()
+    private var editorRestoreCount = 0
+
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
 
@@ -498,6 +505,9 @@ class GutenbergView : FrameLayout {
     @SuppressLint("SetJavaScriptEnabled") // Without JavaScript we have no Gutenberg
     private fun initializeWebView() {
         webView.settings.javaScriptCanOpenWindowsAutomatically = true
+        // Without this, `window.open()` and `target="_blank"` load into the editor's
+        // own frame. With it, they reach `onCreateWindow`.
+        webView.settings.setSupportMultipleWindows(true)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
 
@@ -577,24 +587,11 @@ class GutenbergView : FrameLayout {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
                 val url = request.url
 
-                // Allow local file URLs
-                if (url.scheme == "file") {
-                    return false
-                }
-
-                // Allow blob URLs (used by block inserter)
-                if (url.scheme == "blob") {
-                    return false
-                }
-
-                // Allow data URLs (used by block inserter)
-                if (url.scheme == "data") {
-                    return false
-                }
-
-                // Allow about:blank URLs
-                if (url.scheme == "about") {
-                    return false
+                // Local documents load in subframes, such as Gutenberg's `Iframe`
+                // component. In the main frame they would replace the editor, and no
+                // other app can open them.
+                if (url.scheme in LOCAL_DOCUMENT_SCHEMES) {
+                    return request.isForMainFrame
                 }
 
                 // Allow asset URLs (restrict to the asset path prefix so that
@@ -611,14 +608,26 @@ class GutenbergView : FrameLayout {
 
                 // For all other URLs, open in external browser. This includes the site's
                 // REST API: the editor reaches it by fetch, which never passes through here.
-                val intent = Intent(Intent.ACTION_VIEW, url)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                view?.context?.startActivity(intent)
+                openExternally(url)
                 return true
             }
         }
 
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                // The URL of a new window is only known once it navigates, so the window
+                // is a hidden web view that hands that navigation to the browser.
+                transport.webView = createPopupWebView()
+                resultMsg.sendToTarget()
+                return true
+            }
+
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                 if (consoleMessage != null) {
                     Log.i("GutenbergView", consoleMessage.message())
@@ -679,6 +688,70 @@ class GutenbergView : FrameLayout {
     private fun showEditorLoadErrorPhase(url: Uri, reason: String?) {
         val isDevServer = BuildConfig.GUTENBERG_EDITOR_URL.isNotEmpty()
         showErrorPhase(Exception(editorLoadErrorMessage(url, reason, isDevServer)))
+    }
+
+    /**
+     * Opens [url] in another app, such as the browser, when one can open it. The
+     * page chooses the URL, so no URL may crash the host app: besides no app
+     * matching, the matched app can refuse the intent or the URL can exceed its limit.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private fun openExternally(url: Uri) {
+        val intent = Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(intent)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Unable to open the ${url.scheme} URL", e)
+        }
+    }
+
+    /**
+     * Creates a hidden web view for a new window. Its first navigation opens in the
+     * browser when it is http(s) and is dropped otherwise.
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createPopupWebView(): WebView {
+        val popup = WebView(context)
+        popupWebViews.add(popup)
+        popup.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean {
+                closePopup(popup, request.url)
+                return true
+            }
+
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                // Catches loads `shouldOverrideUrlLoading` doesn't see. A new window
+                // is blank before its first navigation.
+                if (url == null || url == "about:blank") return
+                closePopup(popup, Uri.parse(url))
+            }
+
+            @RequiresApi(Build.VERSION_CODES.O)
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                closePopup(popup, url = null)
+                // Popups share the editor's renderer, and any web view leaving this
+                // unhandled kills the app.
+                return true
+            }
+        }
+        // Without JavaScript, `window.close()` never reaches `onCloseWindow`.
+        popup.settings.javaScriptEnabled = true
+        popup.webChromeClient = object : WebChromeClient() {
+            override fun onCloseWindow(window: WebView?) {
+                closePopup(popup, url = null)
+            }
+        }
+        return popup
+    }
+
+    private fun closePopup(popup: WebView, url: Uri?) {
+        // A navigation can reach both callbacks.
+        if (!popupWebViews.remove(popup)) return
+        if (url?.scheme == "http" || url?.scheme == "https") {
+            openExternally(url)
+        }
+        // The popup is still dispatching the callback that closes it.
+        handler.post { popup.destroy() }
     }
 
     /**
@@ -795,9 +868,10 @@ class GutenbergView : FrameLayout {
 
     /**
      * Invoked when any page begins loading in the main frame. Resets readiness for
-     * every page; for the editor document alone, starts the upload server once —
-     * capturing the [mediaProcessor] provided before load — then advertises the
-     * editor globals (including the server's port and token).
+     * every page and loads the editor again over any other page; for the editor
+     * document alone, starts the upload server once — capturing the
+     * [mediaProcessor] provided before load — then advertises the editor globals
+     * (including the server's port and token).
      *
      * Starting the server here, on the UI thread, rather than from the
      * [mediaProcessor] setter keeps its whole lifecycle — start here, stop in
@@ -810,17 +884,55 @@ class GutenbergView : FrameLayout {
         isEditorLoaded = false
         didFireEditorLoaded = false
 
+        if (url == null) return
+
         // The globals carry the site credential and the upload server's token, so
-        // they go to the editor document alone. `shouldOverrideUrlLoading` admits
-        // other pages into this frame, and on Android the editor shares an origin
-        // with the site, so the destination is checked rather than assumed.
-        if (url == null || !isEditorDocument(Uri.parse(url))) return
+        // they go to the editor document alone. Some loads never pass
+        // `shouldOverrideUrlLoading` (POST forms, history, a host's `loadUrl`), and
+        // on Android the editor shares an origin with the site, so the destination
+        // is checked rather than assumed.
+        if (!isEditorDocument(Uri.parse(url))) {
+            if (editorUri != null) restoreEditorDocument()
+            return
+        }
 
         if (!hasStartedLoading) {
             hasStartedLoading = true
             startUploadServer()
         }
         setGlobalJavaScriptVariables()
+    }
+
+    /**
+     * Loads the editor again after another page replaced it. Hosts are told the
+     * editor is unavailable until it reports itself loaded.
+     */
+    private fun restoreEditorDocument() {
+        // A script that navigates on every load would otherwise reload forever.
+        if (editorRestoreCount < MAX_EDITOR_RESTORES) {
+            editorRestoreCount++
+            Log.w(TAG, "Another page replaced the editor document, so the editor is reloading")
+            loadEditorDocumentAgain()
+        } else {
+            Log.e(TAG, "Another page keeps replacing the editor document, so the editor stopped reloading")
+            webView.stopLoading()
+            showEditorCrashPhase()
+        }
+        handler.post {
+            // Picks made in an open inserter can no longer reach the editor.
+            blockInserterDialog?.dismiss()
+            reportOpenModalDialogsClosed()
+            editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
+        }
+    }
+
+    /**
+     * Reports the editor's open dialogs closed after it went away without unmounting
+     * them, rather than leave the host's navigation blocked.
+     */
+    private fun reportOpenModalDialogsClosed() {
+        openModalDialogs.forEach { modalDialogStateListener?.onModalDialogClosed(it) }
+        openModalDialogs.clear()
     }
 
     private fun setGlobalJavaScriptVariables() {
@@ -1012,23 +1124,23 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Notified when the editor crashes and is no longer usable.
+     * Notified when the editor crashes or is replaced and is no longer usable.
      *
      * This can be called without a preceding
      * [EditorAvailableListener.onEditorAvailable] when the editor crashes before
      * it finishes loading.
      *
-     * Either the editor's error boundary caught an error and React unmounted the
-     * editor, or the web view's renderer process died. Both remove every
-     * JavaScript `editor` API, so calls to them are refused from this point until
-     * the editor reloads.
+     * The editor's error boundary caught an error and React unmounted the editor,
+     * the web view's renderer process died, or another page replaced the editor
+     * document. Each removes every JavaScript `editor` API, so calls to them are
+     * refused from this point until the editor reloads.
      *
      * GutenbergKit either reloads the editor automatically after a renderer death
-     * or covers it with a notice offering to reload it. Until it reloads, hosts
-     * should disable the controls that depend on the editor — history, editor
-     * mode — while leaving those that read from their own persisted copy, such as
-     * saving and closing, available. Re-enable them the next time
-     * [EditorAvailableListener.onEditorAvailable] is called.
+     * or a replaced document, or covers it with a notice offering to reload it.
+     * Until it reloads, hosts should disable the controls that depend on the
+     * editor — history, editor mode — while leaving those that read from their own
+     * persisted copy, such as saving and closing, available. Re-enable them the
+     * next time [EditorAvailableListener.onEditorAvailable] is called.
      */
     fun interface EditorUnavailableListener {
         fun onEditorUnavailable(view: GutenbergView?)
@@ -1209,16 +1321,27 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Reloads the editor after it has crashed.
+     * Reloads the editor at the user's request, which also lets automatic recovery
+     * run again.
+     */
+    internal fun reloadEditor() {
+        hasRecoveredAutomatically = false
+        editorRestoreCount = 0
+        loadEditorDocumentAgain()
+    }
+
+    /**
+     * Loads the editor document again, after it has crashed or another page
+     * replaced it.
      *
      * The reloaded editor starts from the content [LatestContentProvider]
      * returns, or from the content it was opened with when there is none.
      * Readiness is reset immediately and restored only once the editor emits
      * `onEditorLoaded` again.
      */
-    internal fun reloadEditor() {
+    private fun loadEditorDocumentAgain() {
+        val editorUrl = editorUri?.toString() ?: return
         isEditorLoaded = false
-        hasRecoveredAutomatically = false
         // The reload replaces the page these reads were sent to, so their results
         // may never arrive.
         failPendingTitleAndContentReads()
@@ -1227,7 +1350,8 @@ class GutenbergView : FrameLayout {
                 loadEditor(dependencies)
             } else {
                 showSpinnerPhase()
-                webView.reload()
+                // `reload()` would reload whichever page now occupies the frame.
+                webView.loadUrl(editorUrl)
             }
         }
     }
@@ -1249,10 +1373,7 @@ class GutenbergView : FrameLayout {
         failPendingTitleAndContentReads()
         replaceWebView()
         blockInserterDialog?.dismiss()
-        // The dead renderer can't unmount the editor's open dialogs to report
-        // them closed, so report them here rather than leave navigation blocked.
-        openModalDialogs.forEach { modalDialogStateListener?.onModalDialogClosed(it) }
-        openModalDialogs.clear()
+        reportOpenModalDialogsClosed()
         editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
         if (wasEditorLoaded && !hasRecoveredAutomatically) {
             hasRecoveredAutomatically = true
@@ -1515,6 +1636,8 @@ class GutenbergView : FrameLayout {
         errorView.animate().cancel()
         webView.animate().cancel()
         webView.stopLoading()
+        popupWebViews.forEach { it.destroy() }
+        popupWebViews.clear()
         contentChangeListener = null
         historyChangeListener = null
         saveAvailabilityListener = null
@@ -1596,6 +1719,12 @@ class GutenbergView : FrameLayout {
 
         /** Hosts that are safe to serve assets over HTTP (local development only). */
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
+
+        /** Schemes of documents the WebView creates or reads itself, without a server. */
+        private val LOCAL_DOCUMENT_SCHEMES = setOf("about", "blob", "data", "file")
+
+        /** How many times the editor reloads over other pages before asking the user to reload. */
+        private const val MAX_EDITOR_RESTORES = 3
 
         /**
          * Returns [url]'s origin authority: its host, plus its port when that port
