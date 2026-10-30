@@ -248,6 +248,27 @@ class GutenbergViewNavigationTest {
     }
 
     @Test
+    fun `onPageStarted reports open dialogs closed when another page replaces the editor`() {
+        val siteView = configuredSiteView()
+        val webView = siteView.editorWebView
+        val closed = mutableListOf<String>()
+        siteView.setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
+            override fun onModalDialogOpened(dialogType: String) = Unit
+
+            override fun onModalDialogClosed(dialogType: String) {
+                closed += dialogType
+            }
+        })
+        siteView.onModalDialogOpened("block-inspector")
+        idle()
+
+        webView.webViewClient.onPageStarted(webView, "https://example.com/a-page/", null)
+        idle()
+
+        assertEquals("the host would keep its navigation disabled", listOf("block-inspector"), closed)
+    }
+
+    @Test
     fun `onPageStarted stops loading the editor again over a page that keeps replacing it`() {
         val siteView = configuredSiteView()
         val webView = siteView.editorWebView

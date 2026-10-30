@@ -921,8 +921,18 @@ class GutenbergView : FrameLayout {
         handler.post {
             // Picks made in an open inserter can no longer reach the editor.
             blockInserterDialog?.dismiss()
+            reportOpenModalDialogsClosed()
             editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
         }
+    }
+
+    /**
+     * Reports the editor's open dialogs closed after it went away without unmounting
+     * them, rather than leave the host's navigation blocked.
+     */
+    private fun reportOpenModalDialogsClosed() {
+        openModalDialogs.forEach { modalDialogStateListener?.onModalDialogClosed(it) }
+        openModalDialogs.clear()
     }
 
     private fun setGlobalJavaScriptVariables() {
@@ -1363,10 +1373,7 @@ class GutenbergView : FrameLayout {
         failPendingTitleAndContentReads()
         replaceWebView()
         blockInserterDialog?.dismiss()
-        // The dead renderer can't unmount the editor's open dialogs to report
-        // them closed, so report them here rather than leave navigation blocked.
-        openModalDialogs.forEach { modalDialogStateListener?.onModalDialogClosed(it) }
-        openModalDialogs.clear()
+        reportOpenModalDialogsClosed()
         editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
         if (wasEditorLoaded && !hasRecoveredAutomatically) {
             hasRecoveredAutomatically = true
