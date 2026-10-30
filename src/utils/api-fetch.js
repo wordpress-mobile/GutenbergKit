@@ -1319,17 +1319,10 @@ async function parseResponse( response, isOk ) {
 }
 
 /**
- * Wraps a fetch handler to send cross-origin writes with their real method.
- *
- * api-fetch sends PUT, PATCH and DELETE as POST with an override header, for
- * servers that block those methods. WordPress's CORS preflight response allows
- * those methods but not that header, so a cross-origin write would fail before
- * it is sent. The `_method` query parameter is no alternative: WordPress also
- * applies it to the preflight, which then fails authentication. Same-origin
- * requests keep the header, as in WP Admin.
- *
- * As a fetch handler, it sees the final URL, after every middleware has run,
- * including api-fetch's own `httpV1Middleware`.
+ * Wraps a fetch handler to send cross-origin writes with their real method, as
+ * WordPress's CORS preflight rejects api-fetch's `X-HTTP-Method-Override`. The
+ * `_method` query parameter fails too: WordPress applies it to the preflight,
+ * which carries no credentials.
  *
  * Exported for testing only.
  *
@@ -1339,7 +1332,11 @@ async function parseResponse( response, isOk ) {
 export function withCrossOriginRealMethod( fetchHandler ) {
 	return ( options ) => {
 		const method = options.headers?.[ METHOD_OVERRIDE_HEADER ];
-		if ( ! method || ! options.url || ! isPreflighted( options.url ) ) {
+		if (
+			! method ||
+			! options.url ||
+			! isCrossOriginFromHttpPage( options.url )
+		) {
 			return fetchHandler( options );
 		}
 
@@ -1356,15 +1353,13 @@ export function withCrossOriginRealMethod( fetchHandler ) {
 }
 
 /**
- * Whether the browser sends a CORS preflight for a request to the given URL.
- *
- * Only pages served over HTTP(S) are subject to CORS here: the iOS editor is a
- * `file:` page with universal access, and its requests are never preflighted.
+ * Whether a request from this page to the URL is cross-origin under CORS;
+ * `file:` pages, like the iOS editor's, are exempt.
  *
  * @param {string} url The request URL.
  * @return {boolean} True when the page is HTTP(S) and the URL is cross-origin.
  */
-function isPreflighted( url ) {
+function isCrossOriginFromHttpPage( url ) {
 	const { protocol, origin, href } = window.location;
 	if ( protocol !== 'http:' && protocol !== 'https:' ) {
 		return false;
