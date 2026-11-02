@@ -261,7 +261,17 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 				for ( const type of this.#contentTypes ) {
 					headers.append( 'Content-Type', type );
 				}
-				const read = readSynchronously( sent, headers, Base );
+				let read;
+				try {
+					read = readSynchronously( sent, headers, Base );
+				} catch ( err ) {
+					warn( `Could not read a request body: ${ err?.message }` );
+					// Lets the browser fail the request, which fires its events
+					// and throws its `NetworkError`.
+					super.open( 'POST', FAILING_URL, false );
+					super.send();
+					return;
+				}
 				const type = headers.get( 'Content-Type' );
 				if ( type !== null ) {
 					super.setRequestHeader( 'Content-Type', type );
@@ -563,12 +573,17 @@ function isBlob( body ) {
  * Decoded as `x-user-defined`, each byte becomes one character: an ASCII byte
  * as itself, and the rest as U+F780 to U+F7FF.
  *
+ * Decoding takes a byte order mark at the start of the text as the encoding, and
+ * removes it, so the read starts with one extra character.
+ *
+ * A file that shrank after the page got it reads as a success with fewer bytes,
+ * so the length is checked. Otherwise a cut-off body would be sent.
+ *
  * @param {Blob|FormData}         body    The request body.
  * @param {Headers}               headers The request headers, updated in place.
  * @param {typeof XMLHttpRequest} Base    The browser's `XMLHttpRequest`.
  * @return {ArrayBuffer} The body's bytes.
- * @throws {DOMException} A `NetworkError`, as a failed synchronous request does,
- *                        when the body can't be read.
+ * @throws {Error} When the body can't be read whole.
  */
 function readSynchronously( body, headers, Base ) {
 	let blob = body;
@@ -583,24 +598,23 @@ function readSynchronously( body, headers, Base ) {
 		headers.set( 'Content-Type', blob.type );
 	}
 
-	const url = URL.createObjectURL( blob );
+	const url = URL.createObjectURL( new Blob( [ '-', blob ] ) );
 	try {
 		const reader = new Base();
 		reader.open( 'GET', url, false );
 		reader.overrideMimeType( 'text/plain; charset=x-user-defined' );
 		reader.send();
 		const text = reader.responseText;
-		const bytes = new Uint8Array( text.length );
-		for ( let i = 0; i < text.length; i++ ) {
-			bytes[ i ] = text.charCodeAt( i ) % 256;
+		if ( text.length - 1 !== blob.size ) {
+			throw new Error(
+				`Read ${ text.length - 1 } of ${ blob.size } bytes.`
+			);
+		}
+		const bytes = new Uint8Array( blob.size );
+		for ( let i = 0; i < bytes.length; i++ ) {
+			bytes[ i ] = text.charCodeAt( i + 1 ) % 256;
 		}
 		return bytes.buffer;
-	} catch ( err ) {
-		warn( `Could not read a request body: ${ err?.message }` );
-		throw new DOMException(
-			"Failed to execute 'send' on 'XMLHttpRequest': the body could not be read.",
-			'NetworkError'
-		);
 	} finally {
 		URL.revokeObjectURL( url );
 	}

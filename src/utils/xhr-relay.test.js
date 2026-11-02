@@ -292,12 +292,12 @@ describe( 'createRelayXMLHttpRequest', () => {
 			// A synchronous request can't wait for a `Blob` to be read, so the
 			// relay reads it with a synchronous request for a `blob:` URL.
 			let blobs;
-			let reads;
+			let read;
 			let Relay;
 
 			beforeEach( () => {
 				blobs = new Map();
-				reads = new Map();
+				read = undefined;
 				URL.createObjectURL = vi.fn( ( blob ) => {
 					const url = `blob:null/${ blobs.size }`;
 					blobs.set( url, blob );
@@ -314,15 +314,18 @@ describe( 'createRelayXMLHttpRequest', () => {
 
 					send( ...args ) {
 						super.send( ...args );
-						const [ , , url ] = this.calls.find(
+						const [ , , url ] = this.calls.findLast(
 							( [ name ] ) => name === 'open'
 						);
+						if ( url.startsWith( 'data:' ) ) {
+							throw new DOMException( 'failed', 'NetworkError' );
+						}
 						if ( url.startsWith( 'blob:' ) ) {
-							const read = reads.get( blobs.get( url ) ) ?? '';
 							if ( read instanceof Error ) {
 								throw read;
 							}
-							this.responseText = read;
+							this.responseText =
+								read ?? 'x'.repeat( blobs.get( url ).size );
 						}
 					}
 				}
@@ -337,9 +340,10 @@ describe( 'createRelayXMLHttpRequest', () => {
 			} );
 
 			it( 'reads a Blob before sending it, with its type', () => {
-				const body = new Blob( [ 'ignored' ], { type: 'image/png' } );
-				// What `x-user-defined` decodes the bytes 0x00 0x41 0x80 0xFF to.
-				reads.set( body, '\u0000A\uF780\uF7FF' );
+				const body = new Blob( [ 'four' ], { type: 'image/png' } );
+				// The extra first character, and what `x-user-defined` decodes
+				// the bytes 0x00 0x41 0x80 0xFF to.
+				read = '-\u0000A\uF780\uF7FF';
 
 				const xhr = new Relay();
 				xhr.open( 'POST', 'https://example.org/upload', false );
@@ -383,6 +387,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 				let multipart;
 				URL.createObjectURL.mockImplementationOnce( ( blob ) => {
 					multipart = blob;
+					blobs.set( 'blob:null/form', blob );
 					return 'blob:null/form';
 				} );
 
@@ -398,29 +403,30 @@ describe( 'createRelayXMLHttpRequest', () => {
 				)?.[ 1 ];
 				expect( boundary ).toBeDefined();
 				expect( await text( multipart ) ).toBe(
-					[
-						`--${ boundary }`,
-						'Content-Disposition: form-data; name="title"',
-						'',
-						'Hello\r\nWorld',
-						`--${ boundary }`,
-						'Content-Disposition: form-data; name="a%22b"',
-						'',
-						'x',
-						`--${ boundary }`,
-						'Content-Disposition: form-data; name="file"; filename="a.txt"',
-						'Content-Type: text/plain',
-						'',
-						'abc',
-						`--${ boundary }--`,
-						'',
-					].join( '\r\n' )
+					'-' +
+						[
+							`--${ boundary }`,
+							'Content-Disposition: form-data; name="title"',
+							'',
+							'Hello\r\nWorld',
+							`--${ boundary }`,
+							'Content-Disposition: form-data; name="a%22b"',
+							'',
+							'x',
+							`--${ boundary }`,
+							'Content-Disposition: form-data; name="file"; filename="a.txt"',
+							'Content-Type: text/plain',
+							'',
+							'abc',
+							`--${ boundary }--`,
+							'',
+						].join( '\r\n' )
 				);
 			} );
 
 			it( 'fails as a network error when the body can’t be read', () => {
 				const body = new Blob( [ 'x' ] );
-				reads.set( body, new Error( 'gone' ) );
+				read = new Error( 'gone' );
 
 				const xhr = new Relay();
 				xhr.open( 'POST', 'https://example.org/upload', false );
@@ -428,14 +434,26 @@ describe( 'createRelayXMLHttpRequest', () => {
 				expect( () => xhr.send( body ) ).toThrow(
 					expect.objectContaining( { name: 'NetworkError' } )
 				);
-				expect(
-					xhr.calls.filter(
-						( [ name, , url ] ) =>
-							name === 'open' && url.startsWith( 'blob:' )
-					)
-				).toEqual( [] );
-				expect( xhr.callsTo( 'send' ) ).toEqual( [] );
+				expect( xhr.callsTo( 'open' ).at( -1 ) ).toEqual( [
+					'POST',
+					'data:;base64,%',
+					false,
+				] );
+				expect( xhr.callsTo( 'send' ) ).toEqual( [ [] ] );
 				expect( blobs.size ).toBe( 0 );
+			} );
+
+			it( 'fails as a network error when part of the body is read', () => {
+				const body = new Blob( [ 'whole body' ] );
+				read = '-whole';
+
+				const xhr = new Relay();
+				xhr.open( 'POST', 'https://example.org/upload', false );
+
+				expect( () => xhr.send( body ) ).toThrow(
+					expect.objectContaining( { name: 'NetworkError' } )
+				);
+				expect( xhr.callsTo( 'send' ) ).toEqual( [ [] ] );
 			} );
 		} );
 
