@@ -2,6 +2,7 @@ import { useEffect } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { onEditorHistoryChanged } from '../../utils/bridge';
+import { countHistoryChanged } from '../../utils/spike-adopt-post';
 
 /**
  * Synchronizes the host's undo and redo history controls with the editor.
@@ -23,6 +24,7 @@ export function useSyncHistoryControls() {
 	}, [] );
 
 	useEffect( () => {
+		countHistoryChanged( hasUndo, hasRedo );
 		onEditorHistoryChanged( hasUndo, hasRedo );
 	}, [ hasUndo, hasRedo ] );
 }
