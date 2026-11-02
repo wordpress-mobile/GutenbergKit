@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Network
 
@@ -7,7 +8,7 @@ import Network
 /// Each request is answered by its path, with CORS headers that let a `file://` page
 /// read the response:
 ///
-/// - `/echo`: the request's method, body size and `Content-Type`, as JSON.
+/// - `/echo`: the request's method, `Content-Type`, and body size and hash, as JSON.
 /// - `/delay`: as `/echo`, after 10 seconds.
 /// - `/stall`: the headers and the start of the body, then nothing more.
 /// - `/cut`: the headers and the start of the body, then the connection closes.
@@ -152,10 +153,22 @@ final class LifecycleHTTPServer: @unchecked Sendable {
         let echo: [String: Any] = [
             "method": request.method,
             "bodyLength": request.body.count,
+            "bodyHash": Self.hash(of: request),
             "contentType": contentType ?? NSNull(),
         ]
         let body = (try? JSONSerialization.data(withJSONObject: echo, options: .sortedKeys)) ?? Data()
         send(status: 200, headers: headers.merging(["Content-Type": "application/json"]) { $1 }, body: body, on: connection)
+    }
+
+    /// The SHA-256 of the request's body. A multipart boundary is replaced first, so
+    /// two requests that differ only in their boundary have the same hash.
+    private static func hash(of request: Request) -> String {
+        var body = request.body
+        if let contentType = request.headers["content-type"],
+           let boundary = contentType.components(separatedBy: "boundary=").dropFirst().first {
+            body = body.replacing(Data(boundary.utf8), with: Data("boundary".utf8))
+        }
+        return SHA256.hash(data: body).map { String(format: "%02x", $0) }.joined()
     }
 
     private func send(status: Int, headers: [String: String], body: Data, on connection: NWConnection) {

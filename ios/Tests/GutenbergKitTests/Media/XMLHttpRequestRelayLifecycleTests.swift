@@ -41,6 +41,9 @@ struct XMLHttpRequestRelayLifecycleTests {
         "callsAfterSend",
         "synchronousGet",
         "synchronousPost",
+        "synchronousPostBlob",
+        "synchronousPostEmptyBlob",
+        "synchronousPostFormData",
         "reopenFromSynchronousLoad",
     ])
     func matchesTheBrowser(_ scenario: String) async throws {

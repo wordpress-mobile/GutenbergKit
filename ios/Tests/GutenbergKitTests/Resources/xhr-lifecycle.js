@@ -207,6 +207,34 @@ const scenarios = {
 		xhr.open( 'POST', `${ origin }/echo`, false );
 		attempt( 'send', () => xhr.send( 'a string body' ) );
 	},
+	synchronousPostBlob() {
+		// Every byte value, which is what a read could get wrong.
+		const bytes = Uint8Array.from( { length: 256 }, ( _, i ) => i );
+		xhr.open( 'POST', `${ origin }/echo`, false );
+		attempt( 'send', () =>
+			xhr.send( new Blob( [ bytes ], { type: 'image/png' } ) )
+		);
+	},
+	synchronousPostEmptyBlob() {
+		xhr.open( 'POST', `${ origin }/echo`, false );
+		attempt( 'send', () =>
+			xhr.send( new Blob( [], { type: 'image/png' } ) )
+		);
+	},
+	synchronousPostFormData() {
+		const form = new FormData();
+		form.append( 'títle\n"quoted"', 'Héllo\nWörld' );
+		form.append(
+			'file',
+			new Blob( [ new Uint8Array( [ 0, 128, 255 ] ) ], {
+				type: 'image/png',
+			} ),
+			'fíle "1".png'
+		);
+		form.append( 'unnamed', new Blob( [ 'bytes' ] ) );
+		xhr.open( 'POST', `${ origin }/echo`, false );
+		attempt( 'send', () => xhr.send( form ) );
+	},
 	reopenFromSynchronousLoad() {
 		let reopened = false;
 		xhr.addEventListener( 'load', () => {
