@@ -25,7 +25,7 @@ jobs:
             contents: read
             issues: write
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
 
             - name: Compare toolchain versions and report drift
               uses: actions/github-script@v9
