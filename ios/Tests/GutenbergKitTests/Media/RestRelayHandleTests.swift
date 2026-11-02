@@ -489,8 +489,10 @@ struct RestRelayHandleTests {
         #expect(exchange.response.status == 502)
         #expect(String(decoding: exchange.response.body, as: UTF8.self).contains("relay_redirect_refused"))
         #expect(exchange.response.header("Location") == nil)
-        // The relay answers before the upstream task has finished.
-        try await waitUntil { recorder.events.contains("completed") }
+        // The relay answers before the upstream task has finished. Answering also
+        // cancels the task, so the task ends as `failed` if the cancel gets there
+        // first, and as `completed` if it doesn't.
+        try await waitUntil { recorder.events.contains { $0 == "completed" || $0 == "failed" } }
         #expect(!recorder.events.contains("performed"), "reported the refused redirect as the answer")
     }
 
