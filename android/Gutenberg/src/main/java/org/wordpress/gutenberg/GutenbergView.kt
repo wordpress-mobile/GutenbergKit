@@ -142,7 +142,19 @@ class GutenbergView : FrameLayout {
 
     /** Web views created for new windows that have not navigated yet. */
     private val popupWebViews = mutableSetOf<WebView>()
+
+    /**
+     * How many times the editor reloaded on its own over another page, since the
+     * user last chose to reload it. A successful load doesn't reset it, so a page
+     * that replaces the editor on every load can't reload it forever.
+     */
     private var editorRestoreCount = 0
+
+    /**
+     * Whether the editor stopped reloading over other pages after
+     * [MAX_EDITOR_RESTORES], until the user chooses to reload it.
+     */
+    private var hasStoppedEditorRestores = false
 
     private val configuration: EditorConfiguration
     private lateinit var dependencies: EditorDependencies
@@ -892,7 +904,7 @@ class GutenbergView : FrameLayout {
         // on Android the editor shares an origin with the site, so the destination
         // is checked rather than assumed.
         if (!isEditorDocument(Uri.parse(url))) {
-            if (editorUri != null) restoreEditorDocument()
+            if (editorUri != null) restoreEditorDocument(url)
             return
         }
 
@@ -904,10 +916,17 @@ class GutenbergView : FrameLayout {
     }
 
     /**
-     * Loads the editor again after another page replaced it. Hosts are told the
-     * editor is unavailable until it reports itself loaded.
+     * Loads the editor again after the page at [url] replaced it. Hosts are told
+     * the editor is unavailable until it reports itself loaded.
      */
-    private fun restoreEditorDocument() {
+    private fun restoreEditorDocument(url: String) {
+        if (hasStoppedEditorRestores) {
+            // Hosts were already told, so only keep any later page out of the frame.
+            if (url != BLANK_PAGE_URL) webView.loadUrl(BLANK_PAGE_URL)
+            return
+        }
+        // Either way, the editor these reads were sent to is gone.
+        failPendingTitleAndContentReads()
         // A script that navigates on every load would otherwise reload forever.
         if (editorRestoreCount < MAX_EDITOR_RESTORES) {
             editorRestoreCount++
@@ -915,7 +934,9 @@ class GutenbergView : FrameLayout {
             loadEditorDocumentAgain()
         } else {
             Log.e(TAG, "Another page keeps replacing the editor document, so the editor stopped reloading")
-            webView.stopLoading()
+            hasStoppedEditorRestores = true
+            // Unloads the other page, which would otherwise keep running behind the notice.
+            webView.loadUrl(BLANK_PAGE_URL)
             showEditorCrashPhase()
         }
         handler.post {
@@ -1327,6 +1348,7 @@ class GutenbergView : FrameLayout {
     internal fun reloadEditor() {
         hasRecoveredAutomatically = false
         editorRestoreCount = 0
+        hasStoppedEditorRestores = false
         loadEditorDocumentAgain()
     }
 
@@ -1725,6 +1747,9 @@ class GutenbergView : FrameLayout {
 
         /** How many times the editor reloads over other pages before asking the user to reload. */
         private const val MAX_EDITOR_RESTORES = 3
+
+        /** The empty page that holds the frame once the editor stops reloading. */
+        private const val BLANK_PAGE_URL = "about:blank"
 
         /**
          * Returns [url]'s origin authority: its host, plus its port when that port

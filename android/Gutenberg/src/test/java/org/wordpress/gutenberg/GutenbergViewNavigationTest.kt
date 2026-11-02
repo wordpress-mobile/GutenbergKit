@@ -283,12 +283,56 @@ class GutenbergViewNavigationTest {
 
         repeat(3) { assertEquals("the editor should recover", editorUrl, replaceEditor()) }
 
-        assertEquals("the editor should stop reloading", pageUrl, replaceEditor())
+        assertEquals("the editor should stop reloading and unload the page", "about:blank", replaceEditor())
 
         siteView.reloadEditor()
         idle()
 
         assertEquals("the user's reload should allow recovery again", editorUrl, replaceEditor())
+    }
+
+    @Test
+    fun `onPageStarted keeps later pages out without notifying again once the editor stops reloading`() {
+        val siteView = configuredSiteView()
+        val webView = siteView.editorWebView
+        var unavailableCount = 0
+        siteView.setEditorDidBecomeUnavailable { unavailableCount++ }
+        val startPage = { url: String ->
+            webView.webViewClient.onPageStarted(webView, url, null)
+            idle()
+        }
+        repeat(4) { startPage("https://example.com/a-page/") }
+        startPage("about:blank")
+        assertEquals("each replacement notifies the host once", 4, unavailableCount)
+
+        webView.loadUrl("https://example.com/another-page/")
+        startPage("https://example.com/another-page/")
+
+        assertEquals("the host was already told", 4, unavailableCount)
+        assertEquals("the page should be unloaded again", "about:blank", shadowOf(webView).lastLoadedUrl)
+    }
+
+    @Test
+    fun `onPageStarted fails reads still waiting on the editor once it stops reloading`() {
+        val siteView = configuredSiteView()
+        val webView = siteView.editorWebView
+        repeat(3) {
+            webView.webViewClient.onPageStarted(webView, "https://example.com/a-page/", null)
+            idle()
+        }
+        siteView.onEditorLoaded()
+        idle()
+        val callback = RecordingTitleAndContentCallback()
+        siteView.getTitleAndContent("original content", callback)
+        // Robolectric's shadow WebView never invokes the ValueCallback, like a page
+        // replaced before it answers.
+        idle()
+        assertTrue("the read is still waiting", callback.errors.isEmpty())
+
+        webView.webViewClient.onPageStarted(webView, "https://example.com/a-page/", null)
+
+        assertEquals("the host is told the read failed", 1, callback.errors.size)
+        assertTrue("because the editor is not ready", callback.errors.first() is EditorNotReadyException)
     }
 
     @Test
@@ -437,5 +481,15 @@ class GutenbergViewNavigationTest {
             "a network-served page must not receive the site credential",
             shadowOf(webView).lastEvaluatedJavascript
         )
+    }
+
+    private class RecordingTitleAndContentCallback : GutenbergView.TitleAndContentCallback {
+        val errors = mutableListOf<Throwable>()
+
+        override fun onResult(title: CharSequence, content: CharSequence) = Unit
+
+        override fun onError(error: Throwable) {
+            errors += error
+        }
     }
 }
