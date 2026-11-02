@@ -90,7 +90,7 @@ class SitePreparationViewModel(
                     is ConfigurationItem.ConfiguredEditor -> loadConfiguration(configurationItem)
                 }
                 _uiState.update { it.copy(editorConfiguration = configuration) }
-                countAssetBundles()
+                countAssetBundles(createEditorService(configuration))
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Unknown error") }
             }
@@ -186,7 +186,7 @@ class SitePreparationViewModel(
                     )
                 }
 
-                countAssetBundles()
+                countAssetBundles(editorService)
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -211,7 +211,7 @@ class SitePreparationViewModel(
                 val editorService = createEditorService(configuration)
                 withContext(Dispatchers.IO) { editorService.purge() }
 
-                countAssetBundles()
+                countAssetBundles(editorService)
 
                 _uiState.update { it.copy(isLoading = false) }
             } catch (e: Exception) {
@@ -225,15 +225,9 @@ class SitePreparationViewModel(
         }
     }
 
-    private fun countAssetBundles() {
+    private fun countAssetBundles(editorService: EditorService) {
         viewModelScope.launch {
             try {
-                val configuration = _uiState.value.editorConfiguration ?: run {
-                    _uiState.update { it.copy(cacheBundleCount = 0) }
-                    return@launch
-                }
-
-                val editorService = createEditorService(configuration)
                 val count = withContext(Dispatchers.IO) { editorService.fetchAssetBundleCount() }
 
                 _uiState.update { it.copy(cacheBundleCount = count) }

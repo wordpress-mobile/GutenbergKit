@@ -26,6 +26,8 @@ import uniffi.wp_mobile.Account
 import uniffi.wp_mobile.AccountRepository
 
 class GutenbergKitApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * The [AccountRepository] is initialized off the main thread because its
      * constructor touches `filesDir` (a `getDataDir()` disk access) and loads
@@ -35,8 +37,6 @@ class GutenbergKitApplication : Application() {
      *
      * Access via [accountRepository] from a coroutine.
      */
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     private val accountRepositoryAsync: Deferred<AccountRepository> =
         applicationScope.async(start = CoroutineStart.LAZY) {
             AccountRepository(
