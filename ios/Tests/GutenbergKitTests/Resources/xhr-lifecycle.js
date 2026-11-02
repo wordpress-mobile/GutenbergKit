@@ -70,6 +70,17 @@ function callSentRequest() {
 	attempt( 'send', () => xhr.send() );
 }
 
+/**
+ * Sends a `Blob` of the bytes in a synchronous request.
+ *
+ * @param {...number} bytes The bytes.
+ */
+function postBytes( ...bytes ) {
+	const body = new Blob( [ new Uint8Array( bytes ) ], { type: 'text/csv' } );
+	xhr.open( 'POST', `${ origin }/echo`, false );
+	attempt( 'send', () => xhr.send( body ) );
+}
+
 const scenarios = {
 	get() {
 		xhr.open( 'GET', `${ origin }/echo` );
@@ -206,6 +217,86 @@ const scenarios = {
 	synchronousPost() {
 		xhr.open( 'POST', `${ origin }/echo`, false );
 		attempt( 'send', () => xhr.send( 'a string body' ) );
+	},
+	synchronousPostBlob() {
+		// Every byte value, which is what a read could get wrong.
+		const bytes = Uint8Array.from( { length: 256 }, ( _, i ) => i );
+		xhr.open( 'POST', `${ origin }/echo`, false );
+		attempt( 'send', () =>
+			xhr.send( new Blob( [ bytes ], { type: 'image/png' } ) )
+		);
+	},
+	synchronousPostEmptyBlob() {
+		xhr.open( 'POST', `${ origin }/echo`, false );
+		attempt( 'send', () =>
+			xhr.send( new Blob( [], { type: 'image/png' } ) )
+		);
+	},
+	synchronousPostFormData() {
+		const form = new FormData();
+		form.append( 'títle\n"quoted"', 'Héllo\nWörld' );
+		form.append(
+			'file',
+			new Blob( [ new Uint8Array( [ 0, 128, 255 ] ) ], {
+				type: 'image/png',
+			} ),
+			'fíle "1".png'
+		);
+		form.append( 'unnamed', new Blob( [ 'bytes' ] ) );
+		xhr.open( 'POST', `${ origin }/echo`, false );
+		attempt( 'send', () => xhr.send( form ) );
+	},
+	synchronousPostUTF8ByteOrderMark() {
+		postBytes( 0xef, 0xbb, 0xbf, 0x41 );
+	},
+	synchronousPostUTF16LittleEndianByteOrderMark() {
+		postBytes( 0xff, 0xfe, 0x41, 0x00 );
+	},
+	synchronousPostUTF16BigEndianByteOrderMark() {
+		postBytes( 0xfe, 0xff, 0x00, 0x41 );
+	},
+	synchronousPostBlobFromIframe() {
+		const frame = document.body.appendChild(
+			document.createElement( 'iframe' )
+		);
+		const { Blob: FrameBlob } = frame.contentWindow;
+		xhr.open( 'POST', `${ origin }/echo`, false );
+		attempt( 'send', () =>
+			xhr.send(
+				new FrameBlob( [ new Uint8Array( [ 0, 128, 255 ] ) ], {
+					type: 'image/png',
+				} )
+			)
+		);
+		frame.remove();
+	},
+	synchronousReadFails() {
+		// Nothing a page can do makes a `Blob` unreadable, so the relay is given
+		// a `blob:` URL that WebKit fails to read. The direct request fails to
+		// connect, as the browser's own way of failing.
+		const createObjectURL = URL.createObjectURL;
+		URL.createObjectURL = () =>
+			'blob:null/00000000-0000-0000-0000-000000000000';
+		recordUpload();
+		xhr.open( 'POST', `${ relayed ? origin : UNREACHABLE }/echo`, false );
+		attempt( 'send', () => xhr.send( new Blob( [ 'a blob body' ] ) ) );
+		URL.createObjectURL = createObjectURL;
+	},
+	reopenFromFailedSynchronousRead() {
+		const createObjectURL = URL.createObjectURL;
+		URL.createObjectURL = () =>
+			'blob:null/00000000-0000-0000-0000-000000000000';
+		let reopened = false;
+		xhr.addEventListener( 'error', () => {
+			if ( ! reopened ) {
+				reopened = true;
+				URL.createObjectURL = createObjectURL;
+				xhr.open( 'GET', `${ origin }/echo`, false );
+			}
+		} );
+		xhr.open( 'POST', `${ relayed ? origin : UNREACHABLE }/echo`, false );
+		attempt( 'send', () => xhr.send( new Blob( [ 'a blob body' ] ) ) );
+		attempt( 'second send', () => xhr.send() );
 	},
 	reopenFromSynchronousLoad() {
 		let reopened = false;

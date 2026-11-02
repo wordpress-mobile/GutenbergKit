@@ -24,6 +24,13 @@ const HEADERS_RECEIVED = 2;
  */
 const TIMEOUT_HEADER = 'X-GBK-Relay-Timeout';
 
+/**
+ * The largest body read for a synchronous request, in bytes. The read holds
+ * several times the body in memory. Failing the request is better than the
+ * system ending the web view, which the page can't catch.
+ */
+const MAX_SYNCHRONOUS_BODY = 100 * 1024 * 1024;
+
 /** The upload events the relay fires itself, which WebKit doesn't. */
 const OWN_UPLOAD_EVENTS = new WeakSet();
 
@@ -85,8 +92,10 @@ export function installXMLHttpRequestRelay() {
  *   because WebKit drops those bodies on the way to native code (see
  *   `bufferedBody`). The request starts once the body is read, so its
  *   `loadstart` comes later than `send()`. A synchronous request can't wait for
- *   the read, so its `Blob` or `FormData` body is sent as it is. An `abort()`
- *   during the read ends the request with the events an abort fires.
+ *   the read, so its body is read synchronously instead (see
+ *   `readSynchronously`), and one too large to read that way fails. An
+ *   `abort()` during an asynchronous request's read ends the request with the
+ *   events an abort fires.
  * - WebKit doesn't apply `timeout` to a request native code answers, so native
  *   code enforces it. It is read when the request is sent, so a change to it
  *   after `send()` has no effect.
@@ -249,10 +258,33 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			this.#sent = true;
 
 			if ( ! this.#async ) {
+				if ( ! isReadBeforeSending( sent ) ) {
+					for ( const type of this.#contentTypes ) {
+						super.setRequestHeader( 'Content-Type', type );
+					}
+					super.send( sent );
+					return;
+				}
+				const headers = new Headers();
 				for ( const type of this.#contentTypes ) {
+					headers.append( 'Content-Type', type );
+				}
+				let read;
+				try {
+					read = readSynchronously( sent, headers, Base );
+				} catch ( err ) {
+					warn( `Could not read a request body: ${ err?.message }` );
+					// Lets the browser fail the request, which fires its events
+					// and throws its `NetworkError`.
+					super.open( 'POST', FAILING_URL, false );
+					super.send();
+					return;
+				}
+				const type = headers.get( 'Content-Type' );
+				if ( type !== null ) {
 					super.setRequestHeader( 'Content-Type', type );
 				}
-				super.send( sent );
+				super.send( read );
 				return;
 			}
 
@@ -537,6 +569,143 @@ function isBlob( body ) {
 	return [ '[object Blob]', '[object File]' ].includes(
 		Object.prototype.toString.call( body )
 	);
+}
+
+/**
+ * A `Blob`, `File`, or `FormData` body read into an `ArrayBuffer` without
+ * waiting, for a synchronous request. Names the body's type as `bufferedBody`
+ * does.
+ *
+ * The page has no synchronous way to read a `Blob` (`FileReaderSync` exists only
+ * in workers), but a synchronous `XMLHttpRequest` for a `blob:` URL reads it.
+ * Decoded as `x-user-defined`, each byte becomes one character: an ASCII byte
+ * as itself, and the rest as U+F780 to U+F7FF.
+ *
+ * Decoding takes a byte order mark at the start of the text as the encoding, and
+ * removes it, so the read starts with one extra character.
+ *
+ * A file that shrank after the page got it reads as a success with fewer bytes,
+ * so the length is checked. Otherwise a cut-off body would be sent.
+ *
+ * @param {Blob|FormData}         body    The request body.
+ * @param {Headers}               headers The request headers, updated in place.
+ * @param {typeof XMLHttpRequest} Base    The browser's `XMLHttpRequest`.
+ * @return {ArrayBuffer} The body's bytes.
+ * @throws {Error} When the body is too large, or can't be read whole.
+ */
+function readSynchronously( body, headers, Base ) {
+	let blob = body;
+	if ( Object.prototype.toString.call( body ) === '[object FormData]' ) {
+		const boundary = formBoundary();
+		blob = multipartBody( body, boundary );
+		headers.set(
+			'Content-Type',
+			`multipart/form-data; boundary=${ boundary }`
+		);
+	} else if ( blob.type && ! headers.has( 'Content-Type' ) ) {
+		headers.set( 'Content-Type', blob.type );
+	}
+
+	if ( blob.size > MAX_SYNCHRONOUS_BODY ) {
+		throw new Error( `A ${ blob.size }-byte body is too large to read.` );
+	}
+
+	const url = URL.createObjectURL( new Blob( [ '-', blob ] ) );
+	try {
+		const reader = new Base();
+		reader.open( 'GET', url, false );
+		reader.overrideMimeType( 'text/plain; charset=x-user-defined' );
+		reader.send();
+		const text = reader.responseText;
+		if ( text.length - 1 !== blob.size ) {
+			throw new Error(
+				`Read ${ text.length - 1 } of ${ blob.size } bytes.`
+			);
+		}
+		const bytes = new Uint8Array( blob.size );
+		for ( let i = 0; i < bytes.length; i++ ) {
+			bytes[ i ] = text.charCodeAt( i + 1 ) % 256;
+		}
+		return bytes.buffer;
+	} finally {
+		URL.revokeObjectURL( url );
+	}
+}
+
+/**
+ * A multipart boundary in the form WebKit uses.
+ *
+ * @return {string} The boundary.
+ */
+function formBoundary() {
+	const characters =
+		'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+	const random = crypto.getRandomValues( new Uint8Array( 16 ) );
+	return `----WebKitFormBoundary${ Array.from(
+		random,
+		( byte ) => characters[ byte % characters.length ]
+	).join( '' ) }`;
+}
+
+/**
+ * A `FormData` serialized as `multipart/form-data`, as a `Blob` that holds its
+ * files rather than copies of them.
+ *
+ * Follows the HTML standard's multipart/form-data encoding: line breaks in
+ * names and string values become CRLF, and a name or file name escapes CR, LF
+ * and `"`.
+ *
+ * @param {FormData} formData The form data.
+ * @param {string}   boundary The boundary between its parts.
+ * @return {Blob} The serialized form data.
+ */
+function multipartBody( formData, boundary ) {
+	const parts = [];
+	for ( const [ name, value ] of formData ) {
+		parts.push(
+			`--${ boundary }\r\nContent-Disposition: form-data; name="${ escapeFormName(
+				normalizeLineBreaks( name )
+			) }"`
+		);
+		if ( typeof value === 'string' ) {
+			parts.push( `\r\n\r\n${ normalizeLineBreaks( value ) }\r\n` );
+		} else {
+			parts.push(
+				`; filename="${ escapeFormName(
+					value.name
+				) }"\r\nContent-Type: ${
+					value.type || 'application/octet-stream'
+				}\r\n\r\n`,
+				value,
+				'\r\n'
+			);
+		}
+	}
+	parts.push( `--${ boundary }--\r\n` );
+	return new Blob( parts );
+}
+
+/**
+ * A string with every lone CR or LF made a CRLF.
+ *
+ * @param {string} value The string.
+ * @return {string} The normalized string.
+ */
+function normalizeLineBreaks( value ) {
+	return value.replace( /\r(?!\n)|(?<!\r)\n/g, '\r\n' );
+}
+
+/**
+ * A form entry's name or file name, escaped for a `Content-Disposition` header.
+ *
+ * @param {string} value The name.
+ * @return {string} The escaped name.
+ */
+function escapeFormName( value ) {
+	return value
+		.replace( /\n/g, '%0A' )
+		.replace( /\r/g, '%0D' )
+		.replace( /"/g, '%22' );
 }
 
 /**
