@@ -443,6 +443,37 @@ describe( 'createRelayXMLHttpRequest', () => {
 				expect( blobs.size ).toBe( 0 );
 			} );
 
+			it( 'fails as a network error without reading a body that is too large', () => {
+				const body = new Blob( [ 'x' ] );
+				Object.defineProperty( body, 'size', {
+					value: 100 * 1024 * 1024 + 1,
+				} );
+
+				const xhr = new Relay();
+				xhr.open( 'POST', 'https://example.org/upload', false );
+
+				expect( () => xhr.send( body ) ).toThrow(
+					expect.objectContaining( { name: 'NetworkError' } )
+				);
+				expect( URL.createObjectURL ).not.toHaveBeenCalled();
+				expect( xhr.callsTo( 'send' ) ).toEqual( [ [] ] );
+			} );
+
+			it( 'reads a body of the largest size', () => {
+				const body = new Blob( [ 'x' ] );
+				Object.defineProperty( body, 'size', {
+					value: 100 * 1024 * 1024,
+				} );
+				// The fake read can't copy a body this size.
+				read = new Error( 'read' );
+
+				const xhr = new Relay();
+				xhr.open( 'POST', 'https://example.org/upload', false );
+
+				expect( () => xhr.send( body ) ).toThrow();
+				expect( URL.createObjectURL ).toHaveBeenCalledOnce();
+			} );
+
 			it( 'fails as a network error when part of the body is read', () => {
 				const body = new Blob( [ 'whole body' ] );
 				read = '-whole';

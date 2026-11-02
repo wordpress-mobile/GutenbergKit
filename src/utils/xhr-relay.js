@@ -24,6 +24,13 @@ const HEADERS_RECEIVED = 2;
  */
 const TIMEOUT_HEADER = 'X-GBK-Relay-Timeout';
 
+/**
+ * The largest body read for a synchronous request, in bytes. The read holds
+ * several times the body in memory. Failing the request is better than the
+ * system ending the web view, which the page can't catch.
+ */
+const MAX_SYNCHRONOUS_BODY = 100 * 1024 * 1024;
+
 /** The upload events the relay fires itself, which WebKit doesn't. */
 const OWN_UPLOAD_EVENTS = new WeakSet();
 
@@ -86,8 +93,9 @@ export function installXMLHttpRequestRelay() {
  *   `bufferedBody`). The request starts once the body is read, so its
  *   `loadstart` comes later than `send()`. A synchronous request can't wait for
  *   the read, so its body is read synchronously instead (see
- *   `readSynchronously`). An `abort()` during the read ends the request with
- *   the events an abort fires.
+ *   `readSynchronously`), and one too large to read that way fails. An
+ *   `abort()` during an asynchronous request's read ends the request with the
+ *   events an abort fires.
  * - WebKit doesn't apply `timeout` to a request native code answers, so native
  *   code enforces it. It is read when the request is sent, so a change to it
  *   after `send()` has no effect.
@@ -583,7 +591,7 @@ function isBlob( body ) {
  * @param {Headers}               headers The request headers, updated in place.
  * @param {typeof XMLHttpRequest} Base    The browser's `XMLHttpRequest`.
  * @return {ArrayBuffer} The body's bytes.
- * @throws {Error} When the body can't be read whole.
+ * @throws {Error} When the body is too large, or can't be read whole.
  */
 function readSynchronously( body, headers, Base ) {
 	let blob = body;
@@ -596,6 +604,10 @@ function readSynchronously( body, headers, Base ) {
 		);
 	} else if ( blob.type && ! headers.has( 'Content-Type' ) ) {
 		headers.set( 'Content-Type', blob.type );
+	}
+
+	if ( blob.size > MAX_SYNCHRONOUS_BODY ) {
+		throw new Error( `A ${ blob.size }-byte body is too large to read.` );
 	}
 
 	const url = URL.createObjectURL( new Blob( [ '-', blob ] ) );
