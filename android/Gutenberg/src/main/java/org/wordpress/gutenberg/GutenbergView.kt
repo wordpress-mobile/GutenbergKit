@@ -715,11 +715,11 @@ class GutenbergView : FrameLayout {
 
         coroutineScope.launch(Dispatchers.Main) {
             Log.i("GutenbergView", "In coroutine scope")
-            Log.i("GutenbergView", "Fetching dependencies in IO context")
             try {
                 // Creating the service and preparing it both read the disk, and
                 // creating it sets up an SSL context, so neither runs on the main thread.
                 val fetchedDependencies = withContext(Dispatchers.IO) {
+                    Log.i("GutenbergView", "Fetching dependencies in IO context")
                     val editorService = EditorService.create(
                         context = context,
                         configuration = configuration,
@@ -761,6 +761,10 @@ class GutenbergView : FrameLayout {
      * This is the shared loading path used by both flows after dependencies are available.
      */
     private fun loadEditor(dependencies: EditorDependencies) {
+        // A dependency fetch can finish after detach. The storage and cookies
+        // cleared below are shared with any other editor in the process.
+        if (isDetached) return
+
         this.dependencies = dependencies
         isWebViewBlank = false
 
@@ -836,9 +840,11 @@ class GutenbergView : FrameLayout {
      * Loading again after a renderer death keeps the server that is already running.
      */
     private fun loadEditorPage(editorUrl: String) {
-        // Fetching dependencies and clearing cookies can both finish after detach.
+        // Clearing cookies can finish after detach.
         if (isDetached) return
 
+        // Cancelling stops any server the previous load started.
+        editorPageJob?.cancel()
         editorPageJob = coroutineScope.launch(Dispatchers.Main) {
             hasStartedLoading = true
             val processor = mediaProcessor
