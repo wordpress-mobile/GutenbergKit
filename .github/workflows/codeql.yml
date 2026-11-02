@@ -55,17 +55,13 @@ jobs:
                   build-mode: manual
 
             # The :Gutenberg Gradle build generates `SupportedLocales.kt` from
-            # `src/main/assets/supported-locales.json`, which is emitted by the
-            # JS build's Vite plugin. Without it, the Gradle build fails before
-            # any Kotlin sources are extracted.
-            - name: Set up Node.js
-              uses: actions/setup-node@v7
-              with:
-                  node-version-file: '.nvmrc'
-                  cache: 'npm'
-
-            - name: Populate Android assets via JS build
-              run: make build
+            # `src/main/assets/supported-locales.json`, which is normally
+            # created by the JS build. Copying the checked-in iOS list means
+            # this job doesn't need Node or translate.wordpress.org.
+            - name: Copy supported locales list
+              run: |
+                  mkdir -p android/Gutenberg/src/main/assets
+                  cp ios/Sources/GutenbergKitResources/Gutenberg/supported-locales.json android/Gutenberg/src/main/assets/
 
             - name: Build Android project
               run: cd android && ./gradlew compileDebugSources compileDebugUnitTestSources
@@ -102,7 +98,7 @@ jobs:
             # Resolve before CodeQL starts tracing. Resolution under the tracer
             # took ~10 minutes; outside it, it takes seconds.
             - name: Resolve Swift packages
-              run: swift package resolve
+              run: xcodebuild -resolvePackageDependencies -scheme GutenbergKit-Package
 
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
@@ -110,8 +106,12 @@ jobs:
                   languages: swift
                   build-mode: manual
 
+            # Build for iOS: much of `GutenbergKit` is wrapped in
+            # `canImport(UIKit)` and compiles to nothing on macOS.
+            # `GutenbergKit-Package` also builds `GutenbergKitHTTP`, which the
+            # `GutenbergKit` scheme leaves out.
             - name: Build Swift package
-              run: swift build
+              run: xcodebuild build -scheme GutenbergKit-Package -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS=arm64 CODE_SIGNING_ALLOWED=NO
 
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v4
