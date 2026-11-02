@@ -16,13 +16,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -49,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.example.gutenbergkit.ui.theme.AppTheme
@@ -135,10 +131,6 @@ class EditorActivity : ComponentActivity() {
             AppTheme {
                 when (val load = dependenciesLoad.value) {
                     is DependenciesLoad.Loading -> DependenciesLoadingScreen()
-                    is DependenciesLoad.Failed -> DependenciesErrorScreen(
-                        message = load.message,
-                        onClose = { finish() }
-                    )
                     is DependenciesLoad.Ready -> EditorScreen(
                         configuration = configuration,
                         dependencies = load.dependencies,
@@ -158,17 +150,15 @@ class EditorActivity : ComponentActivity() {
 
     private sealed interface DependenciesLoad {
         data object Loading : DependenciesLoad
-        data class Failed(val message: String) : DependenciesLoad
         data class Ready(val dependencies: EditorDependencies?) : DependenciesLoad
     }
 
     /**
      * Reads [EditorDependencies] from the intent's [EXTRA_DEPENDENCIES_PATH]
      * off the main thread. Returns a state holder that flips from
-     * [DependenciesLoad.Loading] to [DependenciesLoad.Ready] or
-     * [DependenciesLoad.Failed]. When no path was provided, starts in
-     * [DependenciesLoad.Ready] with null dependencies (the editor will load
-     * from the network).
+     * [DependenciesLoad.Loading] to [DependenciesLoad.Ready]. When no path was
+     * provided, starts in [DependenciesLoad.Ready] with null dependencies (the
+     * editor will load from the network).
      */
     private fun loadDependenciesFromIntent(): MutableState<DependenciesLoad> {
         val path = intent.getStringExtra(EXTRA_DEPENDENCIES_PATH)
@@ -180,11 +170,10 @@ class EditorActivity : ComponentActivity() {
                 val deps = withContext(Dispatchers.IO) {
                     EditorDependenciesSerializer.readFromDisk(path)
                 }
-                state.value = if (deps != null) {
-                    DependenciesLoad.Ready(deps)
-                } else {
-                    DependenciesLoad.Failed("The editor data file was missing or could not be read.")
-                }
+                // readFromDisk deletes the file after reading, so a recreated
+                // activity or a reused path gets null. The editor then loads
+                // from the network.
+                state.value = DependenciesLoad.Ready(deps)
             }
         }
         return state
@@ -201,21 +190,6 @@ class EditorActivity : ComponentActivity() {
 private fun DependenciesLoadingScreen() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun DependenciesErrorScreen(message: String, onClose: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(24.dp)
-        ) {
-            Text("Couldn't load editor data")
-            Text(message)
-            TextButton(onClick = onClose) { Text("Close") }
-        }
     }
 }
 
