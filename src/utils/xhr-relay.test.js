@@ -121,6 +121,21 @@ class FakeXMLHttpRequest extends EventTarget {
 }
 
 /**
+ * A jsdom `Blob`'s contents as text.
+ *
+ * @param {Blob} blob The blob.
+ * @return {Promise<string>} Its text.
+ */
+function text( blob ) {
+	return new Promise( ( resolve, reject ) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve( reader.result );
+		reader.onerror = () => reject( reader.error );
+		reader.readAsText( blob );
+	} );
+}
+
+/**
  * Lets every pending body read finish, and the relay act on it.
  *
  * Waits for the reads themselves, not a set number of timer turns: a read can
@@ -273,13 +288,173 @@ describe( 'createRelayXMLHttpRequest', () => {
 			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ body ] ] );
 		} );
 
-		it( 'sends a synchronous request’s Blob as it is, since it cannot wait', () => {
-			const body = new NodeBlob( [ 'x' ] );
-			const xhr = new RelayXMLHttpRequest();
-			xhr.open( 'POST', 'https://example.org/upload', false );
-			xhr.send( body );
+		describe( 'synchronous requests', () => {
+			// A synchronous request can't wait for a `Blob` to be read, so the
+			// relay reads it with a synchronous request for a `blob:` URL.
+			let blobs;
+			let read;
+			let Relay;
 
-			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ body ] ] );
+			beforeEach( () => {
+				blobs = new Map();
+				read = undefined;
+				URL.createObjectURL = vi.fn( ( blob ) => {
+					const url = `blob:null/${ blobs.size }`;
+					blobs.set( url, blob );
+					return url;
+				} );
+				URL.revokeObjectURL = vi.fn( ( url ) => blobs.delete( url ) );
+
+				class ReadingXMLHttpRequest extends FakeXMLHttpRequest {
+					responseText = '';
+
+					overrideMimeType( type ) {
+						this.calls.push( [ 'overrideMimeType', type ] );
+					}
+
+					send( ...args ) {
+						super.send( ...args );
+						const [ , , url ] = this.calls.findLast(
+							( [ name ] ) => name === 'open'
+						);
+						if ( url.startsWith( 'data:' ) ) {
+							throw new DOMException( 'failed', 'NetworkError' );
+						}
+						if ( url.startsWith( 'blob:' ) ) {
+							if ( read instanceof Error ) {
+								throw read;
+							}
+							this.responseText =
+								read ?? 'x'.repeat( blobs.get( url ).size );
+						}
+					}
+				}
+				Relay = createRelayXMLHttpRequest( ReadingXMLHttpRequest, {
+					restRelay: REST_RELAY,
+				} );
+			} );
+
+			afterEach( () => {
+				delete URL.createObjectURL;
+				delete URL.revokeObjectURL;
+			} );
+
+			it( 'reads a Blob before sending it, with its type', () => {
+				const body = new Blob( [ 'four' ], { type: 'image/png' } );
+				// The extra first character, and what `x-user-defined` decodes
+				// the bytes 0x00 0x41 0x80 0xFF to.
+				read = '-\u0000A\uF780\uF7FF';
+
+				const xhr = new Relay();
+				xhr.open( 'POST', 'https://example.org/upload', false );
+				xhr.send( body );
+
+				const [ [ sent ] ] = xhr.callsTo( 'send' );
+				expect( Array.from( new Uint8Array( sent ) ) ).toEqual( [
+					0x00, 0x41, 0x80, 0xff,
+				] );
+				expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+					[ 'Content-Type', 'image/png' ],
+				] );
+				expect( blobs.size ).toBe( 0 );
+			} );
+
+			it( 'keeps the caller’s Content-Type for a Blob', () => {
+				const body = new Blob( [ 'x' ], { type: 'image/png' } );
+
+				const xhr = new Relay();
+				xhr.open( 'PATCH', 'https://example.org/files/abc', false );
+				xhr.setRequestHeader(
+					'Content-Type',
+					'application/offset+octet-stream'
+				);
+				xhr.send( body );
+
+				expect( xhr.callsTo( 'setRequestHeader' ) ).toEqual( [
+					[ 'Content-Type', 'application/offset+octet-stream' ],
+				] );
+			} );
+
+			it( 'serializes FormData as multipart/form-data, with its files', async () => {
+				const form = new FormData();
+				form.append( 'title', 'Hello\nWorld' );
+				form.append( 'a"b', 'x' );
+				form.append(
+					'file',
+					new Blob( [ 'abc' ], { type: 'text/plain' } ),
+					'a.txt'
+				);
+				let multipart;
+				URL.createObjectURL.mockImplementationOnce( ( blob ) => {
+					multipart = blob;
+					blobs.set( 'blob:null/form', blob );
+					return 'blob:null/form';
+				} );
+
+				const xhr = new Relay();
+				xhr.open( 'POST', 'https://example.org/upload', false );
+				// A stale type, as a caller copying headers would send.
+				xhr.setRequestHeader( 'Content-Type', 'multipart/form-data' );
+				xhr.send( form );
+
+				const [ [ , type ] ] = xhr.callsTo( 'setRequestHeader' );
+				const boundary = type.match(
+					/^multipart\/form-data; boundary=(----WebKitFormBoundary[A-Za-z0-9]{16})$/
+				)?.[ 1 ];
+				expect( boundary ).toBeDefined();
+				expect( await text( multipart ) ).toBe(
+					'-' +
+						[
+							`--${ boundary }`,
+							'Content-Disposition: form-data; name="title"',
+							'',
+							'Hello\r\nWorld',
+							`--${ boundary }`,
+							'Content-Disposition: form-data; name="a%22b"',
+							'',
+							'x',
+							`--${ boundary }`,
+							'Content-Disposition: form-data; name="file"; filename="a.txt"',
+							'Content-Type: text/plain',
+							'',
+							'abc',
+							`--${ boundary }--`,
+							'',
+						].join( '\r\n' )
+				);
+			} );
+
+			it( 'fails as a network error when the body can’t be read', () => {
+				const body = new Blob( [ 'x' ] );
+				read = new Error( 'gone' );
+
+				const xhr = new Relay();
+				xhr.open( 'POST', 'https://example.org/upload', false );
+
+				expect( () => xhr.send( body ) ).toThrow(
+					expect.objectContaining( { name: 'NetworkError' } )
+				);
+				expect( xhr.callsTo( 'open' ).at( -1 ) ).toEqual( [
+					'POST',
+					'data:;base64,%',
+					false,
+				] );
+				expect( xhr.callsTo( 'send' ) ).toEqual( [ [] ] );
+				expect( blobs.size ).toBe( 0 );
+			} );
+
+			it( 'fails as a network error when part of the body is read', () => {
+				const body = new Blob( [ 'whole body' ] );
+				read = '-whole';
+
+				const xhr = new Relay();
+				xhr.open( 'POST', 'https://example.org/upload', false );
+
+				expect( () => xhr.send( body ) ).toThrow(
+					expect.objectContaining( { name: 'NetworkError' } )
+				);
+				expect( xhr.callsTo( 'send' ) ).toEqual( [ [] ] );
+			} );
 		} );
 
 		it( 'drops the body of a GET, as XMLHttpRequest does', () => {
