@@ -22,61 +22,98 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                language: [actions, java-kotlin, javascript-typescript]
+                language: [actions, javascript-typescript]
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v4
+              uses: actions/checkout@v5
 
             - name: Initialize CodeQL
-              uses: github/codeql-action/init@v3
+              uses: github/codeql-action/init@v4
               with:
                   languages: ${{ matrix.language }}
-
-            # The :Gutenberg Gradle build generates `SupportedLocales.kt` from
-            # `src/main/assets/supported-locales.json`, which is emitted by the
-            # JS build's Vite plugin. Without it, Autobuild fails before any
-            # Kotlin sources are extracted.
-            - name: Set up Node.js
-              if: matrix.language == 'java-kotlin'
-              uses: actions/setup-node@v4
-              with:
-                  node-version-file: '.nvmrc'
-                  cache: 'npm'
-
-            - name: Populate Android assets via JS build
-              if: matrix.language == 'java-kotlin'
-              run: make build
-
-            - name: Autobuild
-              uses: github/codeql-action/autobuild@v3
+                  build-mode: none
 
             - name: Perform CodeQL Analysis
-              uses: github/codeql-action/analyze@v3
+              uses: github/codeql-action/analyze@v4
               with:
                   category: '/language:${{ matrix.language }}'
 
-    analyze-swift:
-        name: Analyze (swift)
-        runs-on: macos-15
+    analyze-kotlin:
+        name: Analyze (java-kotlin)
+        runs-on: ubuntu-latest
         timeout-minutes: 30
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v4
-
-            - name: Select Xcode
-              run: sudo xcode-select -s /Applications/Xcode_26.0.1.app/Contents/Developer
+              uses: actions/checkout@v5
 
             - name: Initialize CodeQL
-              uses: github/codeql-action/init@v3
+              uses: github/codeql-action/init@v4
               with:
-                  languages: swift
+                  languages: java-kotlin
+                  build-mode: manual
 
-            - name: Build Swift package
-              run: swift build --target GutenbergKit --target GutenbergKitHTTP
+            # The :Gutenberg Gradle build generates `SupportedLocales.kt` from
+            # `src/main/assets/supported-locales.json`, which is normally
+            # created by the JS build. Copying the checked-in iOS list means
+            # this job doesn't need Node or translate.wordpress.org.
+            - name: Copy supported locales list
+              run: |
+                  mkdir -p android/Gutenberg/src/main/assets
+                  cp ios/Sources/GutenbergKitResources/Gutenberg/supported-locales.json android/Gutenberg/src/main/assets/
+
+            - name: Build Android project
+              run: cd android && ./gradlew compileDebugSources compileDebugUnitTestSources
 
             - name: Perform CodeQL Analysis
-              uses: github/codeql-action/analyze@v3
+              uses: github/codeql-action/analyze@v4
+              with:
+                  category: '/language:java-kotlin'
+
+    analyze-swift:
+        name: Analyze (swift)
+        runs-on: macos-26
+        timeout-minutes: 45
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v5
+
+            # Match the Xcode version in `.xcode-version` used by the main CI.
+            # Xcode 27 can't be used yet: it ships Swift 6.4, and CodeQL's
+            # Swift extractor supports up to Swift 6.3.
+            - name: Select Xcode
+              run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+            - name: Cache SPM dependencies
+              uses: actions/cache@v6
+              with:
+                  path: |
+                      ~/Library/Caches/org.swift.swiftpm/repositories
+                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                  restore-keys: |
+                      spm-${{ runner.os }}-
+
+            # Resolve before CodeQL starts tracing. Resolution under the tracer
+            # took ~10 minutes; outside it, it takes seconds.
+            - name: Resolve Swift packages
+              run: xcodebuild -resolvePackageDependencies -scheme GutenbergKit-Package
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@v4
+              with:
+                  languages: swift
+                  build-mode: manual
+
+            # Build for iOS: much of `GutenbergKit` is wrapped in
+            # `canImport(UIKit)` and compiles to nothing on macOS.
+            # `GutenbergKit-Package` also builds `GutenbergKitHTTP`, which the
+            # `GutenbergKit` scheme leaves out.
+            - name: Build Swift package
+              run: xcodebuild build -scheme GutenbergKit-Package -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS=arm64 CODE_SIGNING_ALLOWED=NO
+
+            - name: Perform CodeQL Analysis
+              uses: github/codeql-action/analyze@v4
               with:
                   category: '/language:swift'
