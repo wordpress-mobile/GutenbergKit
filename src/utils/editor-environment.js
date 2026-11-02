@@ -12,6 +12,7 @@ import { initializeVideoPressAjaxBridge } from './videopress-bridge';
 import { initializeFetchInterceptor } from './fetch-interceptor';
 import { installFetchWrappers } from './fetch-chain';
 import { createRelayFetchWrapper } from './fetch-relay';
+import { installXMLHttpRequestRelay } from './xhr-relay';
 import EditorLoadError from '../components/editor-load-error';
 import { setLogLevel, error } from './logger';
 import { setUpGlobalErrorHandlers } from './global-error-handler';
@@ -31,6 +32,7 @@ export async function setUpEditorEnvironment() {
 		await awaitGBKitGlobal();
 		setLogLevelFromGBKit();
 		installFetchLayers();
+		installXMLHttpRequestRelay();
 		const isRTL = await configureLocale();
 		injectEditorStyles( isRTL );
 		configureAdminGlobals( isRTL );

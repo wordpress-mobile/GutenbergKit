@@ -83,9 +83,7 @@ export function createRelayFetch( next, { restRelay } ) {
 		const body = request
 			? request.body && ( await request.arrayBuffer() )
 			: await bufferedBody( init?.body, headers );
-		const url = encodeURIComponent( target.href );
-
-		return next( `${ restRelay.endpoint }?url=${ url }`, {
+		return next( relayURL( restRelay, target ), {
 			...init,
 			...( request && {
 				method: request.method,
@@ -124,6 +122,17 @@ function requestURL( input ) {
 }
 
 /**
+ * The relay URL that sends a request on to `target`.
+ *
+ * @param {import('./bridge').RestRelay} restRelay Where the relay is.
+ * @param {URL}                          target    The request's target.
+ * @return {string} The relay URL.
+ */
+export function relayURL( restRelay, target ) {
+	return `${ restRelay.endpoint }?url=${ encodeURIComponent( target.href ) }`;
+}
+
+/**
  * Whether a request goes through the relay: an `http` or `https` request to
  * another origin.
  *
@@ -138,7 +147,7 @@ function requestURL( input ) {
  * @param {URL} target The request's target.
  * @return {boolean} Whether to relay it.
  */
-function isRelayed( target ) {
+export function isRelayed( target ) {
 	return (
 		[ 'http:', 'https:' ].includes( target.protocol ) &&
 		target.origin !== window.location.origin &&
@@ -177,7 +186,7 @@ function isRelayed( target ) {
  * @param {Headers} headers The request headers, updated in place.
  * @return {Promise<unknown>} The body to send.
  */
-async function bufferedBody( body, headers ) {
+export async function bufferedBody( body, headers ) {
 	if ( body === undefined || body === null || typeof body === 'string' ) {
 		return body;
 	}
