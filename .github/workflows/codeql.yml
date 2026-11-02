@@ -26,7 +26,7 @@ jobs:
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v5
+              uses: actions/checkout@v7
 
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
@@ -46,7 +46,7 @@ jobs:
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v5
+              uses: actions/checkout@v7
 
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
@@ -78,7 +78,7 @@ jobs:
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v5
+              uses: actions/checkout@v7
 
             # Match the Xcode version in `.xcode-version` used by the main CI.
             # Xcode 27 can't be used yet: it ships Swift 6.4, and CodeQL's
