@@ -216,6 +216,9 @@ class AuthenticationManager(
 
                 val discoverySuccess = currentDiscoverySuccess
                     ?: throw IllegalStateException("API discovery result is not available")
+                // Clear this before storing the account suspends, so a repeated
+                // callback can't store the site twice.
+                currentDiscoverySuccess = null
                 val siteApiRoot = discoverySuccess.apiRootUrl.toURL().toString()
 
                 val account = Account.SelfHostedSite(
@@ -229,7 +232,6 @@ class AuthenticationManager(
                     repo.store(account)
                     repo.all().last()
                 }
-                currentDiscoverySuccess = null
                 withContext(Dispatchers.Main) {
                     callback.onAuthenticationSuccess(stored)
                 }
