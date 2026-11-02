@@ -9,6 +9,7 @@ import android.os.Message
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -37,14 +38,27 @@ class GutenbergViewNavigationTest {
     private val testScope = TestScope()
 
     /** A view whose configuration carries a recognizable credential. */
-    private fun configuredSiteView() = GutenbergView(
+    private fun configuredSiteView() = preparedView(
         EditorConfiguration.builder("https://example.com", "https://example.com/wp-json/")
             .setAuthHeader("Bearer secret-credential")
-            .build(),
-        EditorDependencies.empty,
-        testScope,
-        RuntimeEnvironment.getApplication()
+            .build()
     )
+
+    /**
+     * A view that has built its editor globals, as it does before loading the
+     * editor page, so `onPageStarted` has something to inject.
+     */
+    private fun preparedView(configuration: EditorConfiguration): GutenbergView {
+        val view = GutenbergView(
+            configuration,
+            EditorDependencies.empty,
+            testScope,
+            RuntimeEnvironment.getApplication()
+        )
+        view.backgroundDispatcher = Dispatchers.Unconfined
+        shadowOf(Looper.getMainLooper()).idle()
+        return view
+    }
 
     /**
      * The editor document for [siteUrl], mirroring the fallback in `loadEditor` so
@@ -421,13 +435,10 @@ class GutenbergViewNavigationTest {
     @Test
     fun `onPageStarted injects the configuration into a local http site's editor document`() {
         // A local site serves the editor over http, which the asset scheme must follow.
-        val siteView = GutenbergView(
+        val siteView = preparedView(
             EditorConfiguration.builder("http://10.0.2.2:8888", "http://10.0.2.2:8888/wp-json/")
                 .setAuthHeader("Bearer secret-credential")
-                .build(),
-            EditorDependencies.empty,
-            testScope,
-            RuntimeEnvironment.getApplication()
+                .build()
         )
         val webView = siteView.editorWebView
 

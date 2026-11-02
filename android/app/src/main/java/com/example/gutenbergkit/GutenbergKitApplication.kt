@@ -83,9 +83,9 @@ class GutenbergKitApplication : Application() {
     }
 
     private fun enableStrictMode() {
-        // ThreadPolicy only logs for now: the library still reads the disk on
-        // the main thread while the editor page loads, so penaltyDeath would
-        // crash every editor launch. Switch to penaltyDeath once #848 is fixed.
+        // A ThreadPolicy violation crashes the demo, so new main-thread disk or
+        // network work in the library fails loudly during development. The log
+        // keeps the full violation, not just the crash.
         // VmPolicy stays on penaltyLog — VM violations like
         // LeakedClosableObject fire during GC and would crash at unpredictable
         // times unrelated to the offending code path.
@@ -93,6 +93,7 @@ class GutenbergKitApplication : Application() {
             StrictMode.ThreadPolicy.Builder()
                 .detectAll()
                 .penaltyLog()
+                .penaltyDeath()
                 .build()
         )
         StrictMode.setVmPolicy(

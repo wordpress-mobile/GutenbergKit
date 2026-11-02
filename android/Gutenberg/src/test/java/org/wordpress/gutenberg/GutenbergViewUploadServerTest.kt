@@ -2,11 +2,15 @@ package org.wordpress.gutenberg
 
 import android.os.Looper
 import android.view.View
+import android.webkit.RenderProcessGoneDetail
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
@@ -21,17 +25,6 @@ import org.wordpress.gutenberg.model.EditorDependencies
 @Config(manifest = Config.NONE)
 class GutenbergViewUploadServerTest {
 
-    private companion object {
-        /**
-         * The editor document for [makeView]'s site, which the globals are scoped to.
-         *
-         * Mirrors the fallback in `loadEditor`, so this holds whether or not a local
-         * `GUTENBERG_EDITOR_URL` dev server is configured.
-         */
-        val EDITOR_URL = BuildConfig.GUTENBERG_EDITOR_URL
-            .ifEmpty { "https://example.com/assets/index.html" }
-    }
-
     private val testScope = TestScope()
 
     private fun makeView(authHeader: String = "Bearer test", siteApiRoot: String = "https://example.com/wp-json/"): GutenbergView {
@@ -44,7 +37,10 @@ class GutenbergViewUploadServerTest {
             EditorDependencies.empty,
             testScope,
             RuntimeEnvironment.getApplication()
-        )
+        ).apply {
+            // Run the pre-load setup in place, so idling the main looper finishes it.
+            backgroundDispatcher = Dispatchers.Unconfined
+        }
     }
 
     private fun uploadServerOf(view: GutenbergView): Any? {
@@ -54,18 +50,10 @@ class GutenbergViewUploadServerTest {
     }
 
     /**
-     * Invokes the private `onEditorPageStarted` hook (fired from the WebViewClient's
-     * `onPageStarted`) to simulate the editor page beginning to load — the point at
-     * which the processor is captured and the upload server starts.
+     * Lets the view finish the setup it does before loading the editor page — the
+     * point at which the processor is captured and the upload server starts.
      */
-    private fun startLoading(view: GutenbergView, url: String = EDITOR_URL) {
-        val method = GutenbergView::class.java.getDeclaredMethod(
-            "onEditorPageStarted",
-            String::class.java
-        )
-        method.isAccessible = true
-        method.invoke(view, url)
-    }
+    private fun startLoading() = idle()
 
     /** Invokes the protected `onDetachedFromWindow` lifecycle callback. */
     private fun detach(view: GutenbergView) {
@@ -76,14 +64,26 @@ class GutenbergViewUploadServerTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
+    private fun killRenderer(view: GutenbergView) {
+        val webView = view.editorWebView
+        webView.webViewClient.onRenderProcessGone(webView, mock(RenderProcessGoneDetail::class.java))
+        idle()
+    }
+
+    /** Invokes `loadEditor`, as a dependency fetch does when it finishes. */
+    private fun loadEditor(view: GutenbergView) {
+        val method = GutenbergView::class.java.getDeclaredMethod("loadEditor", EditorDependencies::class.java)
+        method.isAccessible = true
+        method.invoke(view, EditorDependencies.empty)
+    }
+
     @Test
     fun `the upload server starts when the page begins loading, capturing the processor`() {
         val view = makeView()
         try {
             // A processor provided before load is captured when the page starts.
             view.mediaProcessor = mock(MediaProcessor::class.java)
-            startLoading(view)
-            idle()
+            startLoading()
             assertNotNull(
                 "a processor provided before load should bring up the upload server",
                 uploadServerOf(view)
@@ -98,8 +98,7 @@ class GutenbergViewUploadServerTest {
         val view = makeView()
         try {
             // No processor provided — uploads should use the default WebView path.
-            startLoading(view)
-            idle()
+            startLoading()
             assertNull(
                 "with no processor, no upload server should be started",
                 uploadServerOf(view)
@@ -117,8 +116,7 @@ class GutenbergViewUploadServerTest {
             // editor has to the host's upload stack. Without this, `startUploadServer`
             // could drop the `mediaUploader` clause from its gate and stay green.
             view.mediaUploader = mock(MediaUploader::class.java)
-            startLoading(view)
-            idle()
+            startLoading()
             assertNotNull(
                 "an uploader provided before load should bring up the upload server",
                 uploadServerOf(view)
@@ -129,15 +127,18 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
-    fun `a non-editor page does not start the upload server`() {
+    fun `the editor globals advertise the upload server's port`() {
         val view = makeView()
         try {
             view.mediaProcessor = mock(MediaProcessor::class.java)
-            startLoading(view, "https://example.com/assets/support.html")
-            idle()
-            assertNull(
-                "only the editor document should bring up the upload server",
-                uploadServerOf(view)
+            startLoading()
+            val field = GutenbergView::class.java.getDeclaredField("editorGlobalsJson")
+            field.isAccessible = true
+            val globals = field.get(view) as String
+            val port = MediaUploadServer::class.java.getMethod("getPort").invoke(uploadServerOf(view))
+            assertTrue(
+                "the page should learn the port before it loads",
+                globals.contains("\"nativeUploadPort\":$port")
             )
         } finally {
             detach(view)
@@ -145,11 +146,23 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
+    fun `detaching before the page loads leaves no upload server`() {
+        val view = makeView()
+        view.mediaProcessor = mock(MediaProcessor::class.java)
+        detach(view)
+        startLoading()
+
+        assertNull(
+            "a view detached before load should never start the upload server",
+            uploadServerOf(view)
+        )
+    }
+
+    @Test
     fun `setting the uploader after the page has started loading throws`() {
         val view = makeView()
         try {
-            startLoading(view)
-            idle()
+            startLoading()
             assertThrows(IllegalStateException::class.java) {
                 view.mediaUploader = mock(MediaUploader::class.java)
             }
@@ -170,8 +183,7 @@ class GutenbergViewUploadServerTest {
             }
             // The failed assignment left nothing behind, so loading still works —
             // it just falls to the default WebView path.
-            startLoading(view)
-            idle()
+            startLoading()
             assertNull("no server should be left behind by the rejected uploader", uploadServerOf(view))
         } finally {
             detach(view)
@@ -213,8 +225,7 @@ class GutenbergViewUploadServerTest {
         val view = makeView(siteApiRoot = "example.com/wp-json/")
         try {
             view.mediaProcessor = mock(MediaProcessor::class.java)
-            startLoading(view)
-            idle()
+            startLoading()
             assertNull(
                 "a scheme-less site root should not bring up the server",
                 uploadServerOf(view)
@@ -257,8 +268,7 @@ class GutenbergViewUploadServerTest {
         val view = makeView(authHeader = "")
         try {
             view.mediaProcessor = mock(MediaProcessor::class.java)
-            startLoading(view)
-            idle()
+            startLoading()
             assertNull(
                 "a processor with no credentials should not bring up the server",
                 uploadServerOf(view)
@@ -272,8 +282,7 @@ class GutenbergViewUploadServerTest {
     fun `setting the processor after the page has started loading throws`() {
         val view = makeView()
         try {
-            startLoading(view)
-            idle()
+            startLoading()
             // The processor is captured at load; a later assignment is a programmer
             // error and must surface loudly rather than silently do nothing.
             assertThrows(IllegalStateException::class.java) {
@@ -285,11 +294,48 @@ class GutenbergViewUploadServerTest {
     }
 
     @Test
+    fun `reloading after a renderer death keeps the running upload server`() {
+        val view = makeView()
+        try {
+            view.mediaProcessor = mock(MediaProcessor::class.java)
+            startLoading()
+            val server = uploadServerOf(view)
+            view.onEditorLoaded()
+            idle()
+
+            killRenderer(view)
+
+            assertSame(
+                "a second server would replace the first one, leaving it running",
+                server,
+                uploadServerOf(view)
+            )
+        } finally {
+            detach(view)
+        }
+    }
+
+    @Test
+    fun `dependencies that arrive after detach start no upload server`() {
+        val view = makeView()
+        view.mediaProcessor = mock(MediaProcessor::class.java)
+        detach(view)
+        idle()
+
+        loadEditor(view)
+        idle()
+
+        assertNull(
+            "nothing would stop a server started after detach",
+            uploadServerOf(view)
+        )
+    }
+
+    @Test
     fun `detaching the view stops and clears the upload server`() {
         val view = makeView()
         view.mediaProcessor = mock(MediaProcessor::class.java)
-        startLoading(view)
-        idle()
+        startLoading()
         assertNotNull(uploadServerOf(view))
 
         detach(view)

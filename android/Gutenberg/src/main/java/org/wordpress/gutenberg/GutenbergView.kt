@@ -37,9 +37,13 @@ import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
@@ -183,8 +187,8 @@ class GutenbergView : FrameLayout {
      * To perform the upload yourself, set [mediaUploader] instead.
      *
      * Provide this **before the editor loads** — typically right after
-     * construction (e.g. in the `AndroidView` factory). It is captured once, when
-     * the page begins loading, and advertised to the page then; setting it
+     * construction (e.g. in the `AndroidView` factory). It is captured once, just
+     * before the page loads, and advertised to the page then; setting it
      * afterward has no effect, so the setter throws to surface the mistake.
      */
     var mediaProcessor: MediaProcessor? = null
@@ -224,16 +228,36 @@ class GutenbergView : FrameLayout {
 
     private fun lateMediaAssignmentMessage(name: String) =
         "$name must be set before the editor loads (e.g. right after construction). " +
-            "It is captured when the page begins loading; setting it afterward has no effect."
+            "It is captured before the page loads; setting it afterward has no effect."
 
     @Volatile private var uploadServer: MediaUploadServer? = null
 
     /**
-     * True once the editor page has begun loading and the upload server's
-     * configuration has been captured. After this the [mediaProcessor] can no
-     * longer take effect, so its setter throws.
+     * True once [loadEditorPage] has captured the upload server's configuration.
+     * After this the [mediaProcessor] can no longer take effect, so its setter
+     * throws.
      */
     @Volatile private var hasStartedLoading = false
+
+    /**
+     * The editor globals as JSON. [loadEditorPage] builds them before the page
+     * loads, and [onEditorPageStarted] gives them to each editor page as
+     * `window.GBKit`.
+     */
+    private var editorGlobalsJson: String? = null
+
+    /** The work [loadEditorPage] does before loading the page. Cancelled on detach. */
+    private var editorPageJob: Job? = null
+
+    /** True once the view leaves its window. Nothing would stop a server started after that. */
+    private var isDetached = false
+
+    /**
+     * Where [loadEditorPage] does its disk and network setup. Tests replace it to
+     * run that work in place.
+     */
+    @VisibleForTesting
+    internal var backgroundDispatcher: CoroutineDispatcher = Dispatchers.IO
 
     private val uploadHttpClient: okhttp3.OkHttpClient by lazy {
         // The read/write inactivity timeouts mirror URLSession's 60s
@@ -773,26 +797,32 @@ class GutenbergView : FrameLayout {
     private fun prepareAndLoadEditor() {
         Log.i("GutenbergView", "Fetching dependencies...")
 
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.Main) {
             Log.i("GutenbergView", "In coroutine scope")
-            Log.i("GutenbergView", "Fetching dependencies in IO context")
             try {
-                val editorService = EditorService.create(
-                    context = context,
-                    configuration = configuration,
-                    coroutineScope = coroutineScope
-                )
-                Log.i("GutenbergView", "Created editor service")
-                val fetchedDependencies = editorService.prepare { progress ->
-                    progressView.setProgress(progress)
+                // Creating the service and preparing it both read the disk, and
+                // creating it sets up an SSL context, so neither runs on the main thread.
+                val fetchedDependencies = withContext(Dispatchers.IO) {
+                    Log.i("GutenbergView", "Fetching dependencies in IO context")
+                    val editorService = EditorService.create(
+                        context = context,
+                        configuration = configuration,
+                        coroutineScope = coroutineScope
+                    )
+                    Log.i("GutenbergView", "Created editor service")
+                    editorService.prepare { progress ->
+                        handler.post { progressView.setProgress(progress) }
 
-                    Log.i("GutenbergView", "Progress: $progress")
+                        Log.i("GutenbergView", "Progress: $progress")
+                    }
                 }
 
                 Log.i("GutenbergView", "Finished fetching dependencies")
 
                 // Store dependencies and load the editor
                 loadEditor(fetchedDependencies)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("GutenbergView", "Failed to load dependencies", e)
                 showErrorPhase(e)
@@ -815,6 +845,10 @@ class GutenbergView : FrameLayout {
      * This is the shared loading path used by both flows after dependencies are available.
      */
     private fun loadEditor(dependencies: EditorDependencies) {
+        // A dependency fetch can finish after detach. The storage and cookies
+        // cleared below are shared with any other editor in the process.
+        if (isDetached) return
+
         this.dependencies = dependencies
         isWebViewBlank = false
 
@@ -871,6 +905,54 @@ class GutenbergView : FrameLayout {
             for (cookie in configuration.cookies) {
                 CookieManager.getInstance().setCookie(cookie.key, cookie.value)
             }
+            loadEditorPage(editorUrl)
+        }
+    }
+
+    /**
+     * Starts the upload server and builds the editor globals, then loads [editorUrl].
+     *
+     * The page needs both before its scripts run, and both read the disk. Building
+     * them here, on [backgroundDispatcher], keeps that work off the main thread.
+     * Hosts that run `StrictMode` would otherwise see violations on every launch.
+     *
+     * The work starts on a later pass of the main thread, so a [mediaProcessor] or
+     * [mediaUploader] set right after construction is still captured. The server is
+     * assigned on the main thread and stopped in [onDetachedFromWindow], so its
+     * lifecycle can't race a processor assignment.
+     *
+     * Loading again after a renderer death keeps the server that is already running.
+     */
+    private fun loadEditorPage(editorUrl: String) {
+        // Clearing cookies can finish after detach.
+        if (isDetached) return
+
+        // Cancelling stops any server the previous load started.
+        editorPageJob?.cancel()
+        editorPageJob = coroutineScope.launch(Dispatchers.Main) {
+            hasStartedLoading = true
+            val processor = mediaProcessor
+            val uploader = mediaUploader
+            val runningServer = uploadServer
+            var startedServer: MediaUploadServer? = null
+            try {
+                editorGlobalsJson = withContext(backgroundDispatcher) {
+                    val server = runningServer
+                        ?: startUploadServer(processor, uploader).also { startedServer = it }
+                    GBKitGlobal.fromConfiguration(
+                        configuration,
+                        dependencies,
+                        nativeUploadPort = server?.port,
+                        nativeUploadToken = server?.token
+                    ).toJsonString()
+                }
+            } catch (e: CancellationException) {
+                // The view was detached while the server started, so nothing else
+                // will stop it.
+                startedServer?.stop()
+                throw e
+            }
+            startedServer?.let { uploadServer = it }
             webView.loadUrl(editorUrl)
 
             Log.i("GutenbergView", "Startup Complete")
@@ -880,14 +962,8 @@ class GutenbergView : FrameLayout {
     /**
      * Invoked when any page begins loading in the main frame. Resets readiness for
      * every page and loads the editor again over any other page; for the editor
-     * document alone, starts the upload server once — capturing the
-     * [mediaProcessor] provided before load — then advertises the editor globals
-     * (including the server's port and token).
-     *
-     * Starting the server here, on the UI thread, rather than from the
-     * [mediaProcessor] setter keeps its whole lifecycle — start here, stop in
-     * [onDetachedFromWindow] — on the UI thread, so it can't race a
-     * background-thread processor assignment.
+     * document alone, advertises the editor globals (including the upload server's
+     * port and token) that [loadEditorPage] built.
      */
     private fun onEditorPageStarted(url: String?) {
         // Readiness belongs to the page: a new page, including one a reload starts,
@@ -907,11 +983,8 @@ class GutenbergView : FrameLayout {
             return
         }
 
-        if (!hasStartedLoading) {
-            hasStartedLoading = true
-            startUploadServer()
-        }
-        setGlobalJavaScriptVariables()
+        val globalsJson = editorGlobalsJson ?: return
+        webView.evaluateJavascript("window.GBKit = $globalsJson;", null)
     }
 
     /**
@@ -955,23 +1028,16 @@ class GutenbergView : FrameLayout {
         openModalDialogs.clear()
     }
 
-    private fun setGlobalJavaScriptVariables() {
-        val gbKit = GBKitGlobal.fromConfiguration(
-            configuration,
-            dependencies,
-            nativeUploadPort = uploadServer?.port,
-            nativeUploadToken = uploadServer?.token
-        )
-        val gbKitJson = gbKit.toJsonString()
-
-        webView.evaluateJavascript("window.GBKit = $gbKitJson;", null)
-    }
-
-    private fun startUploadServer() {
+    /**
+     * Starts the upload server for [processor] and [uploader], or returns null when
+     * uploads should use the default WebView path. Reads the disk, so it runs off
+     * the main thread.
+     */
+    private fun startUploadServer(processor: MediaProcessor?, uploader: MediaUploader?): MediaUploadServer? {
         // Nothing to route through the native server unless the host provided a
         // processor or an uploader — leave it down and let uploads fall to the default
         // WebView path. (Matches iOS.)
-        if (mediaProcessor == null && mediaUploader == null) return
+        if (processor == null && uploader == null) return null
 
         // An InternalMediaClient delivers GutenbergKit-owned uploads (when no uploader
         // is set) and relays the editor's media DELETEs to the configured site — every
@@ -983,7 +1049,7 @@ class GutenbergView : FrameLayout {
         //
         // Only a mediaProcessor can reach this return: a mediaUploader without
         // credentials already failed in its setter, so by here it has them.
-        if (!MediaServerCredentials.areUsable(configuration.siteApiRoot, configuration.authHeader)) return
+        if (!MediaServerCredentials.areUsable(configuration.siteApiRoot, configuration.authHeader)) return null
 
         // The editor reaches the loopback server over cleartext http://localhost. If
         // the host app's network-security config doesn't permit cleartext to
@@ -1006,27 +1072,26 @@ class GutenbergView : FrameLayout {
                     "server can't be reached from the WebView. Permit cleartext to $LOOPBACK_HOST " +
                     "in the app's network security config to enable native media processing."
             )
-            return
+            return null
         }
 
-        try {
+        return try {
             val internalClient = InternalMediaClient(
                 httpClient = uploadHttpClient,
                 siteApiRoot = configuration.siteApiRoot,
                 authHeader = configuration.authHeader,
                 siteApiNamespace = configuration.siteApiNamespace.toList()
             )
-            uploadServer = MediaUploadServer(
-                processor = mediaProcessor,
+            MediaUploadServer(
+                processor = processor,
                 internalClient = internalClient,
-                uploader = mediaUploader,
+                uploader = uploader,
                 cacheDir = context.cacheDir,
                 scope = coroutineScope
             )
-            // The page globals (including the server's port/token) are injected by
-            // onEditorPageStarted after this returns.
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start upload server", e)
+            null
         }
     }
 
@@ -1647,6 +1712,8 @@ class GutenbergView : FrameLayout {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         stopNetworkMonitoring()
+        isDetached = true
+        editorPageJob?.cancel()
         uploadServer?.stop()
         uploadServer = null
         clearConfig()
