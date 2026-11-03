@@ -57,7 +57,8 @@ export function configureApiFetch() {
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
-	apiFetch.use( blockPostWritesMiddleware );
+	// SPIKE (S1, S4): let the editor write the post.
+	void blockPostWritesMiddleware;
 	// `apiFetch.use` unshifts, so the last registration runs first. Core's media
 	// upload middleware is registered after the native one so that it runs
 	// before it, wrapping it: the native middleware handles an upload without
