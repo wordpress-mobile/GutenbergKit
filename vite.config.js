@@ -33,6 +33,13 @@ export default defineConfig( {
 		emitSupportedLocalesManifest(),
 	],
 	root: 'src',
+	server: {
+		// The demo apps, Makefile, Playwright, and wp-env CORS allowlist expect
+		// 5173. Fail when it is taken rather than silently serving elsewhere while
+		// they load another server, e.g., one from a different worktree.
+		port: 5173,
+		strictPort: true,
+	},
 	css: {
 		preprocessorOptions: {
 			scss: {

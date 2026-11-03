@@ -29,6 +29,14 @@ The file does not exist at "[path]" which is in the optimize deps directory. The
 
 You may also need to clear your browser cache to ensure no stale files are used.
 
+## Development server port is already in use
+
+**Error:** `Error: Port 5173 is already in use`
+
+Another development server, often one started from a different worktree, already holds the port. The demo apps, `make` targets, and Playwright all load `http://localhost:5173`, so the server refuses to start rather than moving to another port while they keep loading the other server's code.
+
+**Solution:** Stop the other development server, then run `make serve-dev` again. To run both at once, start the second with `npm run dev -- --port <port>` and point `GUTENBERG_EDITOR_URL` at that port. The local WordPress site only accepts cross-origin requests from port 5173, so a second server cannot use it.
+
 ## AJAX requests fail with CORS errors
 
 **Error:** `Access to XMLHttpRequest at 'https://example.com/wp-admin/admin-ajax.php' from origin 'http://localhost:5173' has been blocked by CORS policy`
