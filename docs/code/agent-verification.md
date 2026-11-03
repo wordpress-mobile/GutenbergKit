@@ -27,7 +27,7 @@ See [Demo App Sign-In](./demo-app-login.md) for the credentials the sign-in targ
 
 ## iOS
 
-Xcode's MCP tools and its `device-interaction` skill can build, run, and drive the demo app on a simulator.
+Xcode's MCP tools can build, run, and drive the demo app on a simulator; Xcode's `device-interaction` skill describes how to use them.
 
 To load the bundled editor for one run without editing the scheme, pass `{"$(inherited)": "", "GUTENBERG_EDITOR_URL": ""}` as the app's environment variables when running it with Xcode's tools.
 
