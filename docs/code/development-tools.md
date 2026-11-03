@@ -20,10 +20,10 @@ http://localhost:3000/?dev_mode
 
 The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow inspecting React components, view props and state, and debug the component tree during development. GutenbergKit supports the standalone DevTools server for both browser and native WebView debugging.
 
-1. Start the standalone DevTools server:
+1. Start the [standalone DevTools](https://www.npmjs.com/package/react-devtools), which GutenbergKit does not install for you:
 
     ```bash
-    make start-devtools
+    npx react-devtools
     ```
 
     This opens a standalone window that will display your React component tree.
