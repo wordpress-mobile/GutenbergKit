@@ -272,6 +272,10 @@ wp-env-config-android-urls: ## Report the Android emulator URL remap, or set it 
 wp-env-media-failure: ## Report the media upload failure simulation mode (set via MODE=off|recover|always)
 	@MODE=$(MODE) bash bin/wp-env-media-failure.sh
 
+.PHONY: wp-env-post-write-failure
+wp-env-post-write-failure: ## Report the post write failure simulation mode (set via MODE=off|error500|slow90s|drop|conflict; conflict takes POST=<id> [CONTENT=0])
+	@MODE=$(MODE) POST=$(POST) CONTENT=$(CONTENT) bash bin/wp-env-post-write-failure.sh
+
 ################################################################################
 # Code Quality Targets
 ################################################################################
