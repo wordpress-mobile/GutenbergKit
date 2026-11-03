@@ -178,6 +178,9 @@ steps:
           - github_commit_status:
                 context: 'Test iOS Library Simulator'
       depends_on: build
+      # A run takes a few minutes. A stalled run would otherwise hold its agent
+      # until it ended: one took 48 minutes to fail.
+      timeout_in_minutes: 20
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
