@@ -54,7 +54,7 @@ Debug builds of the Android demo app load the development server at `http://10.0
 1. Launch Android Studio and open the `android` project.
 1. Run the app on an emulator.
 
-To load a different URL, set `GUTENBERG_EDITOR_URL` in the `android/local.properties` file. To load the production build of the web app bundled with the GutenbergKit package instead, run `make build` and set the variable to an empty value. Rebuild the app after changing it.
+To load a different URL, set `GUTENBERG_EDITOR_URL` in the `android/local.properties` file. To load the production build of the web app bundled with the GutenbergKit package instead, run `make build` and set the variable to an empty value. Removing or commenting out the line restores the default, so only an empty value selects the bundled build. Rebuild the app after changing it.
 
 <details>
 <summary>Example Android local.properties</summary>

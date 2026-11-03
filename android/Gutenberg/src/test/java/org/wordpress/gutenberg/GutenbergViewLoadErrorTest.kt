@@ -126,6 +126,13 @@ class GutenbergViewLoadErrorTest {
     }
 
     @Test
+    fun `editorLoadErrorMessage names the bundled editor opt-out for a refused dev server`() {
+        val message = GutenbergView.editorLoadErrorMessage(devServer, "net::ERR_CONNECTION_REFUSED", true)
+
+        assertTrue(message.orEmpty().contains("empty GUTENBERG_EDITOR_URL="))
+    }
+
+    @Test
     fun `editorLoadErrorMessage suggests forwarding the port for a refused loopback dev server`() {
         val message = GutenbergView.editorLoadErrorMessage(
             Uri.parse("http://localhost:5173/"),

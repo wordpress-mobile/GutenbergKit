@@ -1872,9 +1872,10 @@ class GutenbergView : FrameLayout {
             val hint = when {
                 "ERR_CONNECTION_REFUSED" in reason && url.host in DEVICE_LOOPBACK_HOSTS && url.port != -1 ->
                     "Is the dev server running? Start it with \"make serve-dev\". " +
-                        "On a physical device, also run \"adb reverse tcp:${url.port} tcp:${url.port}\"."
+                        "On a physical device, also run \"adb reverse tcp:${url.port} tcp:${url.port}\". " +
+                        BUNDLED_EDITOR_HINT
                 "ERR_CONNECTION_REFUSED" in reason ->
-                    "Is the dev server running? Start it with \"make serve-dev\"."
+                    "Is the dev server running? Start it with \"make serve-dev\". $BUNDLED_EDITOR_HINT"
                 "ERR_CLEARTEXT_NOT_PERMITTED" in reason ->
                     "Allow cleartext traffic to ${url.host} in the app's network security config."
                 UNREACHABLE_HOST_ERRORS.any { it in reason } && url.host == EMULATOR_HOST_ALIAS ->
@@ -1883,12 +1884,16 @@ class GutenbergView : FrameLayout {
                 UNREACHABLE_HOST_ERRORS.any { it in reason } ->
                     "Check that this device can reach ${url.host}: its IP address, network, and firewall."
                 reason.startsWith("HTTP ") ->
-                    "Check that GUTENBERG_EDITOR_URL in local.properties points at the dev server."
+                    "Check that GUTENBERG_EDITOR_URL points at the dev server."
                 else -> null
             }
             val summary = "Couldn't load the editor from $url (${description ?: "unknown error"})."
             return listOfNotNull(summary, hint).joinToString(" ")
         }
+
+        /** Debug builds load the dev server by default, so name the opt-out where a missing server surfaces. */
+        private const val BUNDLED_EDITOR_HINT =
+            "To load the bundled editor instead, set an empty GUTENBERG_EDITOR_URL= in local.properties."
 
         /** Hosts that resolve to the device itself, which reaches the dev machine only through `adb reverse`. */
         private val DEVICE_LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1")
