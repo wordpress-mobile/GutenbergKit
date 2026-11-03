@@ -19,7 +19,8 @@ struct EditorList: View {
                     SitePreparationView(site: .bundledEditor)
                 }
             } header: {
-                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"] != nil {
+                // Mirrors `EditorViewController`, which loads the bundled editor when the value isn't a URL, e.g., empty.
+                if ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init) != nil {
                     Text("Note: Editors are using the dev server started with `make serve-dev`.")
                         .textCase(nil)
                         .font(.footnote)
