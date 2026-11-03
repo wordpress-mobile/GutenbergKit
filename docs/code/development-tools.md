@@ -56,17 +56,6 @@ The [React Developer Tools](https://react.dev/learn/react-developer-tools) allow
 
     The editor will automatically connect to the DevTools server, and your component tree will appear in the standalone window.
 
-### Troubleshooting
-
-If `npx react-devtools` fails with `Electron failed to install correctly`, Electron's install script did not run, so its app was never downloaded. This happens when npm skips install scripts that have not been approved. If you trust the script, clear the broken copy from the npx cache and run it again with Electron's script allowed:
-
-```bash
-rm -rf ~/.npm/_npx
-npx --allow-scripts=electron react-devtools
-```
-
-To approve Electron's install script for every npx and global install instead, run `npm config set allow-scripts=electron --location=user`.
-
 ## Logging Configuration
 
 The logger utility (`src/utils/logger.js`) supports different log levels that can be controlled via:
