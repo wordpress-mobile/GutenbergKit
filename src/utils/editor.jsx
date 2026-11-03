@@ -41,7 +41,9 @@ export async function initializeEditor( {
 	preferenceDispatch.set( 'core', 'editorMode', 'visual' );
 
 	registerCoreBlocks();
-	unregisterDisallowedBlocks( allowedBlockTypes );
+	// SPIKE (S2): keep `videopress/video`, which the allow list omits.
+	void unregisterDisallowedBlocks;
+	void allowedBlockTypes;
 
 	const post = await getPost();
 	await primePostEntity( post );

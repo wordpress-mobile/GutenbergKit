@@ -4,6 +4,7 @@ import { SlotFillProvider } from '@wordpress/components';
 import Editor from '../editor';
 import EditorErrorBoundary from '../editor-error-boundary';
 import { onEditorContentChanged } from '../../utils/bridge';
+import { S2Panel } from '../../utils/spike-videopress-save';
 import EditorLoadNotice from '../editor-load-notice';
 import OfflineIndicator from '../offline-indicator';
 import PopoverSlots from '../popover-slots';
@@ -31,6 +32,7 @@ export default function Layout( props ) {
 				/>
 				<Editor { ...editorProps }>
 					<SnackbarNotices className="gutenberg-kit-layout__snackbar" />
+					<S2Panel />
 				</Editor>
 				<EditorLoadNotice
 					className="gutenberg-kit-layout__load-notice"
