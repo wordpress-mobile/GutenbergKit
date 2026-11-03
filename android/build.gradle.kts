@@ -5,8 +5,14 @@ if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 
+// A `-P` property overrides local.properties, so `make` targets can choose the
+// editor source explicitly. Null when neither sets it; an empty value selects
+// the bundled editor.
+val gutenbergEditorUrl = ((findProperty("GUTENBERG_EDITOR_URL") as String?)
+    ?: localProperties.getProperty("GUTENBERG_EDITOR_URL"))?.trim()
+
 ext {
-    set("gutenbergEditorUrl", localProperties.getProperty("GUTENBERG_EDITOR_URL")?.trim() ?: "")
+    set("gutenbergEditorUrl", gutenbergEditorUrl)
 }
 
 plugins {
