@@ -221,10 +221,6 @@ serve-dev: install-web-deps ## Serve the editor from the Vite development server
 serve-dev-force: install-web-deps ## Serve the editor from the Vite development server, ignoring the cache and re-bundling
 	npm run dev:force
 
-.PHONY: start-devtools
-start-devtools: install-web-deps ## Start the React Developer Tools
-	npm run dev:tools
-
 # Credentials come from ~/.config/wp/sites, WPCOM_TOKEN or ~/.wpcom-token, never
 # a make variable, so that they stay out of shell history.
 DEMO_APP_LOGIN = ./bin/demo-app-login.sh $(if $(SITE),--site "$(SITE)") $(if $(DEVICE),--device "$(DEVICE)")
