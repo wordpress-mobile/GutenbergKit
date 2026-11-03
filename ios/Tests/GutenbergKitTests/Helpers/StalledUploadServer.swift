@@ -25,7 +25,9 @@ final class StalledUploadServer: @unchecked Sendable {
     }
 
     static func start() async throws -> StalledUploadServer {
-        let server = StalledUploadServer(listener: try NWListener(using: .tcp, on: .any))
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        let server = StalledUploadServer(listener: try NWListener(using: parameters))
         // A listener without a connection handler fails to start.
         server.listener.newConnectionHandler = { [weak server] connection in
             server?.serve(connection)

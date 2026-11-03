@@ -1315,8 +1315,9 @@ describe( 'installXMLHttpRequestRelay', () => {
 		getGBKit.mockReturnValue( { restRelay: REST_RELAY } );
 		installXMLHttpRequestRelay();
 
-		expect( Object.getOwnPropertyNames( window.XMLHttpRequest ) ).toEqual(
-			expect.not.arrayContaining( [ 'reportUploadProgress' ] )
-		);
+		// `INSTALLED` is a symbol, so it isn't listed.
+		expect(
+			Object.getOwnPropertyNames( window.XMLHttpRequest ).sort()
+		).toEqual( [ 'length', 'name', 'prototype' ] );
 	} );
 } );
