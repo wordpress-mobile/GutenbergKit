@@ -8,7 +8,7 @@ Use the narrowest check that exercises the change:
 
 -   **Web-only logic** in `src/`: run `make test-web-unit` and `make test-web-e2e`, or load the dev server (`make serve-dev`) in a browser.
 -   **Native code, the bridge, or WebView behavior**: run a demo app.
--   **The bundled editor**: run `make build` and load it instead of the dev server when the change affects the build output, asset loading, or translations. Otherwise, the dev server avoids rebuilding the app for web changes.
+-   **The bundled editor**: run `make build` and load it instead of the dev server when the change affects the build output, asset loading, translations, or network requests. On both platforms, the editor's origin differs between the two, so CORS applies differently. Otherwise, the dev server avoids rebuilding the app for web changes.
 
 See [Getting Started](./getting-started.md) for choosing the editor source on each platform.
 
@@ -27,41 +27,21 @@ See [Demo App Sign-In](./demo-app-login.md) for the credentials the sign-in targ
 
 ## iOS
 
-Xcode 27 provides an MCP server and agent skills for building, running, and driving apps on a simulator or device. Enable Xcode's tools for external agents in Xcode's _Settings_ → _Intelligence_, and keep Xcode running.
+Xcode's MCP tools and its `device-interaction` skill can build, run, and drive the demo app on a simulator.
 
-Load the tools and skills into an agent with Xcode's packaged plugin:
+To load the bundled editor for one run without editing the scheme, pass `{"$(inherited)": "", "GUTENBERG_EDITOR_URL": ""}` as the app's environment variables when running it with Xcode's tools.
 
-```bash
-# Claude Code; Xcode also packages the `codex` and `gemini` formats
-claude --plugin-dir "$(xcrun mcpbridge run-agent plugin path --plugin-format claude)"
-```
+Without Xcode's tools, `xcrun simctl` can install, launch, and screenshot the app, but not tap. `simctl launch` passes environment variables only with a `SIMCTL_CHILD_` prefix, e.g., `SIMCTL_CHILD_GUTENBERG_EDITOR_URL`.
 
-Alternatively, `xcrun mcpbridge run-agent claude` launches Claude Code with the same configuration, and `xcrun mcpbridge` alone serves the MCP tools to any MCP client.
-
-The plugin's `device-interaction` skill describes the session lifecycle: start a workspace session, install and run the app, then tap, type, and capture screenshots and the UI hierarchy. Follow its instructions to run it in a subagent.
-
-To load the bundled editor for one run without editing the scheme, pass `{"$(inherited)": "", "GUTENBERG_EDITOR_URL": ""}` as the install-and-run tool's environment variables.
-
-Without Xcode's tools, `xcodebuild` builds the app and `xcrun simctl` installs, launches, and captures screenshots of it, but cannot tap. `simctl launch` passes scheme environment variables only with a `SIMCTL_CHILD_` prefix, e.g., `SIMCTL_CHILD_GUTENBERG_EDITOR_URL`.
+Safari Web Inspector covers the editor's WebView for developers. Agents can use [ios_webkit_debug_proxy](https://github.com/google/ios-webkit-debug-proxy), pointed at the simulator's inspector socket; it speaks WebKit's protocol rather than Chrome's.
 
 ## Android
 
-Google's Android CLI (`android`, in the SDK's command-line tools) reads the screen and layout of a running app. `android init` installs its agent skills.
+Google's Android CLI (`android`) reads the layout and screen of a running app, and `android init` installs its agent skills. Build, install, and launch the demo app with:
 
 ```bash
-# Build, install, and launch the demo app
 ./android/gradlew -p android :app:installDebug
 adb shell am start -n com.example.gutenbergkit/.MainActivity
-
-# Read the layout, with each element's bounds
-android layout --flat
-
-# Capture the screen; --annotate labels the UI elements it detects
-android screen capture --output=<file>.png
-
-# Tap and type
-adb shell input tap <x> <y>
-adb shell input text '<text>'
 ```
 
 ### Editor WebView
