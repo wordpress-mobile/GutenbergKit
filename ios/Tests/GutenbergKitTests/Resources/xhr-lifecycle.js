@@ -101,10 +101,25 @@ const scenarios = {
 		xhr.open( 'POST', `${ origin }/echo` );
 		xhr.send( 'a string body' );
 	},
+	postStringWithLateUploadListener() {
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( 'a string body' );
+		// The browser fires no upload events to a listener added now.
+		recordUpload();
+	},
 	postArrayBuffer() {
 		recordUpload();
 		xhr.open( 'PUT', `${ origin }/echo` );
 		xhr.send( new Uint8Array( 300 ).fill( 7 ).buffer );
+	},
+	postBodyToStalledServer() {
+		recordUpload();
+		// `StalledUploadServer` never reads this body, so end at the first
+		// report for part of it.
+		xhr.upload.addEventListener( 'progress', () => xhr.abort() );
+		xhr.open( 'POST', `${ origin }/upload` );
+		xhr.setRequestHeader( 'Content-Type', 'application/octet-stream' );
+		xhr.send( new ArrayBuffer( 64 * 1000 * 1000 ) );
 	},
 	postEmptyString() {
 		recordUpload();
@@ -162,6 +177,28 @@ const scenarios = {
 		xhr.open( 'POST', `${ origin }/echo` );
 		xhr.send( new Blob( [ 'a blob body' ] ) );
 		xhr.abort();
+	},
+	abortWhileBlobIsReadWithLateUploadListener() {
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( new Blob( [ 'a blob body' ] ) );
+		recordUpload();
+		xhr.abort();
+	},
+	postBlobWithLateUploadListener() {
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( new Blob( [ 'a blob body' ], { type: 'text/plain' } ) );
+		// Added while the body is read, before the relay sends the request.
+		recordUpload();
+	},
+	abortAfterHeadersWithLateUploadListener() {
+		xhr.open( 'POST', `${ origin }/stall` );
+		xhr.addEventListener( 'readystatechange', () => {
+			if ( xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED ) {
+				setTimeout( () => xhr.abort(), 50 );
+			}
+		} );
+		xhr.send( new Blob( [ 'a blob body' ], { type: 'text/plain' } ) );
+		recordUpload();
 	},
 	abortWhileFormDataIsRead() {
 		recordUpload();

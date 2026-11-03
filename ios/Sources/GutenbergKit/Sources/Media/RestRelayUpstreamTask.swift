@@ -44,6 +44,9 @@ extension RestRelay {
     /// It keeps a copy of the body only when there's an observer, which gets the
     /// whole body at the end.
     ///
+    /// It reports how much of the request's body has been sent, for an
+    /// `XMLHttpRequest`'s upload `progress` events.
+    ///
     /// `@unchecked Sendable`: the mutable state is guarded by `lock`; everything
     /// else is a `let`.
     final class UpstreamTask: NSObject, URLSessionDataDelegate, @unchecked Sendable {
@@ -51,17 +54,26 @@ extension RestRelay {
         private let redirectGuard: RedirectGuard
         private let observer: (any EditorHTTPClientDelegate)?
         private let reporter: NetworkTaskReporter?
+        private let onUploadProgress: (@Sendable (_ sent: Int64, _ total: Int64) -> Void)?
 
         private let lock = NSLock()
         private var head: CheckedContinuation<URLResponse, any Error>?
         private var body: AsyncThrowingStream<Data, any Error>.Continuation?
         private var received = Data()
 
-        init(_ request: URLRequest, redirectGuard: RedirectGuard, observer: (any EditorHTTPClientDelegate)?) {
+        /// - Parameter onUploadProgress: Called with the bytes of the body sent so
+        ///   far, and the body's size, each time `URLSession` sends more of it.
+        init(
+            _ request: URLRequest,
+            redirectGuard: RedirectGuard,
+            observer: (any EditorHTTPClientDelegate)?,
+            onUploadProgress: (@Sendable (_ sent: Int64, _ total: Int64) -> Void)? = nil
+        ) {
             self.request = request
             self.redirectGuard = redirectGuard
             self.observer = observer
             self.reporter = observer.map(NetworkTaskReporter.init(reportingTo:))
+            self.onUploadProgress = onUploadProgress
         }
 
         /// Starts the request on `session`. Returns as soon as the response's
@@ -117,6 +129,16 @@ extension RestRelay {
                 return self.body
             }
             body?.yield(data)
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            didSendBodyData bytesSent: Int64,
+            totalBytesSent: Int64,
+            totalBytesExpectedToSend: Int64
+        ) {
+            onUploadProgress?(totalBytesSent, totalBytesExpectedToSend)
         }
 
         func urlSession(

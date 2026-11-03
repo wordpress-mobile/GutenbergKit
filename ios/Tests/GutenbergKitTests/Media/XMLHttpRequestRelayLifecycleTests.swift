@@ -23,6 +23,7 @@ struct XMLHttpRequestRelayLifecycleTests {
         "getJSON",
         "postString",
         "postStringWithoutUploadListener",
+        "postStringWithLateUploadListener",
         "postArrayBuffer",
         "postEmptyString",
         "postEmptyArrayBuffer",
@@ -33,6 +34,9 @@ struct XMLHttpRequestRelayLifecycleTests {
         "abortFromUploadProgress",
         "abortFromUploadLoad",
         "abortWhileBlobIsRead",
+        "abortWhileBlobIsReadWithLateUploadListener",
+        "postBlobWithLateUploadListener",
+        "abortAfterHeadersWithLateUploadListener",
         "abortWhileFormDataIsRead",
         "timeoutBeforeResponse",
         "timeoutAfterHeaders",
@@ -61,6 +65,27 @@ struct XMLHttpRequestRelayLifecycleTests {
         #expect(relayed == direct)
     }
 
+    @Test("fires upload progress for part of the body, from native code's reports")
+    func reportsProgressToThePage() async throws {
+        let page = try await LifecyclePage.shared()
+        let server = try await StalledUploadServer.start()
+        defer { server.stop() }
+
+        let record = try await page.run(
+            "postBodyToStalledServer",
+            relayed: true,
+            origin: "http://127.0.0.1:\(server.port)"
+        )
+
+        // Without a report from native code, the only `progress` is for the whole body,
+        // when the response's headers arrive.
+        let recorded = try JSONDecoder().decode(RecordedEvents.self, from: Data(record.utf8))
+        let size = 64_000_000
+        #expect(recorded.events.contains {
+            $0.hasPrefix("upload.progress ") && !$0.hasSuffix(" \(size)/\(size)")
+        })
+    }
+
     @Test("reports the request as sent only once the body is read", arguments: ["callsWhileBlobIsRead"])
     func startsAfterTheBodyIsRead(_ scenario: String) async throws {
         let page = try await LifecyclePage.shared()
@@ -86,6 +111,10 @@ struct XMLHttpRequestRelayLifecycleTests {
             #expect(relayed == direct)
         }
     }
+}
+
+private struct RecordedEvents: Decodable {
+    let events: [String]
 }
 
 /// A web view with the relay installed, shared by every scenario, and the server the
@@ -138,10 +167,11 @@ private final class LifecyclePage {
     }
 
     /// The scenario's record, as JSON.
-    func run(_ scenario: String, relayed: Bool) async throws -> String {
+    /// - Parameter origin: The server the scenario sends to, when it isn't this page's.
+    func run(_ scenario: String, relayed: Bool, origin: String? = nil) async throws -> String {
         let result = try await webView.callAsyncJavaScript(
             try Self.scenarioScript(),
-            arguments: ["scenario": scenario, "relayed": relayed, "origin": server.origin],
+            arguments: ["scenario": scenario, "relayed": relayed, "origin": origin ?? server.origin],
             in: nil,
             contentWorld: .page
         )
@@ -187,6 +217,7 @@ private final class LifecyclePage {
         const warn = () => {};
         \(modules.joined(separator: "\n"))
         window.XMLHttpRequestRelay = createRelayXMLHttpRequest( XMLHttpRequest, { restRelay } );
+        window.editor = { relayUploadProgress: reportUploadProgress };
         })()
         """
     }
