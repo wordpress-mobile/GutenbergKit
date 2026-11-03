@@ -147,7 +147,6 @@
 		}
 	},
 	"allowScripts": {
-		"electron@23.3.13": true,
 		"unrs-resolver@1.11.1": true,
 		"@parcel/watcher@2.5.0": true,
 		"fsevents@2.3.3": true,
