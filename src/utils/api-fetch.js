@@ -243,6 +243,11 @@ function tokenAuthMiddleware( options, next ) {
  * @todo Remove once the editor saves posts.
  */
 function blockPostWritesMiddleware( options, next ) {
+	// SPIKE (S6): lifting the guard at runtime matches S1's lift.
+	if ( window.__s6?.liftGuard ) {
+		return next( options );
+	}
+
 	const method = ( options.method ?? 'GET' ).toUpperCase();
 
 	if ( SAFE_METHODS.includes( method ) || ! isPostPath( options.path ) ) {

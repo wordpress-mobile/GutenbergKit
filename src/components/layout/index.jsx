@@ -7,6 +7,7 @@ import { onEditorContentChanged } from '../../utils/bridge';
 import EditorLoadNotice from '../editor-load-notice';
 import OfflineIndicator from '../offline-indicator';
 import PopoverSlots from '../popover-slots';
+import { S6Panel } from '../../utils/spike-synced-entities';
 import './style.scss';
 
 /**
@@ -20,8 +21,10 @@ import './style.scss';
 export default function Layout( props ) {
 	const { pluginLoadFailed, ...editorProps } = props;
 
+	// SPIKE (S6): the panel logs writes and lists dirty entities.
 	return (
 		<EditorErrorBoundary>
+			<S6Panel />
 			<SlotFillProvider>
 				<PopoverSlots />
 				<OfflineIndicator />
