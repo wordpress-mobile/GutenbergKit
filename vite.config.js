@@ -35,8 +35,8 @@ export default defineConfig( {
 	root: 'src',
 	server: {
 		// The demo apps, Makefile, Playwright, and wp-env CORS allowlist expect
-		// 5173. Fail when it is taken rather than silently serving elsewhere while
-		// they load another server, e.g., one from a different worktree.
+		// 5173, so fail rather than silently serve elsewhere when another server,
+		// e.g., another worktree's, holds it. `vite preview` inherits this on 4173.
 		port: 5173,
 		strictPort: true,
 	},

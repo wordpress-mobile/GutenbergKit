@@ -33,9 +33,11 @@ You may also need to clear your browser cache to ensure no stale files are used.
 
 **Error:** `Error: Port 5173 is already in use`
 
-Another development server, often one started from a different worktree, already holds the port. The demo apps, `make` targets, and Playwright all load `http://localhost:5173`, so the server refuses to start rather than moving to another port while they keep loading the other server's code.
+Another development server, often one started from a different worktree, already holds the port. The demo apps, `make` targets, and Playwright all load `http://localhost:5173`, so the server refuses to start rather than moving to another port while they keep loading the other server's code. `make serve` and `npm run preview` behave the same on port 4173.
 
-**Solution:** Stop the other development server, then run `make serve-dev` again. To run both at once, start the second with `npm run dev -- --port <port>` and point `GUTENBERG_EDITOR_URL` at that port. The local WordPress site only accepts cross-origin requests from port 5173, so a second server cannot use it.
+A server listening only on `localhost`, e.g., another project's Vite server started without `--host`, may not trigger this error yet still answer requests to `localhost:5173`. To find what holds the port, run `lsof -nP -iTCP:5173 -sTCP:LISTEN`.
+
+**Solution:** Stop the other development server, then run `make serve-dev` again. To run both at once, start the second with `npm run dev -- --port <port>` and point `GUTENBERG_EDITOR_URL` at that port when running the demo apps by hand; the `*-e2e-dev` `make` targets and Playwright still use port 5173. The local WordPress site accepts cross-origin requests only from the development (5173) and preview (4173) ports, so a second development server cannot use it.
 
 ## AJAX requests fail with CORS errors
 
