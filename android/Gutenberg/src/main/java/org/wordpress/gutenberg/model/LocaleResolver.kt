@@ -33,7 +33,7 @@ import java.util.Locale
  * by calendar or numbering system.
  *
  * The supported set is generated at build time from the JS build manifest
- * (see `:Gutenberg:generateSupportedLocales`), so the resolver and the
+ * (see `:Gutenberg:generate<Variant>SupportedLocales`), so the resolver and the
  * shipped bundles cannot drift. Dev-server builds read the bundles the dev
  * server serves instead, which may be none.
  */
