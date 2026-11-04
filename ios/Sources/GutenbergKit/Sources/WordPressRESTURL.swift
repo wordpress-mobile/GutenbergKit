@@ -10,6 +10,10 @@ enum WordPressRESTURL {
     ///
     /// Trailing slashes on the root and namespace are normalized, so an unslashed
     /// `apiRoot` or `namespace` still joins cleanly.
+    ///
+    /// A query string on `path` (e.g. `/wp/v2/media?force=true`) is kept verbatim
+    /// and joined by ``URL/appending(rawPath:)``, which merges it with `&` into a
+    /// query-based root (plain permalinks, `?rest_route=/`).
     static func namespaced(apiRoot: URL, path: String, namespace: String?) -> URL {
         guard let rawNamespace = namespace else {
             return apiRoot.appending(rawPath: path)
@@ -17,9 +21,15 @@ enum WordPressRESTURL {
 
         let namespace = rawNamespace.hasSuffix("/") ? rawNamespace : rawNamespace + "/"
 
+        // Only the route is namespaced: splitting the query on `/` too would drop
+        // empty segments from its values.
+        let queryStart = path.firstIndex(of: "?") ?? path.endIndex
+        let route = path[..<queryStart]
+        let query = path[queryStart...]
+
         // Path format is typically /prefix/version/endpoint
         // (e.g. /wp/v2/posts or /wp-block-editor/v1/settings).
-        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        let components = route.split(separator: "/", omittingEmptySubsequences: true)
         guard components.count >= 2 else {
             return apiRoot.appending(rawPath: path)
         }
@@ -33,6 +43,6 @@ enum WordPressRESTURL {
             ? "/\(prefix)/\(version)/\(namespace)"
             : "/\(prefix)/\(version)/\(namespace)\(remainder)"
 
-        return apiRoot.appending(rawPath: namespacedPath)
+        return apiRoot.appending(rawPath: namespacedPath + query)
     }
 }
