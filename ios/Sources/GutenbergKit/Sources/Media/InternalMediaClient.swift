@@ -40,21 +40,17 @@ class InternalMediaClient: @unchecked Sendable {
     /// ``WordPressRESTURL`` namespacing (so it matches every other REST URL) and
     /// carrying the original request query (e.g. `?_embed`) through to WordPress.
     ///
-    /// Query-based API roots (plain permalinks, `?rest_route=/`) are not supported
-    /// when the request carries a query: assigning `percentEncodedQuery` replaces
-    /// the root's `rest_route` value instead of merging with it.
+    /// The query joins the path, so on a query-based API root (plain permalinks,
+    /// `?rest_route=/`) it is merged with `&` after the route rather than replacing it.
     private func mediaEndpointURL(query: String, attachmentId: String? = nil) -> URL {
         let path = attachmentId.map { "/wp/v2/media/\($0)" } ?? "/wp/v2/media"
-        let base = WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: path, namespace: siteApiNamespace)
-        guard !query.isEmpty else { return base }
         // `query` is the request query as the page wrote it (leading "?"), which need
-        // not be valid in a URL, and the `percentEncodedQuery` setter traps on a
-        // character that isn't. `URLComponents(string:)` encodes those and keeps the
-        // escapes already there.
-        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
-              let parsed = URLComponents(string: query) else { return base }
-        components.percentEncodedQuery = parsed.percentEncodedQuery
-        return components.url ?? base
+        // not be valid in a URL. `URLComponents(string:)` encodes what isn't and keeps
+        // the escapes already there.
+        guard let encodedQuery = URLComponents(string: query)?.percentEncodedQuery, !encodedQuery.isEmpty else {
+            return WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: path, namespace: siteApiNamespace)
+        }
+        return WordPressRESTURL.namespaced(apiRoot: siteApiRoot, path: "\(path)?\(encodedQuery)", namespace: siteApiNamespace)
     }
 
     /// Uploads a file to `POST /wp/v2/media` as `multipart/form-data`, streaming it

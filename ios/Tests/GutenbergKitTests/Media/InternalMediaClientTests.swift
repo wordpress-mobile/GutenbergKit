@@ -556,6 +556,80 @@ struct InternalMediaClientRelayTests {
     #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/media/42?\(expected)")
   }
 
+  // A query-based root (plain permalinks) carries the route in `rest_route`, so the
+  // request query must join it with `&` rather than replace it (#563).
+  @Test(
+    "merges the upload query into each kind of API root",
+    arguments: [
+      (
+        "https://example.com/index.php?rest_route=/", [String](),
+        "https://example.com/index.php?rest_route=/wp/v2/media&_embed=wp:featuredmedia"
+      ),
+      (
+        "https://example.com/index.php?rest_route=", [],
+        "https://example.com/index.php?rest_route=/wp/v2/media&_embed=wp:featuredmedia"
+      ),
+      (
+        "https://example.com/wp-json/", [],
+        "https://example.com/wp-json/wp/v2/media?_embed=wp:featuredmedia"
+      ),
+      (
+        "https://public-api.wordpress.com/", ["sites/123/"],
+        "https://public-api.wordpress.com/wp/v2/sites/123/media?_embed=wp:featuredmedia"
+      ),
+    ]
+  )
+  func uploadQueryJoinsRoot(root: String, namespace: [String], expected: String) async throws {
+    let client = URLCapturingHTTPClient()
+    let uploader = InternalMediaClient(
+      httpClient: client, siteApiRoot: try #require(URL(string: root)), siteApiNamespace: namespace
+    )
+    let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("root-\(UUID().uuidString).jpg")
+    try Data("img".utf8).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    _ = try await uploader.upload(
+      fileURL: tempFile, mimeType: "image/jpeg", filename: "photo.jpg",
+      fields: [], query: "?_embed=wp:featuredmedia"
+    )
+
+    let url = try #require(client.lastURL)
+    #expect(url.absoluteString == expected)
+  }
+
+  @Test(
+    "merges the delete query into each kind of API root",
+    arguments: [
+      (
+        "https://example.com/index.php?rest_route=/", [String](),
+        "https://example.com/index.php?rest_route=/wp/v2/media/42&force=true"
+      ),
+      (
+        "https://example.com/index.php?rest_route=", [],
+        "https://example.com/index.php?rest_route=/wp/v2/media/42&force=true"
+      ),
+      (
+        "https://example.com/wp-json/", [],
+        "https://example.com/wp-json/wp/v2/media/42?force=true"
+      ),
+      (
+        "https://public-api.wordpress.com/", ["sites/123/"],
+        "https://public-api.wordpress.com/wp/v2/sites/123/media/42?force=true"
+      ),
+    ]
+  )
+  func deleteQueryJoinsRoot(root: String, namespace: [String], expected: String) async throws {
+    let client = URLCapturingHTTPClient()
+    let uploader = InternalMediaClient(
+      httpClient: client, siteApiRoot: try #require(URL(string: root)), siteApiNamespace: namespace
+    )
+
+    _ = try await uploader.deleteMedia(attachmentId: "42", query: "?force=true")
+
+    let url = try #require(client.lastURL)
+    #expect(url.absoluteString == expected)
+  }
+
   @Test("sends the editor's fields ahead of the file, in order, with repeated names intact")
   func sendsFieldsInOrder() async throws {
     let client = BodyCapturingHTTPClient()
