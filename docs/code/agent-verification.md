@@ -6,7 +6,7 @@ This guide covers how an AI agent, or a developer, can build, launch, drive, and
 
 Use the narrowest check that exercises the change:
 
--   **Web-only logic** in `src/`: run `make test-web-unit` and `make test-web-e2e`, or load the dev server (`make serve-dev`) in a browser.
+-   **Web-only logic** in `src/`: run `make test-web-unit` and `make test-web-e2e`, or load the dev server (`make serve-dev`) in a browser. Web E2E tests need `make wp-env-start`; see [Testing](./testing.md) for how they choose a dev server.
 -   **Native code, the bridge, or WebView behavior**: run a demo app.
 -   **The bundled editor**: run `make build` and load it instead of the dev server when the change affects the build output, asset loading, translations, or network requests. On both platforms, the editor's origin differs between the two, so CORS applies differently. Otherwise, the dev server avoids rebuilding the app for web changes.
 
@@ -44,9 +44,11 @@ Google's Android CLI (`android`) reads the layout and screen of a running app, a
 adb shell am start -n com.example.gutenbergkit/.MainActivity
 ```
 
+To load the bundled editor for one build without editing `local.properties`, run `make build`, then add `-PGUTENBERG_EDITOR_URL=` to the install command.
+
 ### Editor WebView
 
-Debug builds expose the editor's WebView over the Chrome DevTools Protocol. Developers can open `chrome://inspect` in Chrome. Agents can forward the WebView's socket and connect directly:
+Debug builds expose the editor's WebView over the Chrome DevTools Protocol once an editor is open. Developers can open `chrome://inspect` in Chrome. Agents can forward the WebView's socket and connect directly:
 
 ```bash
 # Find the socket, named after the app's process ID
