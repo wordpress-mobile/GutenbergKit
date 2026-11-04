@@ -29,8 +29,10 @@ SIMULATOR_DESTINATION := OS=latest,name=iPhone 17
 IOS_E2E_RESULT_BUNDLE := build/ios-e2e.xcresult
 
 # Override local.properties so Android test targets load the editor they name.
+# Set ANDROID_DEV_SERVER_URL to reach the dev server another way, e.g., a LAN IP from a physical device.
+ANDROID_DEV_SERVER_URL ?= http://10.0.2.2:5173/
 ANDROID_BUNDLED_EDITOR := -PGUTENBERG_EDITOR_URL=
-ANDROID_DEV_SERVER_EDITOR := -PGUTENBERG_EDITOR_URL=http://10.0.2.2:5173/
+ANDROID_DEV_SERVER_EDITOR := -PGUTENBERG_EDITOR_URL=$(ANDROID_DEV_SERVER_URL)
 
 .PHONY: help
 help: ## Display this help menu
@@ -486,7 +488,7 @@ test-android-app-e2e: ## Run Android demo app E2E tests against the production b
 	exit $$EXIT
 
 .PHONY: test-android-app-e2e-dev
-test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running)
+test-android-app-e2e-dev: ## Run Android demo app E2E tests against the Vite dev server (must be running; optional: ANDROID_DEV_SERVER_URL)
 	@if ! curl -sf http://localhost:5173 > /dev/null 2>&1; then \
 		echo "Error: Dev server is not running at http://localhost:5173"; \
 		echo "Start it first with: make serve-dev"; \
