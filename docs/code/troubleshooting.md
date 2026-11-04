@@ -45,4 +45,4 @@ A server listening only on `localhost`, e.g., another project's Vite server star
 
 This error occurs when the editor makes AJAX requests (e.g., from blocks that use `admin-ajax.php`) while running on the development server. The browser blocks these cross-origin requests because the editor runs on `localhost` while AJAX targets your WordPress site.
 
-**Solution:** AJAX functionality requires a production bundle. Build the editor assets with `make build` and test AJAX features using the demo apps without using the `GUTENBERG_EDITOR_URL` environment variable. See the [AJAX Support section](../integration.md#ajax-support) in the Integration Guide for complete configuration details.
+**Solution:** AJAX functionality requires a production bundle. Build the editor assets with `make build` and test AJAX features using the demo apps with the bundled editor: on iOS, disable the `GUTENBERG_EDITOR_URL` environment variable; on Android, set an empty `GUTENBERG_EDITOR_URL=` in `local.properties`. See the [AJAX Support section](../integration.md#ajax-support) in the Integration Guide for complete configuration details.
