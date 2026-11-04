@@ -171,6 +171,7 @@ class GutenbergViewLoadErrorTest {
 
         assertTrue(message.orEmpty().contains("only from the emulator"))
         assertTrue(message.orEmpty().contains("LAN IP address"))
+        assertTrue(message.orEmpty().contains("empty GUTENBERG_EDITOR_URL="))
     }
 
     @Test

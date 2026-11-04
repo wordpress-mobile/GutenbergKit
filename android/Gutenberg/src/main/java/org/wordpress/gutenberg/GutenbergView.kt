@@ -1880,7 +1880,7 @@ class GutenbergView : FrameLayout {
                     "Allow cleartext traffic to ${url.host} in the app's network security config."
                 UNREACHABLE_HOST_ERRORS.any { it in reason } && url.host == EMULATOR_HOST_ALIAS ->
                     "$EMULATOR_HOST_ALIAS reaches your computer only from the emulator. " +
-                        "On a physical device, use your computer's LAN IP address instead."
+                        "On a physical device, use your computer's LAN IP address instead. $BUNDLED_EDITOR_HINT"
                 UNREACHABLE_HOST_ERRORS.any { it in reason } ->
                     "Check that this device can reach ${url.host}: its IP address, network, and firewall."
                 reason.startsWith("HTTP ") ->
