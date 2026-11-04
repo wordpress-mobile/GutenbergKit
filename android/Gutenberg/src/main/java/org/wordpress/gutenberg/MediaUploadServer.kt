@@ -685,13 +685,13 @@ internal open class InternalMediaClient(
      * namespacing (so it matches every other REST URL) and carrying the original
      * request query (e.g. `?_embed`) through to WordPress.
      *
-     * Query-based API roots (plain permalinks, `?rest_route=/`) are not supported
-     * when the request carries a query: [query] is appended verbatim, so it adds a
-     * second `?` to the URL instead of merging with `&`.
+     * [query] joins the path, so on a query-based API root (plain permalinks,
+     * `?rest_route=/`) it is merged with `&` after the route rather than adding a
+     * second `?`.
      */
     private fun mediaEndpointUrl(query: String, attachmentId: String? = null): String {
         val path = if (attachmentId != null) "/wp/v2/media/$attachmentId" else "/wp/v2/media"
-        return RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), path) + query
+        return RestUrlBuilder.namespaced(siteApiRoot, siteApiNamespace.firstOrNull(), path + query)
     }
 
     /**
