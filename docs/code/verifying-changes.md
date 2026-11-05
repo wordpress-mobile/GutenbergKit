@@ -1,4 +1,4 @@
-# Agent Verification
+# Verifying Changes
 
 This guide covers how an AI agent, or a developer, can build, launch, drive, and check the demo apps to verify a change. It relies on the tools Xcode and the Android SDK provide; which agent and permissions you use is up to you.
 

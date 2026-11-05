@@ -39,7 +39,7 @@ See `docs/code/local-wordpress.md` for detailed setup instructions and troublesh
 
 ## Verifying Changes in the Demo Apps
 
-See `docs/code/agent-verification.md` for choosing between web and native checks, and for building, driving, and inspecting the iOS and Android demo apps.
+See `docs/code/verifying-changes.md` for choosing between web and native checks, and for building, driving, and inspecting the iOS and Android demo apps.
 
 ## Code Quality Standards
 
