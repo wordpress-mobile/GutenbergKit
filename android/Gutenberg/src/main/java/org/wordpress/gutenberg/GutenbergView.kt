@@ -551,6 +551,8 @@ class GutenbergView : FrameLayout {
         webView.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
 
         webView.addJavascriptInterface(this, "editorDelegate")
+        // Spike CMM-2752: foreground service around in-flight saves.
+        webView.addJavascriptInterface(SpikeS4KeepAlive(context.applicationContext, webView), "s4KeepAlive")
 
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
@@ -1806,7 +1808,8 @@ class GutenbergView : FrameLayout {
         private const val TAG = "GutenbergView"
 
         /** Hosts that are safe to serve assets over HTTP (local development only). */
-        private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
+        // Spike CMM-2752: the Mac's LAN address, for wp-env from a phone on Wi-Fi.
+        private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2", "192.168.0.212")
 
         /** Schemes of documents the WebView creates or reads itself, without a server. */
         private val LOCAL_DOCUMENT_SCHEMES = setOf("about", "blob", "data", "file")

@@ -2,8 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Spike CMM-2752: foreground service around in-flight saves. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application>
+        <service
+            android:name="org.wordpress.gutenberg.SpikeS4KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- Exposes a writeable temp-file URI to the camera app so captures can
              come back to us without the host app having to configure its own
              FileProvider. Authority is keyed off the host app's applicationId

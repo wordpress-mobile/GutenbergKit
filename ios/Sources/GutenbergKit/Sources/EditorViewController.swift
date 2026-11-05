@@ -339,8 +339,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         config.applicationNameForUserAgent = "GutenbergKit/\(GutenbergKitVersion.version)"
 
+        // Spike CMM-2752: background-task assertion around in-flight saves.
+        let spikeKeepAlive = SpikeS4KeepAlive()
+        config.userContentController.add(spikeKeepAlive, name: "s4KeepAlive")
+
         self.webView = GBWebView(frame: .zero, configuration: config)
         self.webView.scrollView.keyboardDismissMode = .interactive
+        spikeKeepAlive.webView = self.webView
 
         self.isWarmupMode = isWarmupMode
 

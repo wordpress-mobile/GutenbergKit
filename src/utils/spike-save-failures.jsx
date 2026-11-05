@@ -44,8 +44,66 @@ const s4 = {
 	base: null,
 	current: null,
 	nextId: 1,
+	// CMM-2752: ask native code to keep the app running while a save is in
+	// flight (iOS background task, Android foreground service).
+	keepAlive: false,
+	// CMM-2752: shifts the device's attempt start time, to show what rule 4's
+	// device-clock comparison does on a phone whose clock is off.
+	clockOffsetMs: 0,
 };
 window.__s4 = s4;
+
+// CMM-2752: record when the page is hidden, frozen or starved of timers, so a
+// background run shows when JavaScript stopped and resumed.
+[ 'visibilitychange', 'pagehide', 'pageshow', 'freeze', 'resume' ].forEach(
+	( type ) =>
+		document.addEventListener( type, () =>
+			log( `lifecycle: ${ type }`, {
+				visibility: document.visibilityState,
+			} )
+		)
+);
+let lastBeat = Date.now();
+setInterval( () => {
+	const now = Date.now();
+	if ( now - lastBeat > 3000 ) {
+		log( 'timer gap', {
+			ms: now - lastBeat,
+			from: new Date( lastBeat ).toISOString(),
+		} );
+	}
+	lastBeat = now;
+}, 1000 );
+
+function keepAlive( phase, attemptId ) {
+	if ( ! s4.keepAlive ) {
+		return;
+	}
+	try {
+		if ( window.webkit?.messageHandlers?.s4KeepAlive ) {
+			window.webkit.messageHandlers.s4KeepAlive.postMessage( {
+				phase,
+				attemptId,
+			} );
+		} else if ( window.s4KeepAlive ) {
+			window.s4KeepAlive[ phase ]( attemptId );
+		} else {
+			log( 'keepAlive: no native handler' );
+			return;
+		}
+		log( `keepAlive: ${ phase }`, { attemptId } );
+	} catch ( err ) {
+		log( 'keepAlive: error', { message: err?.message } );
+	}
+}
+
+/**
+ * Native code reports its keep-alive events here, with its own timestamps.
+ *
+ * @param {string} message What happened.
+ * @param {Object} data    Details.
+ */
+s4.nativeLog = ( message, data ) => log( `native: ${ message }`, data );
 
 function log( message, data ) {
 	const entry = { t: clock(), message, data };
@@ -157,7 +215,7 @@ function startAttempt( initiator, options = {} ) {
 		attemptId: `s4-${ s4.nextId++ }`,
 		initiator,
 		isAutosave: !! options.isAutosave,
-		startedAt: new Date().toISOString(),
+		startedAt: new Date( Date.now() + s4.clockOffsetMs ).toISOString(),
 		requestIssued: false,
 		hooksSucceeded: false,
 		abort: null,
@@ -287,13 +345,16 @@ export async function save( { autosave = false } = {} ) {
 
 	const attempt = startAttempt( 'host', { isAutosave: autosave } );
 	log( 'save: start', { attemptId: attempt.attemptId, autosave } );
+	keepAlive( 'begin', attempt.attemptId );
 	try {
 		await dispatch( editorStore )[ autosave ? 'autosave' : 'savePost' ]();
 	} catch ( err ) {
 		attempt.threw = err?.message ?? String( err );
 	}
 	s4.current = null;
-	return finish( attempt, ref, classify( attempt, ref ) );
+	const event = finish( attempt, ref, classify( attempt, ref ) );
+	keepAlive( 'end', attempt.attemptId );
+	return event;
 }
 
 /**
@@ -454,17 +515,26 @@ export async function reconcile() {
 	} );
 	const serverHash = hash( server.content.raw );
 	const matches = serverHash === pending.snapshotHash;
+	// Device clock against server clock: wrong when the phone's clock is off.
 	const afterStart =
 		Date.parse( `${ server.modified_gmt }Z` ) >=
 		Math.floor( Date.parse( pending.startedAt ) / 1000 ) * 1000;
+	// Server clock against server clock: the base came from the server too.
+	const changedSinceBase =
+		!! pending.baseModifiedGmt &&
+		server.modified_gmt !== pending.baseModifiedGmt;
 	const decision = {
 		attemptId: pending.attemptId,
 		serverHash,
 		snapshotHash: pending.snapshotHash,
 		serverModifiedGmt: server.modified_gmt,
+		baseModifiedGmt: pending.baseModifiedGmt,
 		startedAt: pending.startedAt,
 		matches,
 		afterStart,
+		changedSinceBase,
+		resultByDeviceClock: matches && afterStart ? 'saved' : 'dirty',
+		resultByBase: matches && changedSinceBase ? 'saved' : 'dirty',
 		result: matches && afterStart ? 'saved' : 'dirty',
 	};
 	log( 'reconcile', decision );

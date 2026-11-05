@@ -4,5 +4,7 @@
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
+        <!-- Spike CMM-2752: wp-env on the Mac's LAN address, for a phone on Wi-Fi. -->
+        <domain includeSubdomains="false">192.168.0.212</domain>
     </domain-config>
 </network-security-config>
