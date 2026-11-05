@@ -736,6 +736,65 @@ class MediaUploadServerTest {
         mockWpServer.shutdown()
     }
 
+    // A query-based root (plain permalinks) carries the route in `rest_route`, so the
+    // request query must join it with `&` rather than add a second `?` (#563).
+    @Test
+    fun `InternalMediaClient merges the upload query into each kind of API root`() {
+        val cases = listOf(
+            Triple("/index.php?rest_route=/", null, "/index.php?rest_route=/wp/v2/media&_embed=wp:featuredmedia"),
+            Triple("/index.php?rest_route=", null, "/index.php?rest_route=/wp/v2/media&_embed=wp:featuredmedia"),
+            Triple("/wp-json/", null, "/wp-json/wp/v2/media?_embed=wp:featuredmedia"),
+            Triple("/", "sites/123/", "/wp/v2/sites/123/media?_embed=wp:featuredmedia"),
+        )
+
+        for ((root, namespace, expected) in cases) {
+            val path = recordedMediaRequestPath(root, namespace) { client ->
+                client.upload(tempFolder.newFile(), "image/jpeg", "image.jpg", emptyList(), "?_embed=wp:featuredmedia")
+            }
+            assertEquals("root $root", expected, path)
+        }
+    }
+
+    @Test
+    fun `InternalMediaClient merges the delete query into each kind of API root`() {
+        val cases = listOf(
+            Triple("/index.php?rest_route=/", null, "/index.php?rest_route=/wp/v2/media/42&force=true"),
+            Triple("/index.php?rest_route=", null, "/index.php?rest_route=/wp/v2/media/42&force=true"),
+            Triple("/wp-json/", null, "/wp-json/wp/v2/media/42?force=true"),
+            Triple("/", "sites/123/", "/wp/v2/sites/123/media/42?force=true"),
+        )
+
+        for ((root, namespace, expected) in cases) {
+            val path = recordedMediaRequestPath(root, namespace) { client ->
+                client.deleteMedia("42", "?force=true")
+            }
+            assertEquals("root $root", expected, path)
+        }
+    }
+
+    /** Sends [request] through an [InternalMediaClient] for [root], returning the path WordPress received. */
+    private fun recordedMediaRequestPath(
+        root: String,
+        namespace: String?,
+        request: suspend (InternalMediaClient) -> MediaUploadResponse
+    ): String? {
+        val mockWpServer = MockWebServer()
+        mockWpServer.enqueue(MockResponse().setResponseCode(201).setBody("{}"))
+        mockWpServer.start()
+        try {
+            val client = InternalMediaClient(
+                httpClient = okhttp3.OkHttpClient(),
+                siteApiRoot = mockWpServer.url(root).toString(),
+                authHeader = "Bearer test-token",
+                siteApiNamespace = listOfNotNull(namespace)
+            )
+            runBlocking { request(client) }
+            return mockWpServer.takeRequest().path
+        } finally {
+            mockWpServer.shutdown()
+        }
+    }
+
     @Test
     fun `upload surfaces an error instead of hanging when the response body is truncated after headers`() {
         // Regression test: WordPress sends the 201 status line + headers, then the

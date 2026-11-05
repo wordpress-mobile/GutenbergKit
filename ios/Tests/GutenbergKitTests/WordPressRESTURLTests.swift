@@ -64,4 +64,26 @@ struct WordPressRESTURLTests {
     )
     #expect(url.absoluteString == "https://example.com/wp-json/wp-block-editor/v1/sites/123/settings")
   }
+
+  @Test("keeps a path query verbatim when inserting the namespace")
+  func namespacedPathQuery() {
+    let url = WordPressRESTURL.namespaced(
+      apiRoot: URL(string: "https://example.com/wp-json")!,
+      path: "/wp/v2/media/42?redirect=/a//b/",
+      namespace: "sites/123"
+    )
+    #expect(url.absoluteString == "https://example.com/wp-json/wp/v2/sites/123/media/42?redirect=/a//b/")
+  }
+
+  // MARK: - Query-based API Roots (plain permalinks)
+
+  @Test("merges the path query string into a query-based root")
+  func mergesQueryIntoQueryRoot() {
+    let url = WordPressRESTURL.namespaced(
+      apiRoot: URL(string: "https://example.com/?rest_route=/")!,
+      path: "/wp/v2/themes?context=edit&status=active",
+      namespace: "sites/123"
+    )
+    #expect(url.absoluteString == "https://example.com/?rest_route=/wp/v2/sites/123/themes&context=edit&status=active")
+  }
 }
