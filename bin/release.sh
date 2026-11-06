@@ -128,6 +128,26 @@ calculate_new_version() {
     esac
 }
 
+# Function to check that the new version's tag is not already on origin.
+# CI's validate step rejects an existing tag too, but only after this script
+# has pushed a version bump to trunk.
+check_tag_available() {
+    local tag="v$1"
+    local existing_tag
+
+    if ! existing_tag=$(git ls-remote --tags origin "refs/tags/$tag"); then
+        print_error "Unable to list tags on origin."
+        exit 1
+    fi
+
+    if [ -n "$existing_tag" ]; then
+        print_error "Tag $tag already exists on origin."
+        print_error "A release cut from another branch may not have bumped trunk's version."
+        print_error "Pass the next unreleased version explicitly, e.g. make release VERSION_TYPE=<version>"
+        exit 1
+    fi
+}
+
 # Function to validate version type
 validate_version_type() {
     local version_type=$1
@@ -341,12 +361,17 @@ main() {
     check_dependencies
     check_branch
     check_working_directory
-    print_success "Pre-flight checks passed"
-    echo
 
     # Get current version before incrementing
     local current_version=$(get_current_version)
     local new_version
+
+    # `from-git` adopts a version that is already tagged, so it has no new tag to check.
+    if [ "$version_type" != "from-git" ]; then
+        check_tag_available "$(calculate_new_version "$current_version" "$version_type")"
+    fi
+    print_success "Pre-flight checks passed"
+    echo
 
     # Execute release steps
     increment_version "$version_type"
