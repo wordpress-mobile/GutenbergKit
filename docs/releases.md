@@ -42,6 +42,7 @@ The script:
 1. Verifies you're on the `trunk` branch
 1. Checks that your working directory is clean
 1. Ensures required dependencies are installed
+1. Verifies the new version's tag does not already exist on origin (see [Releasing from another branch](#releasing-from-another-branch))
 1. Increments the version number[^1]
 1. Builds the project[^2]
 1. Commits the version bump as `chore(release): X.Y.Z`
@@ -88,6 +89,19 @@ gh release create vX.Y.Z \
 ```
 
 `--notes-start-tag` is required, and `vPREVIOUS` must be the previous **stable** release (skip any intervening prereleases). Omitting it silently restates every release back to `v0.16.0` — see [Release Notes](#release-notes).
+
+## Releasing from another branch
+
+Release from `trunk`, which should always be releasable; ship fixes by merging them to `trunk` and releasing again. Cutting a release from another branch (e.g., a fix cherry-picked onto the previous release) should be rare.
+
+The release script computes the next version from `trunk`'s `package.json`, which a release from another branch does not update. **If you publish a release from another branch, you must also open a PR to `trunk`** that sets its version files to the version you released:
+
+```bash
+npm version --no-git-tag-version X.Y.Z  # package.json, package-lock.json
+npm run generate-version                # GutenbergKitVersion.swift, GutenbergKitVersion.kt
+```
+
+If the release script stops because the new version's tag already exists, an earlier release from another branch skipped that PR. Pass the next unreleased version explicitly (e.g., `make release VERSION_TYPE=X.Y.Z`); the release commit then updates `trunk`'s version files.
 
 ## Release Notes
 
