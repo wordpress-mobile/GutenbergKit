@@ -128,6 +128,26 @@ calculate_new_version() {
     esac
 }
 
+# Function to check that the new version's tag is not already on origin.
+# CI's validate step rejects an existing tag too, but only after this script
+# has pushed a version bump to trunk.
+check_tag_available() {
+    local tag="v$1"
+    local existing_tag
+
+    if ! existing_tag=$(git ls-remote --tags origin "refs/tags/$tag"); then
+        print_error "Unable to list tags on origin."
+        exit 1
+    fi
+
+    if [ -n "$existing_tag" ]; then
+        print_error "Tag $tag already exists on origin."
+        print_error "A release cut from another branch may not have bumped trunk's version."
+        print_error "Pass the next unreleased version explicitly, e.g. make release VERSION_TYPE=<version>"
+        exit 1
+    fi
+}
+
 # Function to validate version type
 validate_version_type() {
     local version_type=$1
@@ -187,19 +207,15 @@ get_version_description() {
 # Function to increment version
 increment_version() {
     local version_type=$1
+    local new_version=$2
     local current_version=$(get_current_version)
     local version_description=$(get_version_description "$version_type")
-    local new_version
 
     print_status "Current version: $current_version"
     print_status "Incrementing version ($version_description)..."
 
     if [ "$DRY_RUN" = "true" ]; then
-        # Calculate what the new version would be
-        new_version=$(calculate_new_version "$current_version" "$version_type")
         print_success "Version would be incremented to: $new_version"
-        # Store in global variable for dry run
-        DRY_RUN_VERSION="$new_version"
         return
     fi
 
@@ -341,21 +357,30 @@ main() {
     check_dependencies
     check_branch
     check_working_directory
-    print_success "Pre-flight checks passed"
-    echo
 
     # Get current version before incrementing
     local current_version=$(get_current_version)
     local new_version
 
-    # Execute release steps
-    increment_version "$version_type"
+    # Fail explicitly: an empty version would make the tag check pass without checking anything.
+    if ! new_version=$(calculate_new_version "$current_version" "$version_type") || [ -z "$new_version" ]; then
+        print_error "Unable to calculate the new version from $current_version."
+        exit 1
+    fi
+
+    # `from-git` adopts a version that is already tagged, so it has no new tag to check.
+    if [ "$version_type" != "from-git" ]; then
+        check_tag_available "$new_version"
+    fi
+    print_success "Pre-flight checks passed"
     echo
 
-    # Get the new version
-    if [ "$DRY_RUN" = "true" ]; then
-        new_version="$DRY_RUN_VERSION"
-    else
+    # Execute release steps
+    increment_version "$version_type" "$new_version"
+    echo
+
+    # Use the version npm wrote, since that is what gets committed.
+    if [ "$DRY_RUN" != "true" ]; then
         new_version=$(get_current_version)
     fi
 
