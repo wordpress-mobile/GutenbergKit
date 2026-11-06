@@ -207,19 +207,15 @@ get_version_description() {
 # Function to increment version
 increment_version() {
     local version_type=$1
+    local new_version=$2
     local current_version=$(get_current_version)
     local version_description=$(get_version_description "$version_type")
-    local new_version
 
     print_status "Current version: $current_version"
     print_status "Incrementing version ($version_description)..."
 
     if [ "$DRY_RUN" = "true" ]; then
-        # Calculate what the new version would be
-        new_version=$(calculate_new_version "$current_version" "$version_type")
         print_success "Version would be incremented to: $new_version"
-        # Store in global variable for dry run
-        DRY_RUN_VERSION="$new_version"
         return
     fi
 
@@ -366,21 +362,25 @@ main() {
     local current_version=$(get_current_version)
     local new_version
 
+    # Fail explicitly: an empty version would make the tag check pass without checking anything.
+    if ! new_version=$(calculate_new_version "$current_version" "$version_type") || [ -z "$new_version" ]; then
+        print_error "Unable to calculate the new version from $current_version."
+        exit 1
+    fi
+
     # `from-git` adopts a version that is already tagged, so it has no new tag to check.
     if [ "$version_type" != "from-git" ]; then
-        check_tag_available "$(calculate_new_version "$current_version" "$version_type")"
+        check_tag_available "$new_version"
     fi
     print_success "Pre-flight checks passed"
     echo
 
     # Execute release steps
-    increment_version "$version_type"
+    increment_version "$version_type" "$new_version"
     echo
 
-    # Get the new version
-    if [ "$DRY_RUN" = "true" ]; then
-        new_version="$DRY_RUN_VERSION"
-    else
+    # Use the version npm wrote, since that is what gets committed.
+    if [ "$DRY_RUN" != "true" ]; then
         new_version=$(get_current_version)
     fi
 
