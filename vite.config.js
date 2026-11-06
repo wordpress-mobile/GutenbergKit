@@ -33,6 +33,13 @@ export default defineConfig( {
 		emitSupportedLocalesManifest(),
 	],
 	root: 'src',
+	server: {
+		// The demo apps, Makefile, Playwright, and wp-env CORS allowlist expect
+		// 5173, so fail rather than silently serve elsewhere when another server,
+		// e.g., another worktree's, holds it. `vite preview` inherits this on 4173.
+		port: 5173,
+		strictPort: true,
+	},
 	css: {
 		preprocessorOptions: {
 			scss: {
