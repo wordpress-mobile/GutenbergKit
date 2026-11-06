@@ -64,7 +64,8 @@ jobs:
                   cp ios/Sources/GutenbergKitResources/Gutenberg/supported-locales.json android/Gutenberg/src/main/assets/
 
             - name: Build Android project
-              run: cd android && ./gradlew compileDebugSources compileDebugUnitTestSources
+              # An empty editor URL compiles the bundled editor, which ships, rather than the dev server default.
+              run: cd android && ./gradlew compileDebugSources compileDebugUnitTestSources -PGUTENBERG_EDITOR_URL=
 
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v4

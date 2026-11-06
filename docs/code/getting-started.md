@@ -48,21 +48,25 @@ Alternatively, you can load a production build of the web app bundled with the G
 
 ### Android
 
-The Android demo app loads the production build of the web app bundled with the GutenbergKit package by default—i.e., the output of the project's `make build` command. It can be configured to load the development server by setting a `GUTENBERG_EDITOR_URL` environment variable in the `android/local.properties` file.
+Debug builds of the Android demo app load the development server at `http://10.0.2.2:5173/` by default.
 
 1. Start the development server by running `make serve-dev`.
 1. Launch Android Studio and open the `android` project.
-1. Modify the `android/local.properties` file to include an environment variable named `GUTENBERG_EDITOR_URL` with the development server URL.
 1. Run the app on an emulator.
+
+To load a different URL, set `GUTENBERG_EDITOR_URL` in the `android/local.properties` file. To load the production build of the web app bundled with the GutenbergKit package instead, run `make build` and set the variable to an empty value. Removing or commenting out the line restores the default, so only an empty value selects the bundled build. Rebuild the app after changing it.
 
 <details>
 <summary>Example Android local.properties</summary>
 
 ```
-GUTENBERG_EDITOR_URL=http://10.0.2.2:5173/
+# Load the bundled production build
+GUTENBERG_EDITOR_URL=
 ```
 
 </details>
+
+Release builds, and host apps that include a local GutenbergKit checkout, load the bundled build unless `GUTENBERG_EDITOR_URL` is set.
 
 > [!NOTE]
 > Android emulators route `http://10.0.2.2` to the host machine's IP address, allowing easy access to the development server from the emulator. For iOS simulators, the localhost URL is `http://localhost`. Appending the correct Vite development server port is required, which Vite logs when starting the server.

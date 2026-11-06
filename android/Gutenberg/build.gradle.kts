@@ -1,3 +1,5 @@
+import com.android.build.api.variant.BuildConfigField
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.compose)
@@ -6,18 +8,34 @@ plugins {
     id("com.automattic.android.publish-to-s3")
 }
 
-val generateSupportedLocales = tasks.register<GenerateSupportedLocales>("generateSupportedLocales") {
-    description = "Generates SupportedLocales.kt from the shipped translation manifest."
-    group = "build"
+val configuredEditorUrl = rootProject.ext["gutenbergEditorUrl"] as String?
 
-    manifest.from(layout.projectDirectory.file("src/main/assets/supported-locales.json"))
-    devServer.set((rootProject.ext["gutenbergEditorUrl"] as? String).orEmpty().isNotEmpty())
-    devServerTranslations.from(
-        rootProject.fileTree("../src/translations") { include("*.json") }
-    )
-}
+// Debug builds default to the Vite dev server, as the iOS demo app's scheme does.
+// Release builds, which are published, and builds that include GutenbergKit from
+// another project, e.g., a host app's local checkout, default to the bundled editor.
+fun editorUrlFor(buildType: String?): String = configuredEditorUrl
+    ?: if (buildType == "debug" && gradle.parent == null) "http://10.0.2.2:5173/" else ""
 
 androidComponents.onVariants { variant ->
+    val editorUrl = editorUrlFor(variant.buildType)
+    variant.buildConfigFields?.put(
+        "GUTENBERG_EDITOR_URL",
+        BuildConfigField("String", "\"$editorUrl\"", "Vite dev server URL; empty loads the bundled editor.")
+    )
+
+    val generateSupportedLocales = tasks.register<GenerateSupportedLocales>(
+        "generate${variant.name.replaceFirstChar { it.uppercase() }}SupportedLocales"
+    ) {
+        description = "Generates SupportedLocales.kt from the shipped translation manifest."
+        group = "build"
+
+        manifest.from(layout.projectDirectory.file("src/main/assets/supported-locales.json"))
+        devServer.set(editorUrl.isNotEmpty())
+        devServerTranslations.from(
+            rootProject.fileTree("../src/translations") { include("*.json") }
+        )
+    }
+
     val kotlinSources = checkNotNull(variant.sources.kotlin) {
         "Variant ${variant.name} has no Kotlin sources to add SupportedLocales to"
     }
@@ -58,12 +76,6 @@ android {
 
     defaultConfig {
         minSdk = 24
-
-        buildConfigField(
-            "String",
-            "GUTENBERG_EDITOR_URL",
-            "\"${rootProject.ext["gutenbergEditorUrl"] ?: ""}\""
-        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         configureBuildkiteTestCollector(
