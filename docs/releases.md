@@ -94,7 +94,7 @@ gh release create vX.Y.Z \
 
 Release from `trunk`, which should always be releasable; ship fixes by merging them to `trunk` and releasing again. Cutting a release from another branch (e.g., a fix cherry-picked onto the previous release) should be rare.
 
-The release script computes the next version from `trunk`'s `package.json`, which a release from another branch does not update. **If you publish a release from another branch, you must also open a PR to `trunk`** that sets its version files to the version you released:
+The release script computes the next version from `trunk`'s `package.json`, which a release from another branch does not update. **If you publish a release from another branch, you must also open a PR to `trunk`** that sets its version files to the version you released. Skip the PR if `trunk`'s version is already higher, since setting it would move `trunk` backwards:
 
 ```bash
 npm version --no-git-tag-version X.Y.Z  # package.json, package-lock.json
