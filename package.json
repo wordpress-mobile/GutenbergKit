@@ -114,7 +114,7 @@
 		"@types/react": "^19.2.7",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^6.1.2",
-		"@wordpress/dependency-extraction-webpack-plugin": "^7.0.0",
+		"@wordpress/dependency-extraction-webpack-plugin": "^7.1.0",
 		"@wordpress/env": "^12.0.0",
 		"@wordpress/eslint-plugin": "^28.0.0",
 		"@wordpress/prettier-config": "^5.0.0",
