@@ -202,15 +202,23 @@ struct InternalEditorSettingsTests {
         #expect(!globalStyles.isEmpty)
     }
 
+    // The first entry is shaped like WordPress core's, with its CSS shortened. The others are
+    // copied from GenerateBlocks 2.5.0, which adds entries that have only `css`.
     @Test("isGlobalStyles is false when the key is missing")
     func isGlobalStylesDefaultsToFalse() throws {
-        let data = try Data.forResource(named: "editor-settings-generateblocks")
-        let styles = try #require(JSONDecoder().decode(InternalEditorSettings.self, from: data).styles)
+        let json = """
+      {"styles": [
+        {"css": ":root{--wp--preset--aspect-ratio--square: 1;}", "__unstableType": "presets", "isGlobalStyles": true},
+        {"css": ":where(:root){--gb-container-width:1100px;}"},
+        {"css": ".gb-shape{line-height:0;}"}
+      ]}
+      """
+        let styles = try #require(JSONDecoder().decode(InternalEditorSettings.self, from: Data(json.utf8)).styles)
 
-        // The last four entries come from GenerateBlocks and have only `css`.
-        #expect(styles.count == 12)
-        #expect(styles.last?.css == ".gb-shape{line-height:0;}")
-        #expect(styles.suffix(4).allSatisfy { !$0.isGlobalStyles })
-        #expect(styles.prefix(8).contains { $0.isGlobalStyles })
+        #expect(styles.count == 3)
+        #expect(styles[0].isGlobalStyles == true)
+        #expect(styles[1].isGlobalStyles == false)
+        #expect(styles[2].isGlobalStyles == false)
+        #expect(styles[2].css == ".gb-shape{line-height:0;}")
     }
 }
