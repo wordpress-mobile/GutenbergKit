@@ -93,6 +93,8 @@ make wp-env-config-android-urls MODE=on
 
 This installs a mu-plugin (`gutenbergkit-android-urls.php`) that rewrites `localhost` and `127.0.0.1` to `10.0.2.2` in WordPress's URL output. The mu-plugins directory is mounted into the running server, so the change applies immediately — no restart, and existing credentials keep working.
 
+With the override on, every URL WordPress reports uses `10.0.2.2`, including the site URL in the REST index and `/wp/v2/settings`. Host apps that discover the site URL from the REST index, such as WordPress-Android, can add the site as `http://10.0.2.2:8888`.
+
 Rebuild the Android app afterwards. This is needed for the URL change itself, not because credentials rotated: `BuildConfig` is populated at build time.
 
 To revert (for browser access or iOS testing):
@@ -106,7 +108,7 @@ Run it with no `MODE` to report the current setting.
 Two things to be aware of while the override is active:
 
 -   The WordPress admin dashboard (`http://localhost:8888/wp-admin/`) redirects to `10.0.2.2`, which doesn't resolve in a desktop browser.
--   The `/wp/v2/settings` endpoint still reports `url` as `localhost`, because that field reads the stored option directly rather than passing through the `site_url` and `home_url` filters. It is not a reliable way to check whether the override is on — use `make wp-env-config-android-urls` instead.
+-   Settings → General shows `10.0.2.2` for the WordPress Address and Site Address. Saving the form leaves the stored addresses unchanged unless you edit them, and the Playground runtime discards any edit on restart.
 
 ### Physical Devices
 

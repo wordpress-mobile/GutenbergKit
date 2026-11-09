@@ -9,6 +9,11 @@ add_filter( 'home_url', 'gutenbergkit_android_remap_url' );
 add_filter( 'content_url', 'gutenbergkit_android_remap_url' );
 add_filter( 'plugins_url', 'gutenbergkit_android_remap_url' );
 
+// The REST index and `/wp/v2/settings` read these options directly, bypassing
+// the URL filters above.
+add_filter( 'option_siteurl', 'gutenbergkit_android_remap_url' );
+add_filter( 'option_home', 'gutenbergkit_android_remap_url' );
+
 add_filter( 'upload_dir', function ( $uploads ) {
 	$uploads['url']     = gutenbergkit_android_remap_url( $uploads['url'] );
 	$uploads['baseurl'] = gutenbergkit_android_remap_url( $uploads['baseurl'] );
