@@ -1,0 +1,78 @@
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs
+index 1f4b348..02f6c71 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs
++++ b/node_modules/@wordpress/block-editor/build-module/components/inserter-list-item/index.mjs
+@@ -10,6 +10,10 @@ import { jsx, jsxs } from "react/jsx-runtime";
+ // packages/block-editor/src/components/inserter-list-item/index.tsx
+ function InserterListItem({ className, isFirst, item, onSelect, onHover, isDraggable, ...props }) {
+ 	const isDraggingRef = useRef(false);
++	const isTouchDeviceRef = useRef(
++		window.matchMedia( '(hover: none)' ).matches ||
++		window.matchMedia( '(pointer: coarse)' ).matches
++	);
+ 	const icon = item.icon;
+ 	const itemIconStyle = icon ? {
+ 		backgroundColor: icon.background,
+@@ -58,7 +62,7 @@ function InserterListItem({ className, isFirst, item, onSelect, onHover, isDragg
+ 					}
+ 				},
+ 				onMouseEnter: () => {
+-					if (isDraggingRef.current) return;
++					if (isDraggingRef.current || isTouchDeviceRef.current) return;
+ 					onHover(item);
+ 				},
+ 				onMouseLeave: () => onHover(null),
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
+index 963b2d2..f67547a 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
++++ b/node_modules/@wordpress/block-editor/build-module/components/inserter/index.mjs
+@@ -39,7 +39,7 @@ const UnforwardedInserterToggle = ({ onToggle, disabled, isOpen, blockTitle, has
+ 	});
+ };
+ const InserterToggle = forwardRef(UnforwardedInserterToggle);
+-const UnforwardedInserter = ({ clientId, rootClientId, disabled, isAppender, position, selectBlockOnInsert, shouldDirectInsert = true, showInserterHelpPanel, __experimentalIsQuick: isQuick, onSelectOrClose, onToggle, renderToggle: renderToggleProp, toggleProps }, ref) => {
++const UnforwardedInserter = ({ clientId, rootClientId, disabled, isAppender, position, selectBlockOnInsert, shouldDirectInsert = true, showInserterHelpPanel, __experimentalIsQuick: isQuick, onSelectOrClose, onToggle, open, popoverProps, renderToggle: renderToggleProp, toggleProps }, ref) => {
+ 	const { hasItems, hasSingleBlockType, blockTitle, allowedBlockType, blockToInsert, appenderLabel, targetRootClientId } = useSelect((select) => {
+ 		const { getBlockRootClientId, hasInserterItems, getAllowedBlocks, getDirectInsertBlock, getBlockListSettings } = select(store$1);
+ 		const { getBlockVariations, getBlockType } = select(store);
+@@ -152,10 +152,12 @@ const UnforwardedInserter = ({ clientId, rootClientId, disabled, isAppender, pos
+ 		className: "block-editor-inserter",
+ 		contentClassName: clsx("block-editor-inserter__popover", { "is-quick": isQuick }),
+ 		popoverProps: {
++			...popoverProps,
+ 			position,
+ 			shift: true
+ 		},
+ 		onToggle,
++		open,
+ 		expandOnMobile: true,
+ 		headerTitle: __("Add a block"),
+ 		renderToggle,
+diff --git a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
+index ce655db..c03f2dd 100644
+--- a/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
++++ b/node_modules/@wordpress/block-editor/build-module/components/provider/index.mjs
+@@ -276,7 +276,7 @@ const ExperimentalBlockEditorProvider = withRegistryProvider((props) => {
+ const BlockEditorProvider = (props) => {
+ 	return /* @__PURE__ */ jsx(ExperimentalBlockEditorProvider, {
+ 		...props,
+-		stripExperimentalSettings: true,
++		stripExperimentalSettings: false,
+ 		children: props.children
+ 	});
+ };
+diff --git a/node_modules/@wordpress/block-editor/package.json b/node_modules/@wordpress/block-editor/package.json
+index f535d30..0d50b9a 100644
+--- a/node_modules/@wordpress/block-editor/package.json
++++ b/node_modules/@wordpress/block-editor/package.json
+@@ -38,7 +38,9 @@
+ 			"require": "./build/index.cjs"
+ 		},
+ 		"./package.json": "./package.json",
+-		"./build-style/*": "./build-style/*"
++		"./build-style/*": "./build-style/*",
++		"./build-module/components/inserter/media-tab/*": "./build-module/components/inserter/media-tab/*",
++		"./build-module/components/inserter/hooks/*": "./build-module/components/inserter/hooks/*"
+ 	},
+ 	"wpScript": true,
+ 	"wpScriptModuleExports": {
