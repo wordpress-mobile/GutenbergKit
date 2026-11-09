@@ -1,5 +1,10 @@
+# Dependabot (npm and Gradle)
+/package.json                       @wordpress-mobile/wpmobile-team
+/package-lock.json                  @wordpress-mobile/wpmobile-team
+/android/gradle/libs.versions.toml  @wordpress-mobile/wpmobile-team
+
 # Ruby dependency surface
-Gemfile*              @wordpress-mobile/apps-infra-tooling
+Gemfile*            @wordpress-mobile/apps-infra-tooling
 .bundle/              @wordpress-mobile/apps-infra-tooling
 fastlane/             @wordpress-mobile/apps-infra-tooling
 
