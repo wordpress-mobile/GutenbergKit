@@ -1,5 +1,5 @@
 diff --git a/node_modules/@wordpress/editor/package.json b/node_modules/@wordpress/editor/package.json
-index 3655e4a..11490f1 100644
+index ec56dc6..c35f291 100644
 --- a/node_modules/@wordpress/editor/package.json
 +++ b/node_modules/@wordpress/editor/package.json
 @@ -36,7 +36,8 @@
