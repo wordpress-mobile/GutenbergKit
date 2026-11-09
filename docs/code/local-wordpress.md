@@ -91,9 +91,9 @@ To remap them, enable the URL override:
 make wp-env-config-android-urls MODE=on
 ```
 
-This installs a mu-plugin (`gutenbergkit-android-urls.php`) that rewrites `localhost` and `127.0.0.1` to `10.0.2.2` in WordPress's URL output. The mu-plugins directory is mounted into the running server, so the change applies immediately — no restart, and existing credentials keep working.
+This installs a mu-plugin (`gutenbergkit-android-urls.php`) that rewrites `localhost` and `127.0.0.1` to `10.0.2.2` in WordPress's URL output. The mu-plugins directory is mounted into the running server, so the change applies immediately — no restart, and existing application passwords keep working.
 
-With the override on, every URL WordPress reports uses `10.0.2.2`, including the site URL in the REST index and `/wp/v2/settings`. Host apps that discover the site URL from the REST index, such as WordPress-Android, can add the site as `http://10.0.2.2:8888`.
+With the override on, URLs WordPress builds from its site URL use `10.0.2.2`, including the site URL in the REST index and `/wp/v2/settings`. URLs already stored in the database, such as media inserted into a post while the override was off, keep their original host. Host apps that discover the site URL from the REST index, such as WordPress-Android, can add the site as `http://10.0.2.2:8888` (or your configured port).
 
 Rebuild the Android app afterwards. This is needed for the URL change itself, not because credentials rotated: `BuildConfig` is populated at build time.
 
@@ -105,10 +105,11 @@ make wp-env-config-android-urls MODE=off
 
 Run it with no `MODE` to report the current setting.
 
-Two things to be aware of while the override is active:
+Things to be aware of while the override is active:
 
 -   The WordPress admin dashboard (`http://localhost:8888/wp-admin/`) redirects to `10.0.2.2`, which doesn't resolve in a desktop browser.
--   Settings → General shows `10.0.2.2` for the WordPress Address and Site Address. Saving the form leaves the stored addresses unchanged unless you edit them, and the Playground runtime discards any edit on restart.
+-   Settings → General shows `10.0.2.2` for the WordPress Address and Site Address. Both fields are read-only, because the Playground runtime defines them as constants.
+-   Switching the override on or off logs out browser sessions, because WordPress derives its login cookie names from the site URL.
 
 ### Physical Devices
 
