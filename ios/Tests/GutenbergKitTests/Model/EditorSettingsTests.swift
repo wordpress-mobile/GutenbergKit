@@ -58,6 +58,16 @@ struct EditorSettingsTests {
         #expect(settings.themeStyles == "h1 { font-size: 2em; }")
     }
 
+    // GenerateBlocks adds editor styles that have only a `css` key.
+    @Test("themeStyles includes styles without isGlobalStyles")
+    func themeStylesIncludesStylesWithoutGlobalStylesFlag() throws {
+        let json = """
+      {"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": ".gb-shape{line-height:0;}"}]}
+      """
+        let settings = try EditorSettings(data: Data(json.utf8))
+        #expect(settings.themeStyles == "body { color: red; }\n.gb-shape{line-height:0;}")
+    }
+
     @Test("themeStyles is empty when styles key is missing")
     func themeStylesEmptyWhenStylesKeyMissing() throws {
         let json = """
@@ -190,5 +200,17 @@ struct InternalEditorSettingsTests {
         // Verify isGlobalStyles is parsed
         let globalStyles = styles.filter { $0.isGlobalStyles }
         #expect(!globalStyles.isEmpty)
+    }
+
+    @Test("isGlobalStyles is false when the key is missing")
+    func isGlobalStylesDefaultsToFalse() throws {
+        let data = try Data.forResource(named: "editor-settings-generateblocks")
+        let styles = try #require(JSONDecoder().decode(InternalEditorSettings.self, from: data).styles)
+
+        // The last four entries come from GenerateBlocks and have only `css`.
+        #expect(styles.count == 12)
+        #expect(styles.last?.css == ".gb-shape{line-height:0;}")
+        #expect(styles.suffix(4).allSatisfy { !$0.isGlobalStyles })
+        #expect(styles.prefix(8).contains { $0.isGlobalStyles })
     }
 }

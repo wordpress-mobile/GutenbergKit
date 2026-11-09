@@ -60,7 +60,20 @@ struct InternalEditorSettings: Decodable {
         let css: String?
 
         /// Whether this style is from the global styles system.
+        ///
+        /// `false` when the entry doesn't say. Plugins can add entries that have only `css`. GenerateBlocks does this.
         let isGlobalStyles: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case css
+            case isGlobalStyles
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.css = try container.decodeIfPresent(String.self, forKey: .css)
+            self.isGlobalStyles = try container.decodeIfPresent(Bool.self, forKey: .isGlobalStyles) ?? false
+        }
     }
 
     /// All style entries from the theme.
