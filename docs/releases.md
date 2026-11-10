@@ -30,9 +30,6 @@ make release VERSION_TYPE=preminor  # 0.3.0 -> 0.4.0-alpha.0
 make release VERSION_TYPE=prepatch  # 0.3.0 -> 0.3.1-alpha.0
 make release VERSION_TYPE=prerelease # 1.2.3-alpha.0 -> 1.2.3-alpha.1
 
-# Use version from git tag
-make release VERSION_TYPE=from-git
-
 # Test the release process without making changes
 make release VERSION_TYPE=patch DRY_RUN=true
 ```

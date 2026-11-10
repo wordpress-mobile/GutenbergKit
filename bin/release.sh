@@ -31,7 +31,7 @@ print_error() {
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [--dry-run]"
+    echo "Usage: $0 [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease] [--dry-run]"
     echo ""
     echo "Arguments:"
     echo "  <newversion>      Custom version number (e.g., 1.2.3)"
@@ -42,7 +42,6 @@ show_usage() {
     echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-alpha.0)"
     echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-alpha.0)"
     echo "  prerelease       Increment prerelease version (1.2.3-alpha.0 -> 1.2.3-alpha.1)"
-    echo "  from-git         Use version from git tag"
     echo "  --dry-run        Run the script without making actual changes"
     echo ""
     echo "Examples:"
@@ -116,11 +115,6 @@ calculate_new_version() {
                 node -p "require('semver').inc('$current_version', '$version_type')"
             fi
             ;;
-        from-git)
-            # For from-git, we would use the git tag version
-            # This is a placeholder - actual implementation would need to fetch from git
-            echo "$current_version"
-            ;;
         *)
             # Custom version number
             echo "$version_type"
@@ -154,7 +148,7 @@ validate_version_type() {
 
     # Check if it's a valid npm version type or a custom version number
     case $version_type in
-        major|minor|patch|premajor|preminor|prepatch|prerelease|from-git)
+        major|minor|patch|premajor|preminor|prepatch|prerelease)
             return 0
             ;;
         *)
@@ -194,9 +188,6 @@ get_version_description() {
             ;;
         prerelease)
             echo "prerelease version increment"
-            ;;
-        from-git)
-            echo "version from git tag"
             ;;
         *)
             echo "custom version: $version_type"
@@ -368,10 +359,7 @@ main() {
         exit 1
     fi
 
-    # `from-git` adopts a version that is already tagged, so it has no new tag to check.
-    if [ "$version_type" != "from-git" ]; then
-        check_tag_available "$new_version"
-    fi
+    check_tag_available "$new_version"
     print_success "Pre-flight checks passed"
     echo
 
