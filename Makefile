@@ -536,7 +536,7 @@ release: ## Create and publish a new release
 	@if [ -z "$(VERSION_TYPE)" ]; then \
 		echo "Error: VERSION_TYPE is required."; \
 		echo ""; \
-		echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]"; \
+		echo "Usage: make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease] [DRY_RUN=true]"; \
 		echo ""; \
 		echo "Version Types:"; \
 		echo "  <newversion>     Custom version number (e.g., 1.2.3)"; \
@@ -547,7 +547,6 @@ release: ## Create and publish a new release
 		echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-alpha.0)"; \
 		echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-alpha.0)"; \
 		echo "  prerelease       Increment prerelease version (1.2.3-alpha.0 -> 1.2.3-alpha.1)"; \
-		echo "  from-git         Use version from git tag"; \
 		echo ""; \
 		echo "Examples:"; \
 		echo "  make release VERSION_TYPE=patch"; \

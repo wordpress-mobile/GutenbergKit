@@ -31,7 +31,7 @@ print_error() {
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [--dry-run]"
+    echo "Usage: $0 [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease] [--dry-run]"
     echo ""
     echo "Arguments:"
     echo "  <newversion>      Custom version number (e.g., 1.2.3)"
@@ -42,7 +42,6 @@ show_usage() {
     echo "  preminor         Increment minor version and add prerelease (1.2.3 -> 1.3.0-alpha.0)"
     echo "  prepatch         Increment patch version and add prerelease (1.2.3 -> 1.2.4-alpha.0)"
     echo "  prerelease       Increment prerelease version (1.2.3-alpha.0 -> 1.2.3-alpha.1)"
-    echo "  from-git         Use version from git tag"
     echo "  --dry-run        Run the script without making actual changes"
     echo ""
     echo "Examples:"
@@ -116,16 +115,31 @@ calculate_new_version() {
                 node -p "require('semver').inc('$current_version', '$version_type')"
             fi
             ;;
-        from-git)
-            # For from-git, we would use the git tag version
-            # This is a placeholder - actual implementation would need to fetch from git
-            echo "$current_version"
-            ;;
         *)
-            # Custom version number
-            echo "$version_type"
+            # Custom version number, normalized the way `npm version` writes it (e.g., without build metadata)
+            node -p "require('semver').valid('$version_type')"
             ;;
     esac
+}
+
+# Function to check that the new version's tag is not already on origin.
+# CI's validate step rejects an existing tag too, but only after this script
+# has pushed a version bump to trunk.
+check_tag_available() {
+    local tag="v$1"
+    local existing_tag
+
+    if ! existing_tag=$(git ls-remote --tags origin "refs/tags/$tag"); then
+        print_error "Unable to list tags on origin."
+        exit 1
+    fi
+
+    if [ -n "$existing_tag" ]; then
+        print_error "Tag $tag already exists on origin."
+        print_error "A release cut from another branch may not have bumped trunk's version."
+        print_error "Pass the next unreleased version explicitly, e.g. make release VERSION_TYPE=<version>"
+        exit 1
+    fi
 }
 
 # Function to validate version type
@@ -134,7 +148,7 @@ validate_version_type() {
 
     # Check if it's a valid npm version type or a custom version number
     case $version_type in
-        major|minor|patch|premajor|preminor|prepatch|prerelease|from-git)
+        major|minor|patch|premajor|preminor|prepatch|prerelease)
             return 0
             ;;
         *)
@@ -175,9 +189,6 @@ get_version_description() {
         prerelease)
             echo "prerelease version increment"
             ;;
-        from-git)
-            echo "version from git tag"
-            ;;
         *)
             echo "custom version: $version_type"
             ;;
@@ -187,33 +198,20 @@ get_version_description() {
 # Function to increment version
 increment_version() {
     local version_type=$1
+    local new_version=$2
     local current_version=$(get_current_version)
     local version_description=$(get_version_description "$version_type")
-    local new_version
 
     print_status "Current version: $current_version"
     print_status "Incrementing version ($version_description)..."
 
     if [ "$DRY_RUN" = "true" ]; then
-        # Calculate what the new version would be
-        new_version=$(calculate_new_version "$current_version" "$version_type")
         print_success "Version would be incremented to: $new_version"
-        # Store in global variable for dry run
-        DRY_RUN_VERSION="$new_version"
         return
     fi
 
-    # For prerelease types, always use 'alpha' as the preid
-    case $version_type in
-        premajor|preminor|prepatch|prerelease)
-            npm --no-git-tag-version version "$version_type" --preid=alpha
-            ;;
-        *)
-            npm --no-git-tag-version version "$version_type"
-            ;;
-    esac
-
-    new_version=$(get_current_version)
+    # Write the version the pre-flight checked, rather than letting npm recalculate it.
+    npm --no-git-tag-version version "$new_version"
     print_success "Version incremented to: $new_version"
 }
 
@@ -341,23 +339,24 @@ main() {
     check_dependencies
     check_branch
     check_working_directory
-    print_success "Pre-flight checks passed"
-    echo
 
     # Get current version before incrementing
     local current_version=$(get_current_version)
     local new_version
 
-    # Execute release steps
-    increment_version "$version_type"
+    # Fail explicitly: an empty version would make the tag check pass without checking anything.
+    if ! new_version=$(calculate_new_version "$current_version" "$version_type") || [ -z "$new_version" ]; then
+        print_error "Unable to calculate the new version from $current_version."
+        exit 1
+    fi
+
+    check_tag_available "$new_version"
+    print_success "Pre-flight checks passed"
     echo
 
-    # Get the new version
-    if [ "$DRY_RUN" = "true" ]; then
-        new_version="$DRY_RUN_VERSION"
-    else
-        new_version=$(get_current_version)
-    fi
+    # Execute release steps
+    increment_version "$version_type" "$new_version"
+    echo
 
     build_project
     echo

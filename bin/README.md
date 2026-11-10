@@ -12,10 +12,10 @@ Automates the GutenbergKit release process. This script performs all the steps o
 
 ```bash
 # Direct usage
-./bin/release.sh [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [--dry-run]
+./bin/release.sh [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease] [--dry-run]
 
 # Via Makefile (recommended)
-make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease | from-git] [DRY_RUN=true]
+make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease] [DRY_RUN=true]
 ```
 
 #### Version Types
@@ -29,7 +29,6 @@ make release VERSION_TYPE=[<newversion> | major | minor | patch | premajor | pre
 | `preminor`     | Increment minor with prerelease | `1.2.3` → `1.3.0-alpha.0`         |
 | `prepatch`     | Increment patch with prerelease | `1.2.3` → `1.2.4-alpha.0`         |
 | `prerelease`   | Increment prerelease version    | `1.2.3-alpha.0` → `1.2.3-alpha.1` |
-| `from-git`     | Use version from git tag        | Uses latest git tag               |
 | `<newversion>` | Set specific version            | `1.2.3` → `1.2.3`                 |
 
 #### Examples
@@ -49,9 +48,6 @@ make release VERSION_TYPE=preminor
 make release VERSION_TYPE=prepatch
 make release VERSION_TYPE=prerelease
 
-# Use version from git tag
-make release VERSION_TYPE=from-git
-
 # Test without making changes
 make release VERSION_TYPE=patch DRY_RUN=true
 ```
@@ -62,20 +58,20 @@ make release VERSION_TYPE=patch DRY_RUN=true
 
     - Verifies you're on the `trunk` branch
     - Checks that your working directory is clean
-    - Ensures required dependencies are installed (`gh`, `npm`, `make`)
+    - Ensures required dependencies are installed (`npm`, `make`)
+    - Verifies the new version's tag does not already exist on origin
 
 2. **Release process:**
-    - Increments the version number in `package.json`
-    - Builds the project using `make build`
-    - Commits all changes with the version number as the commit message
-    - Creates a git tag with the version number
-    - Pushes changes to `origin/trunk` with tags
-    - Creates a GitHub release with auto-generated notes
+    - Sets the new version in `package.json` and `package-lock.json`
+    - Builds the project using `make build`, which also regenerates the native version files
+    - Commits all changes as `chore(release): X.Y.Z`
+    - Pushes the commit to `origin/trunk`
+    - Prints the steps to trigger the Buildkite publish build, which creates the tag and the GitHub release (see the [release documentation](../docs/releases.md))
 
 #### Dependencies
 
--   `gh` (GitHub CLI) - for creating GitHub releases
 -   `npm` - for version management and building
+-   npm packages installed (e.g., `npm ci`) - the script calculates versions with the project's `semver`
 -   `make` - for building the project
 -   Git - for version control operations
 
