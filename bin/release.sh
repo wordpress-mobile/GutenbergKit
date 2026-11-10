@@ -116,8 +116,8 @@ calculate_new_version() {
             fi
             ;;
         *)
-            # Custom version number
-            echo "$version_type"
+            # Custom version number, normalized the way `npm version` writes it (e.g., without build metadata)
+            node -p "require('semver').valid('$version_type')"
             ;;
     esac
 }
@@ -210,17 +210,8 @@ increment_version() {
         return
     fi
 
-    # For prerelease types, always use 'alpha' as the preid
-    case $version_type in
-        premajor|preminor|prepatch|prerelease)
-            npm --no-git-tag-version version "$version_type" --preid=alpha
-            ;;
-        *)
-            npm --no-git-tag-version version "$version_type"
-            ;;
-    esac
-
-    new_version=$(get_current_version)
+    # Write the version the pre-flight checked, rather than letting npm recalculate it.
+    npm --no-git-tag-version version "$new_version"
     print_success "Version incremented to: $new_version"
 }
 
@@ -366,11 +357,6 @@ main() {
     # Execute release steps
     increment_version "$version_type" "$new_version"
     echo
-
-    # Use the version npm wrote, since that is what gets committed.
-    if [ "$DRY_RUN" != "true" ]; then
-        new_version=$(get_current_version)
-    fi
 
     build_project
     echo
