@@ -1,0 +1,85 @@
+diff --git a/node_modules/@wordpress/block-library/build-module/heading/index.mjs b/node_modules/@wordpress/block-library/build-module/heading/index.mjs
+index 89de06d..01ece34 100644
+--- a/node_modules/@wordpress/block-library/build-module/heading/index.mjs
++++ b/node_modules/@wordpress/block-library/build-module/heading/index.mjs
+@@ -14,7 +14,6 @@ const { editableRootKey } = unlock(privateApis);
+ const { name } = metadata;
+ const settings = {
+ 	icon: heading,
+-	[editableRootKey]: true,
+ 	example: { attributes: {
+ 		content: __("Code is Poetry"),
+ 		level: 2,
+diff --git a/node_modules/@wordpress/block-library/build-module/image/image.mjs b/node_modules/@wordpress/block-library/build-module/image/image.mjs
+index 8b1442e..780de0e 100644
+--- a/node_modules/@wordpress/block-library/build-module/image/image.mjs
++++ b/node_modules/@wordpress/block-library/build-module/image/image.mjs
+@@ -190,7 +190,7 @@ function Image({ temporaryURL, isSideloading, attributes, setAttributes, isSingl
+ 	const hasNonContentControls = blockEditingMode === "default";
+ 	const isContentOnlyMode = blockEditingMode === "contentOnly";
+ 	const showDimensionsControls = allowResize && hasNonContentControls;
+-	const isResizable = allowResize && hasNonContentControls && !isWideAligned && isLargeViewport;
++	const isResizable = allowResize && hasNonContentControls && !isWideAligned;
+ 	const isUploading = !!temporaryURL || isSideloading;
+ 	const imageSizeOptions = imageSizes.filter(({ slug }) => image?.media_details?.sizes?.[slug]?.source_url).map(({ name, slug }) => ({
+ 		value: slug,
+diff --git a/node_modules/@wordpress/block-library/build-module/list-item/index.mjs b/node_modules/@wordpress/block-library/build-module/list-item/index.mjs
+index f3a4ea1..0d1758d 100644
+--- a/node_modules/@wordpress/block-library/build-module/list-item/index.mjs
++++ b/node_modules/@wordpress/block-library/build-module/list-item/index.mjs
+@@ -12,7 +12,6 @@ const { editableRootKey } = unlock(privateApis$1);
+ const { name } = metadata;
+ const settings = {
+ 	icon: listItem,
+-	[editableRootKey]: true,
+ 	edit,
+ 	save,
+ 	merge(attributes, attributesToMerge) {
+diff --git a/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs b/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs
+index 56fe064..424c044 100644
+--- a/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs
++++ b/node_modules/@wordpress/block-library/build-module/paragraph/index.mjs
+@@ -13,7 +13,6 @@ const { editableRootKey } = unlock(privateApis);
+ const { name } = metadata;
+ const settings = {
+ 	icon: paragraph,
+-	[editableRootKey]: true,
+ 	example: { attributes: { content: __("In a village of La Mancha, the name of which I have no desire to call to mind, there lived not long since one of those gentlemen that keep a lance in the lance-rack, an old buckler, a lean hack, and a greyhound for coursing.") } },
+ 	__experimentalLabel(attributes, { context }) {
+ 		const customName = attributes?.metadata?.name;
+diff --git a/node_modules/@wordpress/block-library/build/heading/index.cjs b/node_modules/@wordpress/block-library/build/heading/index.cjs
+index 67cf4b7..2a69fcc 100644
+--- a/node_modules/@wordpress/block-library/build/heading/index.cjs
++++ b/node_modules/@wordpress/block-library/build/heading/index.cjs
+@@ -46,7 +46,6 @@ const { editableRootKey } = (0, require("../lock-unlock.cjs").unlock)(_wordpress
+ const { name } = __block_json.default;
+ const settings = {
+ 	icon: _wordpress_icons.heading,
+-	[editableRootKey]: true,
+ 	example: { attributes: {
+ 		content: (0, _wordpress_i18n.__)("Code is Poetry"),
+ 		level: 2,
+diff --git a/node_modules/@wordpress/block-library/build/list-item/index.cjs b/node_modules/@wordpress/block-library/build/list-item/index.cjs
+index 2a2e3bd..8e2352e 100644
+--- a/node_modules/@wordpress/block-library/build/list-item/index.cjs
++++ b/node_modules/@wordpress/block-library/build/list-item/index.cjs
+@@ -43,7 +43,6 @@ const { editableRootKey } = (0, ___lock_unlock_ts.unlock)(_wordpress_blocks.priv
+ const { name } = __block_json.default;
+ const settings = {
+ 	icon: _wordpress_icons.listItem,
+-	[editableRootKey]: true,
+ 	edit: __edit_jsx.default,
+ 	save: __save_jsx.default,
+ 	merge(attributes, attributesToMerge) {
+diff --git a/node_modules/@wordpress/block-library/build/paragraph/index.cjs b/node_modules/@wordpress/block-library/build/paragraph/index.cjs
+index 198c5e7..7c3496f 100644
+--- a/node_modules/@wordpress/block-library/build/paragraph/index.cjs
++++ b/node_modules/@wordpress/block-library/build/paragraph/index.cjs
+@@ -44,7 +44,6 @@ const { editableRootKey } = (0, require("../lock-unlock.cjs").unlock)(_wordpress
+ const { name } = __block_json.default;
+ const settings = {
+ 	icon: _wordpress_icons.paragraph,
+-	[editableRootKey]: true,
+ 	example: { attributes: { content: (0, _wordpress_i18n.__)("In a village of La Mancha, the name of which I have no desire to call to mind, there lived not long since one of those gentlemen that keep a lance in the lance-rack, an old buckler, a lean hack, and a greyhound for coursing.") } },
+ 	__experimentalLabel(attributes, { context }) {
+ 		const customName = attributes?.metadata?.name;

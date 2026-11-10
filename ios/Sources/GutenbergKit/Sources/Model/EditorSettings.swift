@@ -32,8 +32,15 @@ public struct EditorSettings: Sendable, Codable, Equatable, Hashable {
         let encodedJSON = try JSONEncoder().encode(json)
         self.stringValue = String(decoding: encodedJSON, as: UTF8.self)
 
-        let settings = try JSONDecoder().decode(InternalEditorSettings.self, from: data)
-        self.themeStyles = settings.styles?.compactMap { $0.css }.joined(separator: "\n") ?? ""
+        // Theme styles only style the native pattern previews. The editor gets its styles from the raw JSON above.
+        // So a style entry we can't read leaves the previews unstyled instead of failing the editor load.
+        do {
+            let settings = try JSONDecoder().decode(InternalEditorSettings.self, from: data)
+            self.themeStyles = settings.styles?.compactMap { $0.css }.joined(separator: "\n") ?? ""
+        } catch {
+            log(.warn, "Failed to decode theme styles: \(error)")
+            self.themeStyles = ""
+        }
     }
 
     private init(
@@ -60,7 +67,20 @@ struct InternalEditorSettings: Decodable {
         let css: String?
 
         /// Whether this style is from the global styles system.
+        ///
+        /// `false` when the entry doesn't say. Plugins can add entries that have only `css`. GenerateBlocks does this.
         let isGlobalStyles: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case css
+            case isGlobalStyles
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.css = try container.decodeIfPresent(String.self, forKey: .css)
+            self.isGlobalStyles = try container.decodeIfPresent(Bool.self, forKey: .isGlobalStyles) ?? false
+        }
     }
 
     /// All style entries from the theme.

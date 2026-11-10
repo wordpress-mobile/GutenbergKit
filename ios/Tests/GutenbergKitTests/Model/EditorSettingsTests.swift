@@ -58,6 +58,26 @@ struct EditorSettingsTests {
         #expect(settings.themeStyles == "h1 { font-size: 2em; }")
     }
 
+    // GenerateBlocks adds editor styles that have only a `css` key.
+    @Test("themeStyles includes styles without isGlobalStyles")
+    func themeStylesIncludesStylesWithoutGlobalStylesFlag() throws {
+        let json = """
+      {"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": ".gb-shape{line-height:0;}"}]}
+      """
+        let settings = try EditorSettings(data: Data(json.utf8))
+        #expect(settings.themeStyles == "body { color: red; }\n.gb-shape{line-height:0;}")
+    }
+
+    // WordPress core sends `"css": false` when a theme's editor-style file exists but can't be read.
+    @Test("init doesn't throw when a style's css isn't a string")
+    func initToleratesNonStringCSS() throws {
+        let json = """
+      {"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": false}]}
+      """
+        let settings = try EditorSettings(data: Data(json.utf8))
+        #expect(settings.themeStyles.isEmpty)
+    }
+
     @Test("themeStyles is empty when styles key is missing")
     func themeStylesEmptyWhenStylesKeyMissing() throws {
         let json = """
@@ -190,5 +210,25 @@ struct InternalEditorSettingsTests {
         // Verify isGlobalStyles is parsed
         let globalStyles = styles.filter { $0.isGlobalStyles }
         #expect(!globalStyles.isEmpty)
+    }
+
+    // The first entry is shaped like WordPress core's, with its CSS shortened. The others are
+    // copied from GenerateBlocks 2.5.0, which adds entries that have only `css`.
+    @Test("isGlobalStyles is false when the key is missing")
+    func isGlobalStylesDefaultsToFalse() throws {
+        let json = """
+      {"styles": [
+        {"css": ":root{--wp--preset--aspect-ratio--square: 1;}", "__unstableType": "presets", "isGlobalStyles": true},
+        {"css": ":where(:root){--gb-container-width:1100px;}"},
+        {"css": ".gb-shape{line-height:0;}"}
+      ]}
+      """
+        let styles = try #require(JSONDecoder().decode(InternalEditorSettings.self, from: Data(json.utf8)).styles)
+
+        #expect(styles.count == 3)
+        #expect(styles[0].isGlobalStyles == true)
+        #expect(styles[1].isGlobalStyles == false)
+        #expect(styles[2].isGlobalStyles == false)
+        #expect(styles[2].css == ".gb-shape{line-height:0;}")
     }
 }
