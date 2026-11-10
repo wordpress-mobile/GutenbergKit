@@ -29,7 +29,7 @@ See [Demo App Sign-In](./demo-app-login.md) for the credentials the sign-in targ
 
 Xcode's MCP tools can build, run, and drive the demo app on a simulator; Xcode's `device-interaction` skill describes how to use them.
 
-To load the bundled editor for one run without editing the scheme, pass `{"$(inherited)": "", "GUTENBERG_EDITOR_URL": ""}` as the app's environment variables when running it with Xcode's tools.
+To load the bundled editor for one run without editing the scheme, pass `{"GUTENBERG_EDITOR_URL": "", "WP_ENV_CREDENTIALS_PATH": "<repo>/.wp-env.credentials.json"}` as the app's environment variables when running it with Xcode's tools, using the repository's absolute path. Do not include `"$(inherited)"`: the scheme's `GUTENBERG_EDITOR_URL` then wins, so list the scheme's other variables explicitly. The editor list's header reads "Editors are using the compiled web app built with `make build`" when the bundled editor is in use.
 
 Without Xcode's tools, `xcrun simctl` can install, launch, and screenshot the app, but not tap. `simctl launch` passes environment variables only with a `SIMCTL_CHILD_` prefix, e.g., `SIMCTL_CHILD_GUTENBERG_EDITOR_URL`.
 
