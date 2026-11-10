@@ -68,6 +68,16 @@ struct EditorSettingsTests {
         #expect(settings.themeStyles == "body { color: red; }\n.gb-shape{line-height:0;}")
     }
 
+    // WordPress core sends `"css": false` when a theme's editor-style file exists but can't be read.
+    @Test("init doesn't throw when a style's css isn't a string")
+    func initToleratesNonStringCSS() throws {
+        let json = """
+      {"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": false}]}
+      """
+        let settings = try EditorSettings(data: Data(json.utf8))
+        #expect(settings.themeStyles.isEmpty)
+    }
+
     @Test("themeStyles is empty when styles key is missing")
     func themeStylesEmptyWhenStylesKeyMissing() throws {
         let json = """
