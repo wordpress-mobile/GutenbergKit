@@ -58,6 +58,14 @@ class EditorSettingsTest {
         assertEquals("h1 { font-size: 2em; }", settings.themeStyles)
     }
 
+    // GenerateBlocks adds editor styles that have only a `css` key.
+    @Test
+    fun `themeStyles includes styles without isGlobalStyles`() {
+        val jsonString = """{"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": ".gb-shape{line-height:0;}"}]}"""
+        val settings = EditorSettings.fromData(jsonString)
+        assertEquals("body { color: red; }\n.gb-shape{line-height:0;}", settings.themeStyles)
+    }
+
     @Test
     fun `themeStyles is empty when styles key is missing`() {
         val jsonString = """{"otherKey": "value"}"""
@@ -137,6 +145,14 @@ class InternalEditorSettingsTest {
         assertEquals(2, settings.styles.size)
         assertEquals("a", settings.styles[0].css)
         assertEquals("b", settings.styles[1].css)
+        assertEquals(true, settings.styles[0].isGlobalStyles)
+        assertEquals(false, settings.styles[1].isGlobalStyles)
+    }
+
+    @Test
+    fun `decodes missing isGlobalStyles as false`() {
+        val jsonString = """{"styles": [{"css": "body { color: red; }", "isGlobalStyles": true}, {"css": ".gb-shape{line-height:0;}"}]}"""
+        val settings = json.decodeFromString<InternalEditorSettings>(jsonString)
         assertEquals(true, settings.styles[0].isGlobalStyles)
         assertEquals(false, settings.styles[1].isGlobalStyles)
     }
