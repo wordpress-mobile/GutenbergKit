@@ -561,7 +561,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// scripts run. This ensures the editor JavaScript has access to all configuration data
     /// when it initializes.
     ///
-    private func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
+    func buildEditorConfiguration(dependencies: EditorDependencies) throws -> WKUserScript {
         let gbkitGlobal = try GBKitGlobal(
             configuration: self.configuration,
             dependencies: dependencies,
