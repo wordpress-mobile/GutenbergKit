@@ -180,7 +180,9 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
+          restore_swiftpm_cache --package-resolved Package.resolved
           make test-ios-library-simulator
+          save_swiftpm_cache --package-resolved Package.resolved
       plugins: *plugins
 
     - label: ':ios: Test iOS Library Host'
@@ -192,7 +194,9 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
+          restore_swiftpm_cache --package-resolved Package.resolved
           make test-ios-library-host
+          save_swiftpm_cache --package-resolved Package.resolved
       plugins: *plugins
 
     - label: ':ios: Build iOS Library for App Extensions'
@@ -204,7 +208,9 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
+          restore_swiftpm_cache --package-resolved Package.resolved
           make build-ios-library-extension-safe
+          save_swiftpm_cache --package-resolved Package.resolved
       plugins: *plugins
 
     - label: ':ios: Build XCFramework'
@@ -220,7 +226,9 @@ steps:
           tar -xzf dist.tar.gz
           install_gems
           bundle exec fastlane set_up_signing_release
+          restore_swiftpm_cache --package-resolved Package.resolved
           make build-ios-resources-xcframework
+          save_swiftpm_cache --package-resolved Package.resolved
           bundle exec fastlane xcframework_sign
           ./package_xcframework.sh
       artifact_paths:
@@ -288,10 +296,17 @@ steps:
       command: |
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
+          SPM_RESOLVED=ios/Demo-iOS/Gutenberg.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          SPM_PACKAGES=build/SourcePackages
+          restore_swiftpm_cache --package-resolved "$$SPM_RESOLVED" --artifacts "$$SPM_PACKAGES"
           # Keep the result bundle even when tests fail: its screenshots and
           # UI hierarchy are the only record of what the editor showed.
           TEST_STATUS=0
-          make test-ios-app-e2e || TEST_STATUS=$$?
+          make test-ios-app-e2e IOS_E2E_SOURCE_PACKAGES="$$SPM_PACKAGES" || TEST_STATUS=$$?
+          # Save only after a passing run, as a cache entry is never overwritten.
+          if [ "$$TEST_STATUS" -eq 0 ]; then
+              save_swiftpm_cache --package-resolved "$$SPM_RESOLVED" --artifacts "$$SPM_PACKAGES"
+          fi
           if [ -d build/ios-e2e.xcresult ]; then
               echo "--- :package: Zipping test results"
               (cd build && zip -rq ios-e2e.xcresult.zip ios-e2e.xcresult)

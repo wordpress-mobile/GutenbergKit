@@ -27,6 +27,8 @@
 
 SIMULATOR_DESTINATION := OS=latest,name=iPhone 17
 IOS_E2E_RESULT_BUNDLE := build/ios-e2e.xcresult
+# Set to resolve the demo app's Swift packages into a fixed folder rather than DerivedData, so CI can cache them.
+IOS_E2E_SOURCE_PACKAGES ?=
 
 # Override local.properties so Android test targets load the editor they name.
 # Set ANDROID_DEV_SERVER_URL to reach the dev server another way, e.g., a LAN IP from a physical device.
@@ -405,6 +407,7 @@ test-ios-app-e2e: ## Run iOS demo app E2E tests against the production build
 		-sdk iphonesimulator \
 		-destination '${SIMULATOR_DESTINATION}' \
 		-resultBundlePath '$(IOS_E2E_RESULT_BUNDLE)' \
+		$(if $(IOS_E2E_SOURCE_PACKAGES),-clonedSourcePackagesDirPath '$(IOS_E2E_SOURCE_PACKAGES)') \
 		| xcbeautify
 
 .PHONY: test-ios-app-e2e-dev
