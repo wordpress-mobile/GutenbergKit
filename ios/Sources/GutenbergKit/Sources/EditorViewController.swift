@@ -189,7 +189,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     let nativeFileInput = NativeFileInput()
     private let controller: GutenbergEditorController
     private let bundleProvider: EditorAssetBundleProvider
-    private let lockdownModeMonitor: LockdownModeMonitor
     /// Receives the page's media uploads over `gbk-upload:` and delivers them. Enabled
     /// whenever the site credentials are usable, with or without a processor or
     /// uploader; ``stopMediaHandling()`` disables it.
@@ -299,8 +298,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.mediaPicker = mediaPicker
         self.mediaProcessor = mediaProcessor
         self.mediaUploader = mediaUploader
-        self.lockdownModeMonitor = LockdownModeMonitor()
-        self.controller = GutenbergEditorController(configuration: configuration, lockdownModeMonitor: self.lockdownModeMonitor)
+        self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
         // files from the local filesystem.
@@ -364,9 +362,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // it. `accessibilityLanguage` is inherited, including across modal
         // presentations, so the block inserter and its sheets are covered too.
         view.accessibilityLanguage = configuration.locale
-
-        // Set up Lockdown Mode monitoring with foreground detection
-        lockdownModeMonitor.setup(presentingViewController: self)
 
         // FIXME: implement with CSS (bottom toolbar)
         webView.scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: 47, right: 0)
@@ -1100,14 +1095,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
         if !hasAutofocused {
             hasAutofocused = true
-
-            // If lockdown mode was detected, show the sheet — skip autofocus entirely
-            // since the editor may not function correctly with Lockdown Mode restrictions.
-            if !lockdownModeMonitor.isLockdownModeEnabled {
-                self.focus()
-            }
+            self.focus()
         }
-        lockdownModeMonitor.presentSheetIfNeeded(onDismiss: {})
 
         // Log performance timing for monitoring
         let duration = CFAbsoluteTimeGetCurrent() - timestampInit
@@ -1256,11 +1245,9 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     weak var delegate: GutenbergEditorControllerDelegate?
     let configuration: EditorConfiguration
     private let navigationPolicy: EditorNavigationPolicy
-    private let lockdownModeMonitor: LockdownModeMonitor
 
-    init(configuration: EditorConfiguration, lockdownModeMonitor: LockdownModeMonitor) {
+    init(configuration: EditorConfiguration) {
         self.configuration = configuration
-        self.lockdownModeMonitor = lockdownModeMonitor
         let devServerURL = ProcessInfo.processInfo.environment["GUTENBERG_EDITOR_URL"].flatMap(URL.init)
         self.navigationPolicy = EditorNavigationPolicy(devServerURL: devServerURL)
         super.init()
@@ -1291,7 +1278,6 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         NSLog("navigation: \(String(describing: navigation))")
-        lockdownModeMonitor.detectLockdownMode(for: webView)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
