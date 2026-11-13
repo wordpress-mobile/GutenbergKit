@@ -166,8 +166,9 @@ preflight, so the header costs nothing. The relay never sends it on to the site.
 
 A request without the token is refused before native code acts on it. `gbk-rest:` fails it
 as a network failure would, so it can't be mistaken for the site's own answer. `gbk-upload:`
-answers `401` before routing, so it can't start, finish, or cancel a session, or delete
-media.
+answers `401`, so it can't start, finish, or cancel a session, or delete media. A CORS
+preflight never carries the token, so `gbk-upload:` answers one with its CORS headers alone,
+as Android's loopback server does.
 
 The editor's frames fall into two groups:
 

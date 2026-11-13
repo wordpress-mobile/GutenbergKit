@@ -19,8 +19,9 @@ import WebKit
 /// | `POST …/sessions/<id>/cancel` | — | `204` |
 /// | `POST …/media/<attachmentId>/delete` | JSON `{query}` | WordPress's response, verbatim |
 ///
-/// A request must carry the editor's ``SchemeCallerToken``. One without it gets a `401`
-/// before it is routed, so it can't create, finish, or cancel a session, or delete media.
+/// A request must carry the editor's ``SchemeCallerToken``. One without it gets a `401`,
+/// so it can't create, finish, or cancel a session, or delete media. A CORS preflight,
+/// which never carries the token, gets only CORS headers.
 ///
 /// Every response carries CORS headers: under Lockdown Mode WebKit enforces CORS on
 /// scheme responses too, and core's upload middleware reads
