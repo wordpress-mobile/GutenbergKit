@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// A per-editor secret that a request to the native URL schemes must carry.
 ///
@@ -21,10 +20,9 @@ struct SchemeCallerToken: Sendable {
 
     /// A new random token.
     init() {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        precondition(status == errSecSuccess, "Failed to generate a scheme caller token")
-        self.value = bytes.map { String(format: "%02x", $0) }.joined()
+        var generator = SystemRandomNumberGenerator()
+        let words = (0..<4).map { _ in generator.next() }  // 4 × UInt64 = 256 bits
+        self.value = words.map { String(format: "%016llx", $0) }.joined()
     }
 
     init(value: String) {
@@ -37,17 +35,9 @@ struct SchemeCallerToken: Sendable {
               sent.hasPrefix("Bearer ") else {
             return false
         }
-        return Self.constantTimeEqual(Array(sent.dropFirst("Bearer ".count).utf8), Array(value.utf8))
-    }
-
-    /// Compares in time that depends only on the expected token's length, so the time
-    /// a refusal takes doesn't reveal how much of a guess was right.
-    private static func constantTimeEqual(_ provided: [UInt8], _ expected: [UInt8]) -> Bool {
-        var difference = UInt8(provided.count == expected.count ? 0 : 1)
-        for index in expected.indices {
-            let byte = index < provided.count ? provided[index] : 0
-            difference |= byte ^ expected[index]
-        }
-        return difference == 0
+        let provided = Array(sent.utf8.dropFirst("Bearer ".count))
+        let expected = Array(value.utf8)
+        return provided.count == expected.count
+            && timingsafe_bcmp(provided, expected, expected.count) == 0
     }
 }
