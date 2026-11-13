@@ -510,6 +510,48 @@ describe( 'createRelayXMLHttpRequest', () => {
 		} );
 	} );
 
+	describe( 'caller token', () => {
+		const TokenRelayXMLHttpRequest = createRelayXMLHttpRequest(
+			FakeXMLHttpRequest,
+			{ restRelay: { ...REST_RELAY, token: 'caller-token' } }
+		);
+		const TOKEN_HEADER = [ 'Relay-Authorization', 'Bearer caller-token' ];
+
+		it( 'sends the token native code requires with a relayed request', () => {
+			const xhr = new TokenRelayXMLHttpRequest();
+			xhr.open( 'GET', 'https://example.org/a' );
+			xhr.send();
+
+			expect( xhr.headersSet() ).toEqual( [ TOKEN_HEADER ] );
+		} );
+
+		it( 'sends it with a body read before sending', async () => {
+			const xhr = new TokenRelayXMLHttpRequest();
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( new NodeBlob( [ 'x' ] ) );
+			await settle();
+
+			expect( xhr.headersSet() ).toContainEqual( TOKEN_HEADER );
+			expect( xhr.callsTo( 'send' ) ).toHaveLength( 1 );
+		} );
+
+		it( 'sends it with a synchronous request', () => {
+			const xhr = new TokenRelayXMLHttpRequest();
+			xhr.open( 'POST', 'https://example.org/a', false );
+			xhr.send( 'body' );
+
+			expect( xhr.headersSet() ).toEqual( [ TOKEN_HEADER ] );
+		} );
+
+		it( "doesn't send it with a request that isn't relayed", () => {
+			const xhr = new TokenRelayXMLHttpRequest();
+			xhr.open( 'GET', `${ window.location.origin }/local.json` );
+			xhr.send();
+
+			expect( xhr.headersSet() ).toEqual( [] );
+		} );
+	} );
+
 	describe( 'timeout', () => {
 		it( 'tells native code the timeout, which WebKit does not apply', () => {
 			const xhr = new RelayXMLHttpRequest();

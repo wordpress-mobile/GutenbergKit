@@ -350,6 +350,71 @@ describe( 'nativeMediaUploadMiddleware over the native upload scheme', () => {
 		} );
 	} );
 
+	describe( 'caller token', () => {
+		const tokenHeader = ( request ) =>
+			new Headers( request.init.headers ).get( 'Relay-Authorization' );
+
+		beforeEach( () => {
+			getGBKit.mockReturnValue( {
+				nativeUploadScheme: 'gbk-upload',
+				nativeUploadToken: 'caller-token',
+			} );
+		} );
+
+		it( 'sends the token native code requires with every upload request', async () => {
+			const requests = installScheme();
+			const file = new File(
+				[ new Uint8Array( NATIVE_UPLOAD_CHUNK_SIZE + 1 ) ],
+				'a.jpg'
+			);
+
+			await nativeMediaUploadMiddleware(
+				makeOptions( file ),
+				makeNext()
+			);
+
+			expect( requests ).toHaveLength( 4 );
+			for ( const request of requests ) {
+				expect( tokenHeader( request ) ).toBe( 'Bearer caller-token' );
+			}
+			expect(
+				new Headers( requests[ 0 ].init.headers ).get( 'Content-Type' )
+			).toBe( 'application/json' );
+		} );
+
+		it( 'sends it when cancelling a session', async () => {
+			const requests = installScheme( {
+				[ `/sessions/${ SESSION }/chunks` ]: () =>
+					json( 409, { code: 'native_upload_offset_mismatch' } ),
+			} );
+
+			await nativeMediaUploadMiddleware(
+				makeOptions( new File( [ 'x' ], 'a.jpg' ) ),
+				makeNext()
+			).catch( () => {} );
+
+			const cancel = requests.find( ( r ) =>
+				r.path.endsWith( '/cancel' )
+			);
+			expect( tokenHeader( cancel ) ).toBe( 'Bearer caller-token' );
+		} );
+
+		it( 'sends it with a media deletion', async () => {
+			const requests = installScheme( {
+				'/media/42/delete': () => json( 200, { deleted: true } ),
+			} );
+
+			await nativeMediaUploadMiddleware(
+				{ method: 'DELETE', path: '/wp/v2/media/42' },
+				makeNext()
+			);
+
+			expect( tokenHeader( requests[ 0 ] ) ).toBe(
+				'Bearer caller-token'
+			);
+		} );
+	} );
+
 	describe( 'transport selection and deletion', () => {
 		it( 'prefers the scheme over a loopback server', async () => {
 			getGBKit.mockReturnValue( {

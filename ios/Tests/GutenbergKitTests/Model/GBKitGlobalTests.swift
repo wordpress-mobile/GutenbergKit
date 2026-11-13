@@ -79,6 +79,32 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(try global.toString().contains(#""endpoint":"gbk-rest:\/\/relay\/fetch""#))
   }
 
+  @Test("gives the page the caller token with the relay and the upload scheme")
+  func mapsCallerToken() throws {
+    let global = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      nativeUploadScheme: "gbk-upload",
+      restRelayEndpoint: "gbk-rest://relay/fetch",
+      schemeCallerToken: "abc123"
+    )
+    #expect(global.restRelay?.token == "abc123")
+    #expect(global.nativeUploadToken == "abc123")
+    let json = try global.toString()
+    #expect(json.contains(#""nativeUploadToken":"abc123""#))
+    #expect(json.contains(#""token":"abc123""#))
+  }
+
+  @Test("gives the page no upload token when native uploads are off")
+  func omitsUploadTokenWithoutScheme() throws {
+    let global = try GBKitGlobal(
+      configuration: makeConfiguration(), dependencies: makeDependencies(),
+      restRelayEndpoint: "gbk-rest://relay/fetch",
+      schemeCallerToken: "abc123"
+    )
+    #expect(global.nativeUploadToken == nil)
+    #expect(global.restRelay?.token == "abc123")
+  }
+
   @Test("offers no relay in offline mode, where there is no site")
   func omitsRelayOffline() throws {
     let global = try GBKitGlobal(

@@ -3,6 +3,7 @@ import { store as coreStore } from '@wordpress/core-data';
 import { select } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
 import { getGBKit, getPostPath, getPostReference } from './bridge';
+import { CALLER_TOKEN_HEADER } from './fetch-relay';
 import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
 
@@ -328,7 +329,7 @@ export function nativeMediaUploadMiddleware( options, next ) {
  * @typedef {Object} NativeUploadTransport
  * @property {?string} schemeBase The base URL of the native upload scheme (iOS).
  * @property {?number} port       The loopback upload server's port (Android).
- * @property {?string} token      The loopback upload server's token (Android).
+ * @property {?string} token      The token native code requires on every request.
  */
 
 /**
@@ -343,7 +344,10 @@ export function nativeMediaUploadMiddleware( options, next ) {
 function nativeUploadTransport( gbkit ) {
 	const { nativeUploadScheme, nativeUploadPort, nativeUploadToken } = gbkit;
 	if ( nativeUploadScheme ) {
-		return { schemeBase: `${ nativeUploadScheme }://upload` };
+		return {
+			schemeBase: `${ nativeUploadScheme }://upload`,
+			token: nativeUploadToken,
+		};
 	}
 	if ( nativeUploadPort && nativeUploadToken ) {
 		return { port: nativeUploadPort, token: nativeUploadToken };
@@ -392,7 +396,7 @@ function nativeMediaUpload( options, transport ) {
 	const query = requestQuery( options.path );
 
 	const upload = transport.schemeBase
-		? schemeUpload( options, file, query, transport.schemeBase )
+		? schemeUpload( options, file, query, transport )
 		: loopbackUpload( options, file, query, transport );
 
 	// Use the two-argument form of `.then()` so the rejection handler catches
@@ -419,12 +423,21 @@ function loopbackUpload( options, file, query, { port, token } ) {
 	);
 	return fetch( `http://localhost:${ port }/upload${ query }`, {
 		method: 'POST',
-		headers: {
-			'Relay-Authorization': `Bearer ${ token }`,
-		},
+		headers: callerTokenHeader( token ),
 		body: options.body,
 		signal: options.signal,
 	} );
+}
+
+/**
+ * The header that carries native code's caller token. Without it, native code
+ * refuses the request.
+ *
+ * @param {?string} token The token, from `GBKit`.
+ * @return {Object} The header, or none when the host gave no token.
+ */
+function callerTokenHeader( token ) {
+	return token ? { [ CALLER_TOKEN_HEADER ]: `Bearer ${ token }` } : {};
 }
 
 /**
@@ -442,20 +455,20 @@ function loopbackUpload( options, file, query, { port, token } ) {
  * REST relay, which holds the whole file in memory, enough to get the web view
  * killed over a large video.
  *
- * @param {Object} options    The api-fetch options.
- * @param {File}   file       The file being uploaded.
- * @param {string} query      The request's query string.
- * @param {string} schemeBase The native upload scheme's base URL.
+ * @param {Object}                options   The api-fetch options.
+ * @param {File}                  file      The file being uploaded.
+ * @param {string}                query     The request's query string.
+ * @param {NativeUploadTransport} transport The native upload scheme's base URL and token.
  * @return {Promise<Response>} WordPress's response, or native code's refusal.
  */
-async function schemeUpload( options, file, query, schemeBase ) {
+async function schemeUpload( options, file, query, transport ) {
 	const { signal } = options;
 
 	info( `Routing upload of ${ file.name } through the native upload scheme` );
 
 	let sessionId = null;
 	try {
-		sessionId = await beginNativeUpload( schemeBase, file, signal );
+		sessionId = await beginNativeUpload( transport, file, signal );
 		for (
 			let offset = 0;
 			offset < file.size;
@@ -465,15 +478,16 @@ async function schemeUpload( options, file, query, schemeBase ) {
 				.slice( offset, offset + NATIVE_UPLOAD_CHUNK_SIZE )
 				.arrayBuffer();
 			await expectOk(
-				fetch(
-					`${ schemeBase }/sessions/${ sessionId }/chunks?offset=${ offset }`,
+				schemeFetch(
+					transport,
+					`/sessions/${ sessionId }/chunks?offset=${ offset }`,
 					{ method: 'POST', body: chunk, signal }
 				)
 			);
 		}
 	} catch ( sendError ) {
 		if ( sessionId ) {
-			cancelNativeUpload( schemeBase, sessionId );
+			cancelNativeUpload( transport, sessionId );
 		}
 		if ( sendError instanceof Response && ! signal?.aborted ) {
 			return sendError;
@@ -482,7 +496,7 @@ async function schemeUpload( options, file, query, schemeBase ) {
 	}
 
 	return finishNativeUpload(
-		schemeBase,
+		transport,
 		sessionId,
 		uploadFields( options.body ),
 		query,
@@ -493,14 +507,14 @@ async function schemeUpload( options, file, query, schemeBase ) {
 /**
  * Starts a native upload session for `file` and returns its ID.
  *
- * @param {string}       schemeBase The native upload scheme's base URL.
- * @param {File}         file       The file to upload.
- * @param {?AbortSignal} signal     Cancels the request.
+ * @param {NativeUploadTransport} transport The native upload scheme.
+ * @param {File}                  file      The file to upload.
+ * @param {?AbortSignal}          signal    Cancels the request.
  * @return {Promise<string>} The session ID.
  */
-async function beginNativeUpload( schemeBase, file, signal ) {
+async function beginNativeUpload( transport, file, signal ) {
 	const response = await expectOk(
-		fetch( `${ schemeBase }/sessions`, {
+		schemeFetch( transport, '/sessions', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( {
@@ -516,18 +530,34 @@ async function beginNativeUpload( schemeBase, file, signal ) {
 }
 
 /**
+ * Sends a request to iOS's native upload scheme, with the caller token native
+ * code requires.
+ *
+ * @param {NativeUploadTransport} transport The native upload scheme.
+ * @param {string}                path      The path below the scheme's base URL.
+ * @param {Object}                init      The request's options, as `fetch` takes them.
+ * @return {Promise<Response>} Native code's response.
+ */
+function schemeFetch( transport, path, init ) {
+	return fetch( `${ transport.schemeBase }${ path }`, {
+		...init,
+		headers: { ...init.headers, ...callerTokenHeader( transport.token ) },
+	} );
+}
+
+/**
  * Asks native code to upload a session's file to WordPress, and returns
  * WordPress's response.
  *
- * @param {string}       schemeBase The native upload scheme's base URL.
- * @param {string}       sessionId  The session to finish.
- * @param {Array}        fields     The upload's form fields.
- * @param {string}       query      The request's query string.
- * @param {?AbortSignal} signal     Cancels the upload.
+ * @param {NativeUploadTransport} transport The native upload scheme.
+ * @param {string}                sessionId The session to finish.
+ * @param {Array}                 fields    The upload's form fields.
+ * @param {string}                query     The request's query string.
+ * @param {?AbortSignal}          signal    Cancels the upload.
  * @return {Promise<Response>} WordPress's response, relayed.
  */
-function finishNativeUpload( schemeBase, sessionId, fields, query, signal ) {
-	return fetch( `${ schemeBase }/sessions/${ sessionId }/finish`, {
+function finishNativeUpload( transport, sessionId, fields, query, signal ) {
+	return schemeFetch( transport, `/sessions/${ sessionId }/finish`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify( { fields, query } ),
@@ -539,11 +569,11 @@ function finishNativeUpload( schemeBase, sessionId, fields, query, signal ) {
  * Abandons a native upload session, best effort: native code also sweeps idle
  * sessions, so a cancel that doesn't arrive only delays the cleanup.
  *
- * @param {string} schemeBase The native upload scheme's base URL.
- * @param {string} sessionId  The session to abandon.
+ * @param {NativeUploadTransport} transport The native upload scheme.
+ * @param {string}                sessionId The session to abandon.
  */
-function cancelNativeUpload( schemeBase, sessionId ) {
-	fetch( `${ schemeBase }/sessions/${ sessionId }/cancel`, {
+function cancelNativeUpload( transport, sessionId ) {
+	schemeFetch( transport, `/sessions/${ sessionId }/cancel`, {
 		method: 'POST',
 	} ).catch( () => {} );
 }
@@ -689,7 +719,7 @@ function nativeMediaDelete( options, transport, next ) {
 	);
 
 	const request = transport.schemeBase
-		? fetch( `${ transport.schemeBase }/media/${ attachmentId }/delete`, {
+		? schemeFetch( transport, `/media/${ attachmentId }/delete`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify( { query } ),
@@ -699,9 +729,7 @@ function nativeMediaDelete( options, transport, next ) {
 				`http://localhost:${ transport.port }/media/${ attachmentId }${ query }`,
 				{
 					method: 'DELETE',
-					headers: {
-						'Relay-Authorization': `Bearer ${ transport.token }`,
-					},
+					headers: callerTokenHeader( transport.token ),
 					signal: options.signal,
 				}
 		  );
