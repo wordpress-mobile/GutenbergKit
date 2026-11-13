@@ -132,11 +132,11 @@ struct EditorLocalizationTests {
             EditorLocalization.localize = { _ in nil }
             EditorLocalization.reportsMissingTranslations = false
 
-            _ = EditorLocalization[.lockdownModeDismiss]
+            _ = EditorLocalization[.editorCrashedReload]
         }
 
         let reports = try await missingTranslationReports(
-            forKeyNamed: "lockdownModeDismiss",
+            forKeyNamed: "editorCrashedReload",
             since: started
         )
         #expect(reports.isEmpty)
@@ -170,12 +170,12 @@ struct EditorLocalizationTests {
                     }
                 }
 
-                _ = EditorLocalization[.lockdownModeLearnMore]
+                _ = EditorLocalization[.insertPattern]
             }
         }
 
         let reports = try await missingTranslationReports(
-            forKeyNamed: "lockdownModeLearnMore",
+            forKeyNamed: "insertPattern",
             since: started
         )
         #expect(!reports.isEmpty)

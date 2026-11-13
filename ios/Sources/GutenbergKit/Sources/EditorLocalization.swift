@@ -41,13 +41,6 @@ public enum EditorLocalizableString {
     case editorCrashedDescription
 
     case editorCrashedReload
-
-    // MARK: - Lockdown Mode
-    case lockdownModeTitle
-    case lockdownModeWarning
-    case lockdownModeExcludeHint
-    case lockdownModeLearnMore
-    case lockdownModeDismiss
 }
 
 /// Provides localized strings for the editor.
@@ -128,11 +121,6 @@ public final class EditorLocalization {
         case .editorCrashedTitle: "The editor stopped working"
         case .editorCrashedDescription: "Reload the editor to continue editing."
         case .editorCrashedReload: "Reload Editor"
-        case .lockdownModeTitle: "Lockdown Mode Detected"
-        case .lockdownModeWarning: "Lockdown Mode is enabled. The editor may not work correctly."
-        case .lockdownModeExcludeHint: "You can exclude this app from Lockdown Mode in Settings, then re-open the editor to restore full functionality."
-        case .lockdownModeLearnMore: "Learn More"
-        case .lockdownModeDismiss: "Dismiss"
         }
     }
 
