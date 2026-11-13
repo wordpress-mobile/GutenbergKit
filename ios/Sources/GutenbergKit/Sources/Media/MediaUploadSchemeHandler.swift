@@ -124,12 +124,12 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
     // MARK: - Routing
 
     private func response(to request: URLRequest) async -> SchemeResponse {
-        guard callerToken.authorizes(request) else {
-            return .error(401, code: "native_upload_unauthorized", message: "The request is not from the editor.")
-        }
         let route = Route(request)
         if case .preflight = route {
             return SchemeResponse(status: 204)
+        }
+        guard callerToken.authorizes(request) else {
+            return .error(401, code: "native_upload_unauthorized", message: "The request is not from the editor.")
         }
         guard let service else {
             return Self.unavailable

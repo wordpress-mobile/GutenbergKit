@@ -197,6 +197,94 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         #expect(recorder.events.last == "failed")
     }
 
+    // MARK: - Who can use the schemes
+
+    @MainActor
+    @Test("a sandboxed frame can't read the caller token, so both schemes refuse it")
+    func sandboxedFrameIsRefused() async throws {
+        // Nothing listens on port 1, so a relayed request fails at once. The relay still
+        // reports it to the host's delegate, which is how the test tells a request that
+        // was relayed from one refused before it.
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "http://127.0.0.1:1")!,
+            siteApiRoot: URL(string: "http://127.0.0.1:1/wp-json/")!
+        )
+        .setAuthHeader("Bearer test-token")
+        .build()
+        let recorder = TaskEventRecorder()
+        let editor = EditorViewController(
+            configuration: configuration,
+            mediaUploader: InertUploader(),
+            httpClient: EditorHTTPClient(urlSession: URLSession.shared, authHeader: "Bearer test-token", delegate: recorder)
+        )
+        defer { editor.stopMediaHandling() }
+        // The script the editor itself installs, so the test covers which frames get `GBKit`.
+        let dependencies = EditorDependencies(editorSettings: .undefined, assetBundle: .empty, preloadList: nil)
+        editor.webView.configuration.userContentController.addUserScript(
+            try editor.buildEditorConfiguration(dependencies: dependencies)
+        )
+        try await loadBlankPage(in: editor)
+        let relayURL = RestRelayHandleTests.relayURL(for: "http://127.0.0.1:1/wp-json/wp/v2/users/me").absoluteString
+
+        let frame = try #require(try await editor.webView.callAsyncJavaScript(
+            """
+            const script = `(async () => {
+                const result = { origin: self.origin, hasOwnGBKit: 'GBKit' in window };
+                try { result.parentGBKit = typeof parent.GBKit; } catch (e) { result.parentGBKit = e.name; }
+                try { await fetch(relayURL); } catch {}
+                const upload = await fetch('gbk-upload://upload/sessions', {
+                    method: 'POST',
+                    body: JSON.stringify({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1 }),
+                });
+                result.uploadStatus = upload.status;
+                parent.postMessage(result, '*');
+            })();`;
+            const iframe = document.createElement('iframe');
+            iframe.sandbox = 'allow-scripts';
+            iframe.srcdoc = `<script>const relayURL = ${ JSON.stringify(relayURL) };${ script }<\\/script>`;
+            const reply = new Promise((resolve) => {
+                addEventListener('message', (event) => {
+                    if (event.source === iframe.contentWindow) resolve(event.data);
+                });
+            });
+            document.body.append(iframe);
+            return await reply;
+            """,
+            arguments: ["relayURL": relayURL],
+            in: nil,
+            contentWorld: .page
+        ) as? [String: Any])
+
+        #expect(frame["origin"] as? String == "null")
+        #expect(frame["hasOwnGBKit"] as? Bool == false, "the GBKit script ran in the frame")
+        #expect(frame["parentGBKit"] as? String == "SecurityError", "the frame reached the page's GBKit")
+        #expect(frame["uploadStatus"] as? Int == 401)
+        #expect(recorder.events.isEmpty, "the frame's request was relayed")
+
+        // The editor page, sending the token it read from `GBKit`, gets through both.
+        let page = try #require(try await editor.webView.callAsyncJavaScript(
+            """
+            const result = {};
+            const relayHeaders = { 'Relay-Authorization': `Bearer ${ window.GBKit.restRelay.token }` };
+            try { await fetch(relayURL, { headers: relayHeaders }); } catch {}
+            const upload = await fetch('gbk-upload://upload/sessions', {
+                method: 'POST',
+                headers: { 'Relay-Authorization': `Bearer ${ window.GBKit.nativeUploadToken }` },
+                body: JSON.stringify({ filename: 'a.jpg', mimeType: 'image/jpeg', size: 1 }),
+            });
+            result.uploadStatus = upload.status;
+            return result;
+            """,
+            arguments: ["relayURL": relayURL],
+            in: nil,
+            contentWorld: .page
+        ) as? [String: Any])
+
+        #expect(page["uploadStatus"] as? Int == 201)
+        #expect(recorder.events.first == "created", "the page's request wasn't relayed")
+    }
+
     // MARK: - Uploads from the editor's own web view
 
     @MainActor

@@ -175,7 +175,8 @@ struct MediaUploadSchemeHandlerTests {
     let handler = makeHandler(service: ScriptedUploadService())
 
     let notFound = try await send(handler, "/nope")
-    let preflight = try await send(handler, "/sessions", method: "OPTIONS")
+    // A browser sends a preflight without the request's own headers, so without the token.
+    let preflight = try await send(handler, "/sessions", method: "OPTIONS", token: nil)
 
     #expect(notFound.status == 404)
     #expect(notFound.header("Access-Control-Allow-Origin") == "*")
