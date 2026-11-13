@@ -1,6 +1,11 @@
 import { getGBKit } from './bridge';
 import { debug, warn } from './logger';
-import { bufferedBody, isRelayed, relayURL } from './fetch-relay';
+import {
+	CALLER_TOKEN_HEADER,
+	bufferedBody,
+	isRelayed,
+	relayURL,
+} from './fetch-relay';
 
 /**
  * Marks the relaying `XMLHttpRequest` as ours. Registered globally so a second
@@ -313,6 +318,14 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			// listeners open the request again.
 			this.#sent = true;
 
+			// Native code refuses a relayed request without it.
+			if ( restRelay.token ) {
+				super.setRequestHeader(
+					CALLER_TOKEN_HEADER,
+					`Bearer ${ restRelay.token }`
+				);
+			}
+
 			if ( ! this.#async ) {
 				if ( ! isReadBeforeSending( sent ) ) {
 					for ( const type of this.#contentTypes ) {
@@ -499,8 +512,8 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 			// empty body.
 			this.#uploadSize = size === 0 ? undefined : size;
 			if ( this.#uploadSize !== undefined ) {
-				// Hard to guess: any frame can reach the relay, and native code
-				// reports the name it is given to this page.
+				// Hard to guess: native code reports the name it is given to
+				// this page.
 				this.#uploadID = crypto
 					.getRandomValues( new Uint32Array( 4 ) )
 					.join( '-' );
