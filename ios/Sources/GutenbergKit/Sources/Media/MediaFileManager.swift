@@ -36,8 +36,11 @@ actor MediaFileManager {
     /// it, so the attachment WordPress creates is named after it. An item Photos can
     /// only hand over as data is written from memory instead.
     ///
+    /// Takes ``ImportableMediaItem`` rather than `PhotosPickerItem` directly so the
+    /// import path can be exercised with a mock under test.
+    ///
     /// - Returns: MediaInfo with a `gbk-media-file://` URL and detected media type
-    func `import`(_ item: PhotosPickerItem) async throws -> MediaInfo {
+    func `import`(_ item: some ImportableMediaItem) async throws -> MediaInfo {
         do {
             if let picked = try await item.loadTransferable(type: PickedFile.self) {
                 defer { try? fileManager.removeItem(at: picked.url.deletingLastPathComponent()) }
