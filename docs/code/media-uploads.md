@@ -52,7 +52,7 @@ still held 170 MB after the 64 MB upload ended.
 
 A `WKURLSchemeHandler` in the editor's own web view. It has no socket, so iOS can't reclaim
 it when a suspended app's device idle-sleeps, which is what broke the loopback server
-after an ordinary screen lock. It has no token either; see
+after an ordinary screen lock. Like the loopback server, it requires a per-session token; see
 [Who can use the schemes](#who-can-use-the-schemes).
 
 WebKit hands a scheme handler only bodies it has buffered. Measured:
@@ -156,48 +156,40 @@ byte for byte.
 
 ## Who can use the schemes
 
-`gbk-upload:` and the REST relay's `gbk-rest:` don't check who is calling. A scheme
-handler serves every frame in the editor's web view, not only the editor page, and native
-code adds the site credential to what it sends to the site's REST API. So any frame can act
-as the user through them.
+A scheme handler serves every frame in the editor's web view, not only the editor page. So
+`gbk-upload:` and the REST relay's `gbk-rest:` each require a per-session token, as
+Android's loopback server does. Native code makes one token per editor (`SchemeCallerToken`)
+and gives it to the page in `window.GBKit`, which is injected into the main frame only: as
+`restRelay.token` for the relay, and as `nativeUploadToken` for uploads. The page sends it on
+every request as `Relay-Authorization: Bearer <token>`. WebKit sends a scheme handler no
+preflight, so the header costs nothing. The relay never sends it on to the site.
+
+A request without the token is refused before native code acts on it. `gbk-rest:` fails it
+as a network failure would, so it can't be mistaken for the site's own answer. `gbk-upload:`
+answers `401` before routing, so it can't start, finish, or cancel a session, or delete
+media.
 
 The editor's frames fall into two groups:
 
-| Frames                                                   | Origin       | Reads `window.GBKit` |
-| -------------------------------------------------------- | ------------ | -------------------- |
-| The editor page; embed previews                          | the editor's | yes                  |
-| The Custom HTML preview; embeds from untrusted providers | `null`       | no                   |
+| Frames                                                   | Origin       | Reads `window.GBKit` | Can use the schemes |
+| -------------------------------------------------------- | ------------ | -------------------- | ------------------- |
+| The editor page; embed previews                          | the editor's | yes                  | yes                 |
+| The Custom HTML preview; embeds from untrusted providers | `null`       | no                   | no                  |
 
 Gutenberg's `SandBox` runs embed previews with `allowSameOrigin`. Core reduces an embed from
 a provider it doesn't trust to a `sandbox="allow-scripts"` iframe.
 
-The first group already has the credential through `GBKit.authHeader`, so the schemes give
-it nothing new. The second group had no way to use the credential before the schemes, and
-now it does. Measured on iOS 27.0 in the Simulator, with Lockdown Mode on and off: a
-sandboxed `srcdoc` frame's `POST` through `gbk-rest:` reached the site with the credential,
-and the frame read the reply.
-
-A check on each request would shut out the second group:
-
--   **A token** in `GBKit`, sent as a header. A frame that can't read `GBKit` can't send it.
-    WebKit sends a scheme handler no preflight, so the header costs nothing.
--   **An `Origin` check** that allows only what the editor page sends: no `Origin` with
-    Lockdown Mode off, `file://` with it on. The second group's `fetch` says `null`. Loads
-    that send no `Origin`, such as an image or a navigation, still get through, but they are
-    `GET`s whose reply the frame can't read.
-
-Neither check reaches the first group. Code at the editor's origin can call the editor's own
-functions, so nothing on the request tells it apart from the editor. Its scripts come from
-the providers core trusts with their embed HTML (`wp_filter_oembed_result`), and they have
-the same reach in wp-admin.
-
-Neither check is in place. It was left out of the scheme transports because it would close
-the second group only, while the first stays as it was before the schemes.
+The token doesn't reach the first group. Code at the editor's origin can call the editor's own
+functions, so nothing on the request tells it apart from the editor. That group already has
+the credential through `GBKit.authHeader`, so the schemes give it nothing new. Its scripts
+come from the providers core trusts with their embed HTML (`wp_filter_oembed_result`), and
+they have the same reach in wp-admin. Keeping the check to the token, rather than to the main
+frame, also keeps same-origin scripts working if the editor's canvas moves into an iframe.
 
 The relay also sends requests for other hosts, so a plugin's call to its own service works
 under Lockdown Mode. The page sends every request for another origin to one URL,
-`gbk-rest://relay/fetch?url=…`, and native code decides how to send it. That gives every
-frame a response from any `https` URL without CORS. Plain `http` goes only to the site's own
+`gbk-rest://relay/fetch?url=…`, and native code decides how to send it. That gives the
+editor page a response from any `https` URL without CORS. Plain `http` goes only to the site's own
 host — the API root's or the site URL's — on any port. Any other `http` request gets a `426`
 before anything is sent. A device on the local network, or this device itself, can't present
 a valid certificate for another host's name, so a name pointed at one fails before anything
@@ -211,8 +203,7 @@ builds from the configured root. It never removes or replaces an `Authorization`
 sent, wherever the request goes, even when that is the site credential. Which hosts get the
 site credential is the page's decision, made before the request reaches native code:
 removing it there would protect nothing, because the page already holds the credential and
-can send it anywhere. Without Lockdown Mode the editor page can already read those responses;
-the second group couldn't.
+can send it anywhere. Without Lockdown Mode the editor page can already read those responses.
 
 ### Where a relayed request differs from the browser's
 
