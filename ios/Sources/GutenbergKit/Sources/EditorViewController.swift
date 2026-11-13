@@ -196,6 +196,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     let mediaUploadSchemeHandler: MediaUploadSchemeHandler
     /// Relays the page's requests to other origins over `gbk-rest:`.
     let restRelaySchemeHandler: RestRelaySchemeHandler
+    /// The token both scheme handlers require. Given only to the editor page, in `GBKit`.
+    let schemeCallerToken = SchemeCallerToken()
 
     // MARK: - Private Properties (UI)
 
@@ -321,19 +323,25 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         config.setURLSchemeHandler(MediaFileSchemeHandler(), forURLScheme: MediaFileSchemeHandler.scheme)
 
         // The page sends the site's REST API requests here for native code to relay.
-        let relayHandler = RestRelaySchemeHandler(relay: RestRelay(configuration: configuration, observer: httpClient.delegate))
+        let relayHandler = RestRelaySchemeHandler(
+            relay: RestRelay(configuration: configuration, observer: httpClient.delegate),
+            callerToken: schemeCallerToken
+        )
         self.restRelaySchemeHandler = relayHandler
         config.setURLSchemeHandler(relayHandler, forURLScheme: RestRelaySchemeHandler.scheme)
 
         // Scheme handlers can only be registered before the web view exists, so the
         // upload handler is built here, from what the host handed over, even though the
         // page won't use it until it loads.
-        let uploadHandler = MediaUploadSchemeHandler(service: Self.makeMediaUploadService(
-            configuration: configuration,
-            httpClient: httpClient,
-            processor: mediaProcessor,
-            uploader: mediaUploader
-        ))
+        let uploadHandler = MediaUploadSchemeHandler(
+            service: Self.makeMediaUploadService(
+                configuration: configuration,
+                httpClient: httpClient,
+                processor: mediaProcessor,
+                uploader: mediaUploader
+            ),
+            callerToken: schemeCallerToken
+        )
         self.mediaUploadSchemeHandler = uploadHandler
         config.setURLSchemeHandler(uploadHandler, forURLScheme: MediaUploadSchemeHandler.scheme)
 
@@ -559,7 +567,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             dependencies: dependencies,
             nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
             restRelayEndpoint: RestRelaySchemeHandler.endpoint,
-            restRelayReportsRequests: relayObserver != nil
+            restRelayReportsRequests: relayObserver != nil,
+            schemeCallerToken: schemeCallerToken.value
         )
         return WKUserScript(
             source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),

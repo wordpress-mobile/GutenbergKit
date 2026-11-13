@@ -139,13 +139,16 @@ private final class LifecyclePage {
 
     private init() async throws {
         server = try await LifecycleHTTPServer()
-        handler = RestRelaySchemeHandler(relay: RestRelay(
-            configuration: EditorConfigurationBuilder(
-                postType: .post,
-                siteURL: URL(string: server.origin)!,
-                siteApiRoot: URL(string: "\(server.origin)/wp-json/")!
-            ).build()
-        ))
+        handler = RestRelaySchemeHandler(
+            relay: RestRelay(
+                configuration: EditorConfigurationBuilder(
+                    postType: .post,
+                    siteURL: URL(string: server.origin)!,
+                    siteApiRoot: URL(string: "\(server.origin)/wp-json/")!
+                ).build()
+            ),
+            callerToken: .forTests
+        )
 
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(handler, forURLScheme: RestRelaySchemeHandler.scheme)
@@ -203,15 +206,25 @@ private final class LifecyclePage {
         }
         let source = root.appending(path: "src/utils")
         let modules = try ["fetch-relay.js", "xhr-relay.js"].map { name in
-            let lines = try String(contentsOf: source.appending(path: name), encoding: .utf8)
-                .components(separatedBy: "\n")
-                .filter { !$0.hasPrefix("import ") }
-                .map { $0.hasPrefix("export ") ? String($0.dropFirst("export ".count)) : $0 }
+            var lines: [String] = []
+            var inImport = false
+            for line in try String(contentsOf: source.appending(path: name), encoding: .utf8)
+                .components(separatedBy: "\n") {
+                // An import can span several lines; it ends at the one with its `from`.
+                if line.hasPrefix("import ") {
+                    inImport = true
+                }
+                if inImport {
+                    inImport = !line.contains(" from ")
+                    continue
+                }
+                lines.append(line.hasPrefix("export ") ? String(line.dropFirst("export ".count)) : line)
+            }
             return lines.joined(separator: "\n")
         }
         return """
         (() => {
-        const restRelay = { endpoint: '\(RestRelaySchemeHandler.endpoint)' };
+        const restRelay = { endpoint: '\(RestRelaySchemeHandler.endpoint)', token: '\(SchemeCallerToken.forTests.value)' };
         const getGBKit = () => ( { restRelay } );
         const debug = () => {};
         const warn = () => {};

@@ -85,6 +85,10 @@ public struct GBKitGlobal: Sendable, Codable {
     /// the REST relay.
     let nativeUploadScheme: String?
 
+    /// The token the page sends with each request to ``nativeUploadScheme``. The same
+    /// name Android uses for its loopback upload server's token.
+    let nativeUploadToken: String?
+
     /// Where the page sends its requests to other origins for native code to relay, or
     /// `nil` when they go straight from the page.
     let restRelay: RestRelayLocation?
@@ -99,6 +103,9 @@ public struct GBKitGlobal: Sendable, Codable {
         /// page then leaves those requests out of its own network log, which would
         /// otherwise record each of them twice.
         let reportsRequests: Bool
+
+        /// The token the page sends with each relayed request.
+        let token: String?
     }
 
     let editorSettings: JSON?
@@ -120,12 +127,15 @@ public struct GBKitGlobal: Sendable, Codable {
     ///     there is no site to relay for.
     ///   - restRelayReportsRequests: Whether native code reports each relayed
     ///     request to the host's ``EditorHTTPClientDelegate``.
+    ///   - schemeCallerToken: The token the page sends to the upload scheme and the
+    ///     REST relay, given to the page with each of them.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
         nativeUploadScheme: String? = nil,
         restRelayEndpoint: String? = nil,
-        restRelayReportsRequests: Bool = false
+        restRelayReportsRequests: Bool = false,
+        schemeCallerToken: String? = nil
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -149,8 +159,9 @@ public struct GBKitGlobal: Sendable, Codable {
         self.logLevel = configuration.logLevel.rawValue
         self.enableNetworkLogging = configuration.enableNetworkLogging
         self.nativeUploadScheme = nativeUploadScheme
+        self.nativeUploadToken = nativeUploadScheme == nil ? nil : schemeCallerToken
         self.restRelay = configuration.isOfflineModeEnabled ? nil : restRelayEndpoint.map {
-            RestRelayLocation(endpoint: $0, reportsRequests: restRelayReportsRequests)
+            RestRelayLocation(endpoint: $0, reportsRequests: restRelayReportsRequests, token: schemeCallerToken)
         }
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()

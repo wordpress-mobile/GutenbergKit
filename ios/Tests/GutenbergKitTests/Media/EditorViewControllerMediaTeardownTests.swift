@@ -184,8 +184,11 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         try await loadBlankPage(in: editor)
 
         _ = try await editor.webView.callAsyncJavaScript(
-            "try { await fetch(url); } catch {} return true;",
-            arguments: ["url": RestRelayHandleTests.relayURL(for: "http://127.0.0.1:1/wp-json/wp/v2/posts").absoluteString],
+            "try { await fetch(url, { headers: { 'Relay-Authorization': auth } }); } catch {} return true;",
+            arguments: [
+                "url": RestRelayHandleTests.relayURL(for: "http://127.0.0.1:1/wp-json/wp/v2/posts").absoluteString,
+                "auth": "Bearer \(editor.schemeCallerToken.value)",
+            ],
             in: nil,
             contentWorld: .page
         )
@@ -400,11 +403,13 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         let result = try await editor.webView.callAsyncJavaScript(
             """
             const base = 'gbk-upload://upload';
+            const headers = { 'Relay-Authorization': auth };
             const bytes = new Uint8Array(size);
             for (let i = 0; i < size; i++) bytes[i] = i % 251;
             const file = new File([bytes], 'clip.bin', { type: 'application/octet-stream' });
             const begin = await fetch(`${base}/sessions`, {
                 method: 'POST',
+                headers,
                 body: JSON.stringify({ filename: file.name, mimeType: file.type, size: file.size }),
             });
             if (!begin.ok) return { beginStatus: begin.status };
@@ -412,11 +417,12 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
             const chunkSize = 4 * 1024 * 1024;
             for (let offset = 0; offset < file.size; offset += chunkSize) {
                 const chunk = await file.slice(offset, offset + chunkSize).arrayBuffer();
-                const response = await fetch(`${base}/sessions/${id}/chunks?offset=${offset}`, { method: 'POST', body: chunk });
+                const response = await fetch(`${base}/sessions/${id}/chunks?offset=${offset}`, { method: 'POST', headers, body: chunk });
                 if (!response.ok) return { chunkStatus: response.status, offset };
             }
             const finish = await fetch(`${base}/sessions/${id}/finish`, {
                 method: 'POST',
+                headers,
                 body: JSON.stringify({ fields: [{ name: 'post', value: '7' }], query: '?_embed' }),
             });
             return {
@@ -424,7 +430,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
                 attachmentId: finish.headers.get('x-wp-upload-attachment-id'),
             };
             """,
-            arguments: ["size": size],
+            arguments: ["size": size, "auth": "Bearer \(editor.schemeCallerToken.value)"],
             in: nil,
             contentWorld: .page
         )

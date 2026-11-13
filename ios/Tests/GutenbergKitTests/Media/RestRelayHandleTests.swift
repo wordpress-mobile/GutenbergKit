@@ -298,11 +298,13 @@ struct RestRelayHandleTests {
             "Accept-Encoding": "gzip, deflate",
             "X-GBK-Relay-Timeout": "500",
             "X-GBK-Relay-Upload": "upload-1",
+            "Relay-Authorization": "Bearer test-caller-token",
         ])
 
         for header in [
             "Origin", "Referer", "Sec-Fetch-Site", "Sec-Fetch-Mode",
             "Cookie", "Connection", "X-GBK-Relay-Timeout", "X-GBK-Relay-Upload",
+            "Relay-Authorization",
         ] {
             #expect(
                 exchange.upstream.value(forHTTPHeaderField: header) == nil,
@@ -606,12 +608,31 @@ extension RestRelay.Response {
 @MainActor
 @Suite("RestRelaySchemeHandler")
 struct RestRelaySchemeHandlerTests {
+    @Test("refuses a request without the caller token, without relaying it", arguments: [
+        nil, SchemeCallerToken(value: "not-the-editors-token"),
+    ])
+    func refusesWithoutToken(token: SchemeCallerToken?) async throws {
+        let stubbed = StubURLProtocol.makeSession(stub: .init(body: Data("[]".utf8)))
+        defer { stubbed.finish() }
+        let handler = makeHandler(session: stubbed.session)
+        let request = URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/users/me"))
+        let task = FakeSchemeTask(request: token.map { request.carrying($0) } ?? request)
+
+        handler.start(task)
+        await task.waitUntilAnswered()
+
+        #expect((task.failure as? URLError)?.code == .userAuthenticationRequired)
+        #expect(task.response == nil, "a response would reach the page as the site's own")
+        #expect(stubbed.recorder.request == nil, "the request reached the site")
+        #expect(handler.activeRequestCount == 0)
+    }
+
     @Test("fails the page's request when the site can't be reached")
     func failsWhenSiteUnreachable() async throws {
         let stubbed = StubURLProtocol.makeSession(stub: .init(failure: URLError(.notConnectedToInternet)))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
 
         handler.start(task)
         await task.waitUntilAnswered()
@@ -626,7 +647,7 @@ struct RestRelaySchemeHandlerTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init())
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/../wp-admin/")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/../wp-admin/")))
 
         handler.start(task)
         await task.waitUntilAnswered()
@@ -642,7 +663,7 @@ struct RestRelaySchemeHandlerTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(body: Data("[]".utf8)))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts")))
 
         handler.start(task)
         handler.stop(task)
@@ -670,7 +691,7 @@ struct RestRelaySchemeHandlerTests {
         ))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
 
         handler.start(task)
         try await waitUntil { !task.body.isEmpty }
@@ -699,7 +720,7 @@ struct RestRelaySchemeHandlerTests {
         ))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
 
         handler.start(task)
         try await waitUntil { !task.body.isEmpty }
@@ -730,7 +751,7 @@ struct RestRelaySchemeHandlerTests {
         // reached the handler.
         let observer = TaskEventRecorder()
         let handler = makeHandler(session: stubbed.session, observer: observer)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
 
         handler.start(task)
         try await waitUntil { !task.body.isEmpty }
@@ -755,7 +776,7 @@ struct RestRelaySchemeHandlerTests {
         ))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
 
         handler.start(task)
         try await waitUntil { !task.body.isEmpty }
@@ -782,7 +803,7 @@ struct RestRelaySchemeHandlerTests {
         let handler = makeHandler(session: stubbed.session)
         var request = URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query"))
         request.setValue("100", forHTTPHeaderField: RestRelaySchemeHandler.timeoutHeader)
-        let task = FakeSchemeTask(request: request)
+        let task = FakeSchemeTask(fromEditor: request)
 
         handler.start(task)
         await task.waitUntilAnswered()
@@ -801,7 +822,7 @@ struct RestRelaySchemeHandlerTests {
         let handler = makeHandler(session: stubbed.session)
         var request = URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wp/v2/posts"))
         request.setValue("60000", forHTTPHeaderField: RestRelaySchemeHandler.timeoutHeader)
-        let task = FakeSchemeTask(request: request)
+        let task = FakeSchemeTask(fromEditor: request)
 
         handler.start(task)
         await task.waitUntilAnswered()
@@ -822,7 +843,7 @@ struct RestRelaySchemeHandlerTests {
         ))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: "https://example.com/wp-json/wpcom/v2/jetpack-ai-query")))
 
         handler.start(task)
         try await waitUntil { !task.body.isEmpty }
@@ -849,7 +870,7 @@ struct RestRelaySchemeHandlerTests {
         let stubbed = StubURLProtocol.makeSession(stub: .init(headers: Self.eventStream, body: Data("one ".utf8), gate: gate, rest: Data("two".utf8)))
         defer { stubbed.finish() }
         let handler = makeHandler(session: stubbed.session, siteApiRoot: siteApiRoot)
-        let task = FakeSchemeTask(request: URLRequest(url: RestRelayHandleTests.relayURL(for: url)))
+        let task = FakeSchemeTask(fromEditor: URLRequest(url: RestRelayHandleTests.relayURL(for: url)))
 
         handler.start(task)
         try await waitUntil { !task.body.isEmpty }
@@ -874,7 +895,7 @@ struct RestRelaySchemeHandlerTests {
         defer { server.stop() }
         let site = "http://127.0.0.1:\(server.port)"
         let handler = makeHandler(site: site, uploadProgressInterval: .zero)
-        let task = FakeSchemeTask(request: Self.uploadRequest(to: site, naming: "upload-1"))
+        let task = FakeSchemeTask(fromEditor: Self.uploadRequest(to: site, naming: "upload-1"))
         let reports = ProgressRecorder()
 
         handler.start(task) { reports.add($0) }
@@ -900,7 +921,7 @@ struct RestRelaySchemeHandlerTests {
         defer { server.stop() }
         let site = "http://127.0.0.1:\(server.port)"
         let handler = makeHandler(site: site, uploadProgressInterval: .seconds(3600))
-        let task = FakeSchemeTask(request: Self.uploadRequest(to: site, naming: "upload-1"))
+        let task = FakeSchemeTask(fromEditor: Self.uploadRequest(to: site, naming: "upload-1"))
         let reports = ProgressRecorder()
 
         handler.start(task) { reports.add($0) }
@@ -920,7 +941,7 @@ struct RestRelaySchemeHandlerTests {
         defer { server.stop() }
         let site = "http://127.0.0.1:\(server.port)"
         let handler = makeHandler(site: site, uploadProgressInterval: .zero)
-        let task = FakeSchemeTask(request: Self.uploadRequest(to: site, naming: nil))
+        let task = FakeSchemeTask(fromEditor: Self.uploadRequest(to: site, naming: nil))
         let reports = ProgressRecorder()
 
         handler.start(task) { reports.add($0) }
@@ -972,6 +993,7 @@ struct RestRelaySchemeHandlerTests {
                 session: session,
                 observer: observer
             ),
+            callerToken: .forTests,
             uploadProgressInterval: uploadProgressInterval
         )
     }

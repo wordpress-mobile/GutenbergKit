@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import WebKit
 
 /// Serves ``RestRelay`` to the editor's page over a `gbk-rest:` URL scheme.
@@ -6,6 +7,9 @@ import WebKit
 /// The page's `fetch` wrapper (`src/utils/fetch-relay.js`) rewrites a request for
 /// another origin to `gbk-rest://relay/fetch?url=<url>`. This hands it to the
 /// relay and answers with what the server said.
+///
+/// A request must carry the editor's ``SchemeCallerToken``. One without it fails as a
+/// network failure would, before anything is relayed.
 @MainActor
 final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
     nonisolated static let scheme = "gbk-rest"
@@ -45,15 +49,25 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
     /// relays for the configuration the page was given.
     var relay: RestRelay
 
+    /// The token every request must carry.
+    private let callerToken: SchemeCallerToken
+
     private var active = ActiveSchemeTasks()
 
     /// The shortest time between two progress reports for one upload.
     private let uploadProgressInterval: Duration
 
-    /// - Parameter uploadProgressInterval: The shortest time between two progress
-    ///   reports for one upload. A browser fires upload `progress` about every 50 ms.
-    init(relay: RestRelay, uploadProgressInterval: Duration = .milliseconds(50)) {
+    /// - Parameters:
+    ///   - callerToken: The token every request must carry.
+    ///   - uploadProgressInterval: The shortest time between two progress reports for
+    ///     one upload. A browser fires upload `progress` about every 50 ms.
+    init(
+        relay: RestRelay,
+        callerToken: SchemeCallerToken,
+        uploadProgressInterval: Duration = .milliseconds(50)
+    ) {
         self.relay = relay
+        self.callerToken = callerToken
         self.uploadProgressInterval = uploadProgressInterval
         super.init()
     }
@@ -87,6 +101,11 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
         reportUploadProgress: (@MainActor @Sendable (UploadProgress) -> Void)? = nil
     ) {
         let request = task.request
+        guard callerToken.authorizes(request) else {
+            Logger.restRelay.error("Refusing to relay a request without the editor's caller token")
+            task.didFailWithError(URLError(.userAuthenticationRequired))
+            return
+        }
         let relay = relay
         active.start(task) { key in
             let onUploadProgress = reportUploadProgress.flatMap {

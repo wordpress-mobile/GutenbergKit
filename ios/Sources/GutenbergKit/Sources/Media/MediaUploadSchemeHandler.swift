@@ -19,9 +19,8 @@ import WebKit
 /// | `POST …/sessions/<id>/cancel` | — | `204` |
 /// | `POST …/media/<attachmentId>/delete` | JSON `{query}` | WordPress's response, verbatim |
 ///
-/// The scheme doesn't check who is calling: every frame in the editor's web view can load
-/// it, not only the editor page. Why that is left as it is: "Who can use the schemes" in
-/// `docs/code/media-uploads.md`.
+/// A request must carry the editor's ``SchemeCallerToken``. One without it gets a `401`
+/// before it is routed, so it can't create, finish, or cancel a session, or delete media.
 ///
 /// Every response carries CORS headers: under Lockdown Mode WebKit enforces CORS on
 /// scheme responses too, and core's upload middleware reads
@@ -36,13 +35,21 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
     let store: MediaUploadSessionStore
     private var service: (any MediaUploading)?
 
+    /// The token every request must carry.
+    private let callerToken: SchemeCallerToken
+
     /// Whether ``disable()`` has run, which nothing undoes.
     private var isDisabled = false
 
     private var active = ActiveSchemeTasks()
 
-    init(service: (any MediaUploading)?, store: MediaUploadSessionStore = MediaUploadSessionStore()) {
+    init(
+        service: (any MediaUploading)?,
+        callerToken: SchemeCallerToken,
+        store: MediaUploadSessionStore = MediaUploadSessionStore()
+    ) {
         self.service = service
+        self.callerToken = callerToken
         self.store = store
         super.init()
         // The handler is made with the editor, in the foreground: from here the shared
@@ -117,6 +124,9 @@ final class MediaUploadSchemeHandler: NSObject, WKURLSchemeHandler {
     // MARK: - Routing
 
     private func response(to request: URLRequest) async -> SchemeResponse {
+        guard callerToken.authorizes(request) else {
+            return .error(401, code: "native_upload_unauthorized", message: "The request is not from the editor.")
+        }
         let route = Route(request)
         if case .preflight = route {
             return SchemeResponse(status: 204)
