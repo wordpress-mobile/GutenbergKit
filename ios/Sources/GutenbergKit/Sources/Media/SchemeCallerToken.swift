@@ -31,11 +31,12 @@ struct SchemeCallerToken: Sendable {
 
     /// Whether `request` carries this token in ``header``.
     func authorizes(_ request: URLRequest) -> Bool {
-        guard let sent = request.value(forHTTPHeaderField: Self.header),
-              sent.hasPrefix("Bearer ") else {
+        let prefix = "Bearer ".utf8
+        guard let sent = request.value(forHTTPHeaderField: Self.header)?.utf8,
+              sent.starts(with: prefix) else {
             return false
         }
-        let provided = Array(sent.utf8.dropFirst("Bearer ".count))
+        let provided = Array(sent.dropFirst(prefix.count))
         let expected = Array(value.utf8)
         return provided.count == expected.count
             && timingsafe_bcmp(provided, expected, expected.count) == 0
