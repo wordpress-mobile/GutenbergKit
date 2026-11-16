@@ -30,10 +30,9 @@ import OSLog
 ///
 /// ## Security
 ///
-/// - The scheme doesn't check who is calling. Every frame in the editor's web
-///   view can load it, including sandboxed frames that can't reach the page,
-///   and the relay attaches the site credential to what they send to the
-///   site's REST API. Why that is left as it is: "Who can use the schemes" in
+/// - Only callers that can read the editor page's `GBKit` can use the scheme:
+///   ``RestRelaySchemeHandler`` refuses a request without the editor's
+///   ``SchemeCallerToken``. See "Who can use the schemes" in
 ///   `docs/code/media-uploads.md`.
 /// - The relay adds the site credential only to a URL it builds itself, from
 ///   the configured API root and the path below it. The page's URL is matched
@@ -54,9 +53,9 @@ import OSLog
 ///   credential to is decided on the page, before the request reaches the
 ///   relay. Removing it here would protect nothing: the page already holds the
 ///   credential, so it can send it anywhere.
-/// - The relay reaches any `https` URL, so any frame in the web view can read
-///   another host's response without CORS. Without Lockdown Mode the editor
-///   page can do that anyway; a sandboxed frame couldn't before.
+/// - The relay reaches any `https` URL, so a caller can read another host's
+///   response without CORS. Without Lockdown Mode the editor page can do that
+///   anyway.
 /// - A request for another host goes over `https`, or over plain `http` only to
 ///   the site's own host. A device on the local network or this device itself
 ///   can't present a valid certificate for another host's name, so a name
@@ -560,12 +559,14 @@ struct RestRelay: Sendable {
     /// local page to the site (and WordPress rejects a `file://` origin — the
     /// exact problem the relay exists to solve); `cookie` is the page's, and
     /// the relay carries the site credential itself; `authorization` is set on
-    /// its own, by ``authorization(sentByCaller:toSiteAPI:)``.
+    /// its own, by ``authorization(sentByCaller:toSiteAPI:)``. The caller token is
+    /// for the relay alone.
     private static let requestHeadersToStrip: Set<String> = [
         "host", "connection", "content-length", "accept-encoding",
         "origin", "referer",
         "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user",
         "cookie", "authorization",
+        SchemeCallerToken.header.lowercased(),
         RestRelaySchemeHandler.timeoutHeader.lowercased(),
         RestRelaySchemeHandler.uploadHeader.lowercased(),
     ]

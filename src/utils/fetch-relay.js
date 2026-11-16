@@ -1,6 +1,9 @@
 import { getGBKit } from './bridge';
 import { debug } from './logger';
 
+/** The request header that carries the relay's caller token. */
+export const CALLER_TOKEN_HEADER = 'Relay-Authorization';
+
 /**
  * The relay wrapper for the host's configuration, or `null` when the host is
  * not running a relay.
@@ -36,6 +39,10 @@ export function createRelayFetchWrapper() {
  * `Authorization` the request already has is sent on as it is, wherever the
  * request goes, so which hosts get the site credential is decided here, on the
  * page.
+ *
+ * Each relayed request carries `restRelay.token` in `CALLER_TOKEN_HEADER`.
+ * Native code refuses a request without it, so only callers that can read the
+ * page's `GBKit` can use the relay.
  *
  * The relay wraps `fetch` rather than registering an api-fetch middleware or
  * fetch handler, either of which would replace api-fetch's own request building
@@ -78,6 +85,9 @@ export function createRelayFetch( next, { restRelay } ) {
 		const headers = new Headers(
 			request ? request.headers : init?.headers
 		);
+		if ( restRelay.token ) {
+			headers.set( CALLER_TOKEN_HEADER, `Bearer ${ restRelay.token }` );
+		}
 		// A `Request`'s body is read whole into an `ArrayBuffer`, the form
 		// WebKit delivers to a scheme handler; see `bufferedBody`.
 		const body = request

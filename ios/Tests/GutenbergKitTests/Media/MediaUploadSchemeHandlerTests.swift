@@ -10,6 +10,7 @@ struct MediaUploadSchemeHandlerTests {
   private func makeHandler(service: (any MediaUploading)?) -> MediaUploadSchemeHandler {
     MediaUploadSchemeHandler(
       service: service,
+      callerToken: .forTests,
       store: MediaUploadSessionStore(
         directory: FileManager.default.temporaryDirectory.appending(component: "scheme-tests-\(UUID().uuidString)")
       )
@@ -17,13 +18,16 @@ struct MediaUploadSchemeHandlerTests {
   }
 
   /// Starts a request and waits for the handler to answer it.
+  ///
+  /// - Parameter token: The caller token the request carries, or `nil` for none.
   @discardableResult
   private func send(
     _ handler: MediaUploadSchemeHandler,
     _ path: String,
     method: String = "POST",
     json: [String: Any]? = nil,
-    body: Data? = nil
+    body: Data? = nil,
+    token: SchemeCallerToken? = .forTests
   ) async throws -> FakeSchemeTask {
     var request = URLRequest(url: URL(string: "gbk-upload://upload\(path)")!)
     request.httpMethod = method
@@ -32,7 +36,7 @@ struct MediaUploadSchemeHandlerTests {
     } else {
       request.httpBody = body
     }
-    let task = FakeSchemeTask(request: request)
+    let task = FakeSchemeTask(request: token.map { request.carrying($0) } ?? request)
     handler.start(task)
     await task.waitUntilAnswered()
     return task
@@ -51,6 +55,7 @@ struct MediaUploadSchemeHandlerTests {
     let directory = FileManager.default.temporaryDirectory.appending(component: "scheme-tests-\(UUID().uuidString)")
     var handler: MediaUploadSchemeHandler? = MediaUploadSchemeHandler(
       service: ScriptedUploadService(),
+      callerToken: .forTests,
       store: MediaUploadSessionStore(directory: directory)
     )
     _ = try await beginSession(try #require(handler), size: 10)
@@ -63,6 +68,56 @@ struct MediaUploadSchemeHandlerTests {
       try? await Task.sleep(for: .milliseconds(10))
     }
     #expect(!FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)))
+  }
+
+  // MARK: - Caller token
+
+  @Test("refuses a request without the caller token, without starting a session", arguments: [
+    nil, SchemeCallerToken(value: "not-the-editors-token"),
+  ])
+  func refusesBeginWithoutToken(token: SchemeCallerToken?) async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(component: "scheme-tests-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = MediaUploadSessionStore(directory: directory)
+    let handler = MediaUploadSchemeHandler(service: ScriptedUploadService(), callerToken: .forTests, store: store)
+
+    let begin = try await send(
+      handler, "/sessions", json: ["filename": "a.jpg", "mimeType": "image/jpeg", "size": 1], token: token
+    )
+
+    #expect(begin.status == 401)
+    #expect(begin.json["code"] as? String == "native_upload_unauthorized")
+    #expect(begin.header("Access-Control-Allow-Origin") == "*")
+    #expect(await store.sessionCount == 0)
+  }
+
+  @Test("refuses to finish or cancel a session without the caller token")
+  func refusesFinishAndCancelWithoutToken() async throws {
+    let service = ScriptedUploadService()
+    let handler = makeHandler(service: service)
+    let id = try await beginSession(handler, size: 0)
+
+    let finish = try await send(handler, "/sessions/\(id)/finish", json: [:], token: nil)
+    let cancel = try await send(handler, "/sessions/\(id)/cancel", token: nil)
+
+    #expect(finish.status == 401)
+    #expect(cancel.status == 401)
+    #expect(service.calls.isEmpty)
+    // Neither touched the session, so the editor page can still finish it.
+    let finishedByPage = try await send(handler, "/sessions/\(id)/finish", json: [:])
+    #expect(finishedByPage.status == 201)
+    #expect(service.calls.count == 1)
+  }
+
+  @Test("refuses a media delete without the caller token")
+  func refusesDeleteWithoutToken() async throws {
+    let service = ScriptedUploadService()
+    let handler = makeHandler(service: service)
+
+    let delete = try await send(handler, "/media/42/delete", json: ["query": ""], token: nil)
+
+    #expect(delete.status == 401)
+    #expect(service.deletes.isEmpty)
   }
 
   // MARK: - Uploads from the page
@@ -120,7 +175,8 @@ struct MediaUploadSchemeHandlerTests {
     let handler = makeHandler(service: ScriptedUploadService())
 
     let notFound = try await send(handler, "/nope")
-    let preflight = try await send(handler, "/sessions", method: "OPTIONS")
+    // A browser sends a preflight without the request's own headers, so without the token.
+    let preflight = try await send(handler, "/sessions", method: "OPTIONS", token: nil)
 
     #expect(notFound.status == 404)
     #expect(notFound.header("Access-Control-Allow-Origin") == "*")
@@ -245,7 +301,7 @@ struct MediaUploadSchemeHandlerTests {
     var request = URLRequest(url: URL(string: "gbk-upload://upload/sessions/\(id)/finish")!)
     request.httpMethod = "POST"
     request.httpBody = Data("{}".utf8)
-    let finish = FakeSchemeTask(request: request)
+    let finish = FakeSchemeTask(request: request.carrying(.forTests))
     handler.start(finish)
     await gate.waitUntilEntered()
 
@@ -263,7 +319,7 @@ struct MediaUploadSchemeHandlerTests {
     let directory = FileManager.default.temporaryDirectory.appending(component: "scheme-tests-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: directory) }
     let store = MediaUploadSessionStore(directory: directory)
-    let handler = MediaUploadSchemeHandler(service: ScriptedUploadService(), store: store)
+    let handler = MediaUploadSchemeHandler(service: ScriptedUploadService(), callerToken: .forTests, store: store)
 
     // With the store kept busy, the begin and then `disable()`'s clean-up queue up
     // behind it, which puts the clean-up ahead of the session the begin has yet to make.
@@ -275,7 +331,7 @@ struct MediaUploadSchemeHandlerTests {
     var request = URLRequest(url: URL(string: "gbk-upload://upload/sessions")!)
     request.httpMethod = "POST"
     request.httpBody = try JSONSerialization.data(withJSONObject: ["filename": "clip.mp4", "mimeType": "video/mp4", "size": 10])
-    let begin = FakeSchemeTask(request: request)
+    let begin = FakeSchemeTask(request: request.carrying(.forTests))
     handler.start(begin)
     for _ in 0..<2 { await Task.yield() }
 
@@ -306,7 +362,7 @@ struct MediaUploadSchemeHandlerTests {
     var request = URLRequest(url: URL(string: "gbk-upload://upload/sessions/\(id)/finish")!)
     request.httpMethod = "POST"
     request.httpBody = Data("{}".utf8)
-    let finish = FakeSchemeTask(request: request)
+    let finish = FakeSchemeTask(request: request.carrying(.forTests))
     handler.start(finish)
     await gate.waitUntilEntered()
 
@@ -349,6 +405,11 @@ final class FakeSchemeTask: NSObject, WKURLSchemeTask, @unchecked Sendable {
     self.request = request
   }
 
+  /// A task for `request` as the editor page sends it, carrying ``SchemeCallerToken/forTests``.
+  convenience init(fromEditor request: URLRequest) {
+    self.init(request: request.carrying(.forTests))
+  }
+
   func didReceive(_ response: URLResponse) { lock.withLock { _response = response } }
   func didReceive(_ data: Data) { lock.withLock { _body.append(data) } }
   func didFinish() { lock.withLock { _finished = true } }
@@ -369,6 +430,20 @@ final class FakeSchemeTask: NSObject, WKURLSchemeTask, @unchecked Sendable {
     while !finished && failure == nil && ContinuousClock.now < deadline {
       try? await Task.sleep(for: .milliseconds(2))
     }
+  }
+}
+
+extension SchemeCallerToken {
+  /// The token the tests' scheme handlers require.
+  static let forTests = SchemeCallerToken(value: "test-caller-token")
+}
+
+extension URLRequest {
+  /// This request, carrying `token` as the editor page sends it.
+  func carrying(_ token: SchemeCallerToken) -> URLRequest {
+    var request = self
+    request.setValue("Bearer \(token.value)", forHTTPHeaderField: SchemeCallerToken.header)
+    return request
   }
 }
 

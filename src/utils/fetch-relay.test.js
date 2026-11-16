@@ -87,6 +87,35 @@ describe( 'createRelayFetch', () => {
 			expect( init.credentials ).toBe( 'omit' );
 		} );
 
+		it( 'sends the caller token native code requires, over any the caller set', async () => {
+			const relayFetchWithToken = createRelayFetch( next, {
+				restRelay: { ...REST_RELAY, token: 'caller-token' },
+			} );
+
+			await relayFetchWithToken(
+				'https://example.com/wp-json/wp/v2/posts',
+				{ headers: { 'Relay-Authorization': 'Bearer guess' } }
+			);
+			await relayFetchWithToken(
+				new Request( 'https://example.com/wp-json/wp/v2/users/me' )
+			);
+
+			for ( const [ , init ] of next.mock.calls ) {
+				expect(
+					new Headers( init.headers ).get( 'Relay-Authorization' )
+				).toBe( 'Bearer caller-token' );
+			}
+		} );
+
+		it( 'sends no caller token when the host gave none', async () => {
+			await relayFetch()( 'https://example.com/wp-json/wp/v2/posts' );
+
+			const init = next.mock.calls[ 0 ][ 1 ];
+			expect(
+				new Headers( init.headers ).has( 'Relay-Authorization' )
+			).toBe( false );
+		} );
+
 		it( 'sends the whole URL, query and all', async () => {
 			await relayFetch()( 'https://example.org/api?q=a%20b&tags=x,y' );
 
@@ -235,6 +264,15 @@ describe( 'createRelayFetch', () => {
 			await relayFetch()( input );
 			expect( next ).toHaveBeenCalledWith( input, undefined );
 		}
+
+		it( "a request to the page's own origin, without the caller token", async () => {
+			const url = `${ window.location.origin }/local.json`;
+			await createRelayFetch( next, {
+				restRelay: { ...REST_RELAY, token: 'caller-token' },
+			} )( url );
+
+			expect( next ).toHaveBeenCalledWith( url, undefined );
+		} );
 
 		it( 'a request to native code itself', async () => {
 			await expectPassthrough( 'gbk-upload://upload/sessions' );
