@@ -36,15 +36,20 @@ struct BlockInserterViewModelTests {
         let (viewModel, root) = makeViewModel()
         defer { try? FileManager.default.removeItem(at: root) }
 
+        // Three successes and two failures, so a mixed-up count shows up in the
+        // message. Both kinds of failure are included: a thrown error, and a
+        // load that returns nothing.
         let results = await viewModel.processSelectedPhotosPickerItems([
             MockImportableMediaItem(.data(Self.jpeg)),
             MockImportableMediaItem(.failure),
             MockImportableMediaItem(.data(Self.jpeg)),
+            MockImportableMediaItem(.empty),
+            MockImportableMediaItem(.data(Self.jpeg)),
         ])
 
-        #expect(results.count == 2)
+        #expect(results.count == 3)
         #expect(viewModel.error?.title == EditorLocalization[.someMediaFailedToInsert])
-        #expect(viewModel.error?.message == EditorLocalization[.someSelectedMediaFailedToLoad(1)])
+        #expect(viewModel.error?.message == EditorLocalization[.someSelectedMediaFailedToLoad(2)])
         #expect(viewModel.isProcessingMedia == false)
     }
 
@@ -77,11 +82,28 @@ struct BlockInserterViewModelTests {
         #expect(viewModel.error == nil)
     }
 
-    @Test("Partial and total failures read differently")
-    func partialAndTotalMessagesDiffer() {
-        let partial = BlockInserterViewModel.importError(failureCount: 2, successCount: 3)?.message
-        let total = BlockInserterViewModel.importError(failureCount: 2, successCount: 0)?.message
-        #expect(partial != total)
+    @Test("Cancelling partway through inserts nothing and shows no alert", .timeLimit(.minutes(1)))
+    func cancellingMidImportInsertsNothing() async {
+        let (viewModel, root) = makeViewModel()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let (started, didStart) = AsyncStream<Void>.makeStream()
+        let processing = Task {
+            await viewModel.processSelectedPhotosPickerItems([
+                MockImportableMediaItem(.data(Self.jpeg)),
+                MockImportableMediaItem(.waitForCancellation(didStart)),
+                MockImportableMediaItem(.data(Self.jpeg)),
+            ])
+        }
+
+        // Cancel once the second item is loading, after the first has imported.
+        for await _ in started { break }
+        viewModel.cancelProcessing()
+
+        let results = await processing.value
+        #expect(results.isEmpty)
+        #expect(viewModel.error == nil)
+        #expect(viewModel.isProcessingMedia == false)
     }
 }
 
@@ -92,6 +114,9 @@ private struct MockImportableMediaItem: ImportableMediaItem {
         case data(Data)   // `loadTransferable` returns this
         case failure      // `loadTransferable` throws
         case empty        // `loadTransferable` returns nil
+        /// `loadTransferable` signals that it started, then waits until the
+        /// import is cancelled.
+        case waitForCancellation(AsyncStream<Void>.Continuation)
     }
 
     let load: Load
@@ -107,6 +132,10 @@ private struct MockImportableMediaItem: ImportableMediaItem {
         case .data(let data): return data as? T
         case .failure: throw MockError.loadFailed
         case .empty: return nil
+        case .waitForCancellation(let didStart):
+            didStart.yield()
+            try await Task.sleep(for: .seconds(120))
+            return nil
         }
     }
 
