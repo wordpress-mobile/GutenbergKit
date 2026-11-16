@@ -161,11 +161,8 @@ const scenarios = {
 	},
 	postFormData() {
 		recordUpload();
-		const form = new FormData();
-		form.append( 'title', 'Hello' );
-		form.append( 'file', new Blob( [ 'file bytes' ] ), 'a.txt' );
 		xhr.open( 'POST', `${ origin }/echo` );
-		xhr.send( form );
+		xhr.send( form() );
 	},
 	abortBeforeResponse() {
 		xhr.open( 'GET', `${ origin }/delay` );
@@ -224,11 +221,8 @@ const scenarios = {
 	},
 	abortWhileFormDataIsRead() {
 		recordUpload();
-		const form = new FormData();
-		form.append( 'title', 'Hello' );
-		form.append( 'file', new Blob( [ 'file bytes' ] ), 'a.txt' );
 		xhr.open( 'POST', `${ origin }/echo` );
-		xhr.send( form );
+		xhr.send( form() );
 		xhr.abort();
 	},
 	timeoutBeforeResponse() {
@@ -289,6 +283,15 @@ const scenarios = {
 		xhr.addEventListener( 'loadstart', () => xhr.abort(), { once: true } );
 		xhr.open( 'POST', `${ origin }/echo` );
 		xhr.send( new Blob( [ 'a blob body' ] ) );
+	},
+	changeFormDataInLoadStart() {
+		recordStarts();
+		const data = form();
+		xhr.addEventListener( 'loadstart', () => data.append( 'late', 'x' ), {
+			once: true,
+		} );
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( data );
 	},
 	startOfEmptyBlob() {
 		recordStarts();

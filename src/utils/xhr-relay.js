@@ -376,11 +376,8 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 				return;
 			}
 
-			const pending = { body: sent };
+			const pending = {};
 			this.#pending = pending;
-			if ( ! this.#fireLoadStart( sent, pending ) ) {
-				return;
-			}
 			const headers = new Headers();
 			for ( const type of this.#contentTypes ) {
 				headers.append( 'Content-Type', type );
@@ -405,17 +402,19 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 					}
 					this.#pending = null;
 					warn( `Could not read a request body: ${ err?.message }` );
-					this.#endWithoutSending( FAILING_URL, sent );
+					this.#endWithoutSending( FAILING_URL );
 				}
 			);
+			// After the body is copied, so a listener that changes it changes
+			// nothing that is sent, as in the browser.
+			this.#fireLoadStart( sent, pending );
 		}
 
 		abort() {
 			this.#ended++;
 			if ( this.#pending ) {
-				const { body } = this.#pending;
 				this.#pending = null;
-				this.#endWithoutSending( 'data:,', body );
+				this.#endWithoutSending( 'data:,' );
 				super.abort();
 				return;
 			}
@@ -497,30 +496,29 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		 * request that waits for its body to be read first.
 		 *
 		 * The upload's goes out only when the caller has reached the upload
-		 * object. Without that, it can have no listeners to hear it.
+		 * object. Without that, it can have no listeners to hear it. Its size
+		 * is taken before any listener runs, so it is the size of what is sent.
 		 *
 		 * @param {Blob|FormData} body    The caller's body.
 		 * @param {Object}        pending The `send()` waiting for the body.
-		 * @return {boolean} Whether the request is still waiting to be sent: a
-		 *                   listener can end it or open it again.
 		 */
 		#fireLoadStart( body, pending ) {
-			this.#startFired = true;
-			this.dispatchEvent( ownProgressEvent( 'loadstart', 0, 0 ) );
-			if ( this.#pending !== pending ) {
-				return false;
-			}
+			let size;
 			if ( this.#uploadGuarded ) {
 				// Every boundary WebKit makes is the same length, so this
 				// one gives the size WebKit's would.
-				const size = isBlob( body )
+				size = isBlob( body )
 					? body.size
 					: multipartBody( body, formBoundary() ).size;
+			}
+			this.#startFired = true;
+			this.dispatchEvent( ownProgressEvent( 'loadstart', 0, 0 ) );
+			// A listener can end the request or open it again.
+			if ( this.#pending === pending && size !== undefined ) {
 				super.upload.dispatchEvent(
 					ownProgressEvent( 'loadstart', 0, size )
 				);
 			}
-			return this.#pending === pending;
 		}
 
 		/**
@@ -668,21 +666,19 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 		 * Only the browser can move an `XMLHttpRequest` through its states and
 		 * fire its events, and only for a request it sent. So the request is
 		 * opened again for a `data:` URL, which never leaves the web view, and
-		 * sent with the caller's body, so its upload events give the body's
-		 * size. The caller aborts it straight away, or lets an undecodable URL
-		 * fail.
+		 * sent with an empty body. The caller aborts it straight away, or lets
+		 * an undecodable URL fail.
 		 *
-		 * WebKit drops a `Blob` sent to a `data:` URL, so an empty body goes in
-		 * its place. The `loadstart` events already fired at `send()`, with the
-		 * body's size, so the ones this request fires are stopped.
+		 * The body's size went out in the `loadstart` events fired at `send()`,
+		 * so the ones this request fires are stopped. An empty body gives the
+		 * same upload `abort` and `loadend` as the caller's would.
 		 *
-		 * @param {string}  url  The `data:` URL to send it to.
-		 * @param {unknown} body The caller's body.
+		 * @param {string} url The `data:` URL to send it to.
 		 */
-		#endWithoutSending( url, body ) {
+		#endWithoutSending( url ) {
 			super.open( 'POST', url );
 			try {
-				super.send( isBlob( body ) ? '' : body );
+				super.send( '' );
 			} finally {
 				this.#startFired = false;
 			}

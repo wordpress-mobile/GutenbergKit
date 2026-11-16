@@ -1129,6 +1129,60 @@ describe( 'createRelayXMLHttpRequest', () => {
 			expect( starts ).toEqual( [ [ 'request', 0, 0, false ] ] );
 			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ '' ] ] );
 		} );
+
+		it( 'fires no upload loadstart for an upload first read in loadstart', async () => {
+			const xhr = new Relay();
+			const heard = [];
+			xhr.addEventListener(
+				'loadstart',
+				() =>
+					xhr.upload.addEventListener( 'loadstart', () =>
+						heard.push( 'upload' )
+					),
+				{ once: true }
+			);
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( new NodeBlob( [ 'x' ] ) );
+			await settle();
+
+			expect( heard ).toEqual( [] );
+		} );
+
+		it( 'sends the body as it was at send()', async () => {
+			// Node's `FormData`, which its `Response` can serialize.
+			const form = await new Response(
+				new URLSearchParams( 'title=Hello' )
+			).formData();
+			const xhr = new Relay();
+			xhr.addEventListener( 'loadstart', () =>
+				form.append( 'late', 'x' )
+			);
+			xhr.open( 'POST', 'https://example.org/upload' );
+			xhr.send( form );
+			await settle();
+
+			const [ [ sent ] ] = xhr.callsTo( 'send' );
+			expect( new TextDecoder().decode( sent ) ).not.toContain( 'late' );
+		} );
+
+		it( 'gives the upload loadstart the size of the body as it was at send()', () => {
+			const sizeOf = ( changeInLoadStart ) => {
+				const form = new FormData();
+				form.append( 'title', 'Hello' );
+				const xhr = new Relay();
+				const starts = recordStarts( xhr );
+				if ( changeInLoadStart ) {
+					xhr.addEventListener( 'loadstart', () =>
+						form.append( 'late', 'x' )
+					);
+				}
+				xhr.open( 'POST', 'https://example.org/upload' );
+				xhr.send( form );
+				return starts.find( ( [ name ] ) => name === 'upload' )[ 2 ];
+			};
+
+			expect( sizeOf( true ) ).toBe( sizeOf( false ) );
+		} );
 	} );
 
 	describe( 'withCredentials', () => {
@@ -1234,7 +1288,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			expect( starts ).toEqual( [ [ 0, 11, true ] ] );
 		} );
 
-		it( 'sends a FormData body to the stand-in, for its size', () => {
+		it( 'never sends a FormData body to the stand-in either', () => {
 			const form = new FormData();
 			form.append( 'title', 'Hello' );
 			const xhr = new RelayXMLHttpRequest();
@@ -1242,7 +1296,7 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.send( form );
 			xhr.abort();
 
-			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ form ] ] );
+			expect( xhr.callsTo( 'send' ) ).toEqual( [ [ '' ] ] );
 		} );
 
 		it( 'never sends the body when the request is opened again', async () => {

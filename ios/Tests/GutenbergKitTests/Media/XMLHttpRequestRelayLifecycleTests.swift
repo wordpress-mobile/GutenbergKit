@@ -49,6 +49,7 @@ struct XMLHttpRequestRelayLifecycleTests {
         "startOfFormData",
         "startOfEmptyBlob",
         "abortFromBlobLoadStart",
+        "changeFormDataInLoadStart",
         "synchronousGet",
         "synchronousPost",
         "synchronousPostBlob",
