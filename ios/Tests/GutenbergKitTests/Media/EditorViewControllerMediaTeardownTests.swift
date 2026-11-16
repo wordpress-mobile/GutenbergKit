@@ -216,7 +216,7 @@ struct EditorViewControllerMediaTeardownTests: MakesTestFixtures {
         let editor = EditorViewController(
             configuration: configuration,
             mediaUploader: InertUploader(),
-            httpClient: EditorHTTPClient(urlSession: URLSession.shared, authHeader: "Bearer test-token", delegate: recorder)
+            httpClient: EditorHTTPClient(configuration: configuration, delegate: recorder)
         )
         defer { editor.stopMediaHandling() }
         // The script the editor itself installs, so the test covers which frames get `GBKit`.
