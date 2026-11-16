@@ -20,6 +20,8 @@ import WebKit
 struct XMLHttpRequestRelayLifecycleTests {
     @Test("the caller sees what the browser's own XMLHttpRequest shows", arguments: [
         "get",
+        "getWithFragment",
+        "getAfterRedirect",
         "getJSON",
         "postString",
         "postStringWithoutUploadListener",

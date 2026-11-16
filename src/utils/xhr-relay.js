@@ -119,8 +119,8 @@ export function reportUploadProgress( id, sent, total ) {
  * request, so events, `responseType` and synchronous requests behave as they
  * would without the relay. What this adds to keep it that way:
  *
- * - `responseURL` is the URL the caller opened, not the relay's. A redirect
- *   native code followed doesn't show in it.
+ * - `responseURL` is the URL the caller opened, or where a redirect led, not
+ *   the relay's.
  * - `withCredentials` reads back as the caller set it, but the request is sent
  *   without cookies. The relay answers `Access-Control-Allow-Origin: *`, which
  *   a browser refuses to pair with a credentialed request.
@@ -472,7 +472,10 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 				return '';
 			}
 			const url = super.responseURL;
-			if ( ! this.#target || ! url ) {
+			// Native code answers with the URL the browser would report: the
+			// one opened, or where a redirect led. Its own answers, such as a
+			// refusal, keep the relay's URL, so the opened one stands in.
+			if ( ! this.#target || ! url.startsWith( restRelay.endpoint ) ) {
 				return url;
 			}
 			const target = new URL( this.#target );

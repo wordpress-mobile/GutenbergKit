@@ -86,6 +86,14 @@ const scenarios = {
 		xhr.open( 'GET', `${ origin }/echo` );
 		xhr.send();
 	},
+	getWithFragment() {
+		xhr.open( 'GET', `${ origin }/echo#fragment` );
+		xhr.send();
+	},
+	getAfterRedirect() {
+		xhr.open( 'GET', `${ origin }/redirect` );
+		xhr.send();
+	},
 	getJSON() {
 		xhr.open( 'GET', `${ origin }/echo` );
 		xhr.responseType = 'json';
