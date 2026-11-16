@@ -18,6 +18,7 @@ class BlockInserterViewModel: ObservableObject {
 
     struct MediaError: Identifiable, Error {
         let id = UUID()
+        let title: String
         let message: String
     }
 
@@ -117,9 +118,15 @@ class BlockInserterViewModel: ObservableObject {
     static func importError(failureCount: Int, successCount: Int) -> MediaError? {
         guard failureCount > 0 else { return nil }
         if successCount == 0 {
-            return MediaError(message: EditorLocalization[.failedToLoadSelectedMedia])
+            return MediaError(
+                title: EditorLocalization[.failedToInsertMedia],
+                message: EditorLocalization[.failedToLoadSelectedMedia]
+            )
         }
-        return MediaError(message: EditorLocalization[.someSelectedMediaFailedToLoad(failureCount)])
+        return MediaError(
+            title: EditorLocalization[.someMediaFailedToInsert],
+            message: EditorLocalization[.someSelectedMediaFailedToLoad(failureCount)]
+        )
     }
 
     func processCameraMedia(_ media: CameraMedia) async -> [MediaInfo] {
@@ -133,7 +140,10 @@ class BlockInserterViewModel: ObservableObject {
                 switch media {
                 case .photo(let image):
                     guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-                        throw MediaError(message: EditorLocalization[.failedToProcessCapturedMedia])
+                        throw MediaError(
+                            title: EditorLocalization[.failedToInsertMedia],
+                            message: EditorLocalization[.failedToProcessCapturedMedia]
+                        )
                     }
 
                     let fileURL = try await fileManager.writeData(imageData, withExtension: "jpg")
@@ -153,7 +163,10 @@ class BlockInserterViewModel: ObservableObject {
                 return [mediaInfo]
             } catch {
                 Logger.media.error("Failed to process captured media: \(error)")
-                self.error = MediaError(message: EditorLocalization[.failedToProcessCapturedMedia])
+                self.error = MediaError(
+                    title: EditorLocalization[.failedToInsertMedia],
+                    message: EditorLocalization[.failedToProcessCapturedMedia]
+                )
                 return []
             }
         }

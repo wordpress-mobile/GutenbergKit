@@ -43,7 +43,8 @@ struct BlockInserterViewModelTests {
         ])
 
         #expect(results.count == 2)
-        #expect(viewModel.error != nil)
+        #expect(viewModel.error?.title == EditorLocalization[.someMediaFailedToInsert])
+        #expect(viewModel.error?.message == EditorLocalization[.someSelectedMediaFailedToLoad(1)])
         #expect(viewModel.isProcessingMedia == false)
     }
 
@@ -58,7 +59,8 @@ struct BlockInserterViewModelTests {
         ])
 
         #expect(results.isEmpty)
-        #expect(viewModel.error != nil)
+        #expect(viewModel.error?.title == EditorLocalization[.failedToInsertMedia])
+        #expect(viewModel.error?.message == EditorLocalization[.failedToLoadSelectedMedia])
     }
 
     @Test("Every item importing reports no error")

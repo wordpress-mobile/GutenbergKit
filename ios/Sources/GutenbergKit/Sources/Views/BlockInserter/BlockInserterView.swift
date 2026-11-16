@@ -80,7 +80,7 @@ struct BlockInserterView: View {
             }
             .alert(item: $viewModel.error) { error in
                 Alert(
-                    title: Text(EditorLocalization[.failedToInsertMedia]),
+                    title: Text(error.title),
                     message: Text(error.message),
                     dismissButton: .default(Text(EditorLocalization[.ok])) {
                         // A partial import already inserted what it could and this
