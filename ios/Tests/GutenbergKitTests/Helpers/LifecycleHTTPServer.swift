@@ -10,6 +10,7 @@ import Network
 ///
 /// - `/echo`: the request's method, `Content-Type`, and body size and hash, as JSON.
 /// - `/delay`: as `/echo`, after 10 seconds.
+/// - `/redirect`: a `302` to `/echo`.
 /// - `/stall`: the headers and the start of the body, then nothing more.
 /// - `/cut`: the headers and the start of the body, then the connection closes.
 /// - `/cut-chunked`: as `/cut`, with the body sent in chunks.
@@ -136,6 +137,8 @@ final class LifecycleHTTPServer: @unchecked Sendable {
             let chunk = Data("400\r\n".utf8) + Data(repeating: 97, count: 1024) + Data("\r\n".utf8)
             connection.send(content: head + chunk, completion: .contentProcessed { _ in })
             queue.asyncAfter(deadline: .now() + 0.2) { connection.cancel() }
+        case "/redirect":
+            send(status: 302, headers: cors.merging(["Location": "/echo"]) { $1 }, body: Data(), on: connection)
         case "/delay":
             queue.asyncAfter(deadline: .now() + 10) { [weak self] in
                 self?.echo(request, headers: cors, on: connection)

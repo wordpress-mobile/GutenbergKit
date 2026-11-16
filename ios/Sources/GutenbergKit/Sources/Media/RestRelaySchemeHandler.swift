@@ -184,7 +184,7 @@ final class RestRelaySchemeHandler: NSObject, WKURLSchemeHandler {
         defer { timeout?.cancel() }
         do {
             let response = try await relay.handle(request, onUploadProgress: onUploadProgress)
-            guard let task = active.respond(key, status: response.status, headers: response.headers) else { return }
+            guard let task = active.respond(key, status: response.status, headers: response.headers, url: response.url) else { return }
             for try await chunk in response.body {
                 // WebKit stopped the task while this chunk was on its way. Sending it now
                 // would raise an exception.

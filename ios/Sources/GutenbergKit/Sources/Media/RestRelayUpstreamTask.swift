@@ -14,10 +14,16 @@ extension RestRelay {
         /// Dropping it before the end cancels the upstream request.
         let body: AsyncThrowingStream<Data, any Error>
 
-        init(status: Int, headers: [String: String], body: AsyncThrowingStream<Data, any Error>) {
+        /// The URL the page reads as the response's `url`, or `nil` for the URL the
+        /// page requested, which is the relay's own. WebKit ignores one with a
+        /// fragment and reports the requested URL instead.
+        let url: URL?
+
+        init(status: Int, headers: [String: String], body: AsyncThrowingStream<Data, any Error>, url: URL? = nil) {
             self.status = status
             self.headers = headers
             self.body = body
+            self.url = url
         }
 
         /// A response the relay makes itself, such as a refusal, with its whole body

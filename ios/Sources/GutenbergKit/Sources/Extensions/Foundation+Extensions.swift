@@ -141,6 +141,16 @@ extension URL {
         }
         return "\(scheme)://\(host):\(port)"
     }
+
+    /// The URL without its fragment, or the URL itself when it has none.
+    func deletingFragment() -> URL {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false),
+              components.fragment != nil else {
+            return self
+        }
+        components.fragment = nil
+        return components.url ?? self
+    }
 }
 
 // MARK: - URLComponents Extensions

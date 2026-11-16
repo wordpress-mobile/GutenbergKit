@@ -1235,6 +1235,22 @@ describe( 'createRelayXMLHttpRequest', () => {
 			xhr.send();
 			expect( xhr.responseURL ).toBe( 'https://example.org/a?b=1' );
 		} );
+
+		it( 'is where a redirect led, as native code reports it', () => {
+			class RedirectedXMLHttpRequest extends FakeXMLHttpRequest {
+				get responseURL() {
+					return 'https://example.org/final';
+				}
+			}
+			const Relay = createRelayXMLHttpRequest( RedirectedXMLHttpRequest, {
+				restRelay: REST_RELAY,
+			} );
+			const xhr = new Relay();
+			xhr.open( 'GET', 'https://example.org/start' );
+			xhr.send();
+
+			expect( xhr.responseURL ).toBe( 'https://example.org/final' );
+		} );
 	} );
 
 	describe( 'aborting while a body is read', () => {

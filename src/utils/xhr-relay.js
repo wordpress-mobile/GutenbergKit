@@ -119,8 +119,8 @@ export function reportUploadProgress( id, sent, total ) {
  * request, so events, `responseType` and synchronous requests behave as they
  * would without the relay. What this adds to keep it that way:
  *
- * - `responseURL` is the URL the caller opened, not the relay's. A redirect
- *   native code followed doesn't show in it.
+ * - `responseURL` is the URL the caller opened, or where a redirect led, not
+ *   the relay's.
  * - `withCredentials` reads back as the caller set it, but the request is sent
  *   without cookies. The relay answers `Access-Control-Allow-Origin: *`, which
  *   a browser refuses to pair with a credentialed request.
@@ -149,8 +149,10 @@ export function reportUploadProgress( id, sent, total ) {
  *   class can't see listeners, so it goes by whether the caller read `upload`
  *   before `send()`, as adding a listener does. A caller that read it then and
  *   added a listener afterwards hears events the browser wouldn't fire.
- * - The response has no `Content-Length`, because native code drops it. So
- *   download `progress` events have `lengthComputable` false and a `total` of 0.
+ * - On iOS 17 and 18, download `progress` for a compressed response with a
+ *   `Content-Length` differs from the browser's. The browser reports no total.
+ *   Here the total is the compressed size, until more bytes than that arrive.
+ *   From iOS 26, the browser does the same as here.
  *
  * @param {typeof XMLHttpRequest}        Base             The class to extend.
  * @param {Object}                       config           Relay configuration.
@@ -473,7 +475,10 @@ export function createRelayXMLHttpRequest( Base, { restRelay } ) {
 				return '';
 			}
 			const url = super.responseURL;
-			if ( ! this.#target || ! url ) {
+			// Native code answers with the URL the browser would report: the
+			// one opened, or where a redirect led. Its own answers, such as a
+			// refusal, keep the relay's URL, so the opened one stands in.
+			if ( ! this.#target || ! url.startsWith( restRelay.endpoint ) ) {
 				return url;
 			}
 			const target = new URL( this.#target );
