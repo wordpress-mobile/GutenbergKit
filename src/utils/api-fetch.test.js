@@ -127,6 +127,29 @@ describe( 'api-fetch credentials handling', () => {
 		expect( options.headers.Authorization ).toBe( 'Bearer override-token' );
 	} );
 
+	it( 'should send the auth header with a request by namespace and endpoint', async () => {
+		bridge.getGBKit.mockReturnValue( {
+			siteURL: 'https://example.com',
+			siteApiRoot: 'https://example.com/wp-json/',
+			authHeader: 'Bearer test-token',
+			siteApiNamespace: [],
+			namespaceExcludedPaths: [],
+		} );
+
+		try {
+			await apiFetch( { namespace: 'wp/v2', endpoint: 'users/me' } );
+		} catch {
+			// Ignore errors from the actual fetch
+		}
+
+		const [ requestUrl, options ] = global.fetch.mock.calls[ 0 ];
+
+		expect( requestUrl ).toContain(
+			'https://example.com/wp-json/wp/v2/users/me'
+		);
+		expect( options.headers.Authorization ).toBe( 'Bearer test-token' );
+	} );
+
 	it.each( [
 		[ 'the site', 'https://example.com/wp-admin/admin-ajax.php' ],
 		[ "the site's API", 'https://example.com/wp-json/wp/v2/posts' ],
@@ -182,7 +205,8 @@ describe( 'api-fetch credentials handling', () => {
 			// api-fetch adds its own query to the URL
 			expect( requestUrl ).toContain( url );
 			expect( options.headers?.Authorization ).toBeUndefined();
-			expect( options.credentials ).not.toBe( 'omit' );
+			// A request with credentials fails CORS against `*`.
+			expect( options.credentials ).toBe( 'omit' );
 		}
 	);
 

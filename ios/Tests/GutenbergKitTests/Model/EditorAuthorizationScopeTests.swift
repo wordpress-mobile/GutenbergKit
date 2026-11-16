@@ -176,7 +176,7 @@ struct EditorAuthorizationScopeTests {
 
     // MARK: - Names
 
-    @Test("a name can end with the dot that ends a fully qualified one", arguments: ["*.wp.com.", " *.wp.com "])
+    @Test("a name can end with the dot that ends a fully qualified one", arguments: ["*.wp.com.", " *.wp.com ", "*.wp.com\n"])
     func allowsFullyQualifiedName(domain: String) {
         #expect(scope(naming: [domain]).allows(url("https://s0.wp.com/script.js")))
     }

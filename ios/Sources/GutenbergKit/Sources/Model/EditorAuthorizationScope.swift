@@ -75,7 +75,7 @@ public struct EditorAuthorizationScope: Sendable, Hashable {
         /// `nil` for a name that is neither: an empty one, or one with a wildcard anywhere but
         /// in front. What a wildcard is over is the app's business: `*.com` is every `.com` site.
         init?(_ name: String) {
-            var name = name.trimmingCharacters(in: .whitespaces).lowercased()
+            var name = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
             // The dot that ends a fully qualified name
             if name.hasSuffix(".") {

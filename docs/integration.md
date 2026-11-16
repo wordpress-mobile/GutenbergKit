@@ -39,7 +39,7 @@ Create an `EditorViewController` with a configuration:
 import GutenbergKit
 
 let configuration = EditorConfigurationBuilder(
-    postType: "post",
+    postType: .post,
     siteURL: URL(string: "https://example.com")!,
     siteApiRoot: URL(string: "https://example.com/wp-json")!
 )
@@ -568,7 +568,7 @@ Some Gutenberg blocks and features use WordPress AJAX (`admin-ajax.php`) for fun
 ```swift
 // iOS
 let configuration = EditorConfigurationBuilder(
-    postType: "post",
+    postType: .post,
     siteURL: URL(string: "https://example.com")!,
     siteApiRoot: URL(string: "https://example.com/wp-json")!
 )

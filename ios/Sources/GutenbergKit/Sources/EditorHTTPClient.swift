@@ -51,10 +51,11 @@ public extension EditorHTTPClientProtocol {
 ///
 /// Each request carries its `Authorization` header, as sent. That is usually the
 /// site's credential, but a caller's own token is sent as it is — Jetpack AI sends
-/// one to WordPress.com. Native code never adds the site's credential to a request
-/// for another host, but it doesn't remove one the page sent, so such a request can
-/// carry it. Redact the header on every request before storing requests anywhere it
-/// shouldn't be kept, not only where it matches the site credential.
+/// one to WordPress.com. Native code adds the site's credential only to hosts in its
+/// ``EditorAuthorizationScope``, which can include hosts the app names. It doesn't
+/// remove one the page sent, so a request to any host can carry it. Redact the header
+/// on every request before storing requests anywhere it shouldn't be kept, not only
+/// where it matches the site credential.
 public protocol EditorHTTPClientDelegate: Sendable {
     func didPerformRequest(_ request: URLRequest, response: URLResponse, data: EditorResponseData)
 

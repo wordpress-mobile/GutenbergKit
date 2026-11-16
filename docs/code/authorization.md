@@ -35,7 +35,7 @@ Entries are trimmed and lowercased, and may end with the trailing dot of a fully
 
 ```swift
 let configuration = EditorConfigurationBuilder(
-    postType: "post",
+    postType: .post,
     siteURL: URL(string: "https://example.wordpress.com")!,
     siteApiRoot: URL(string: "https://public-api.wordpress.com/")!
 )
@@ -74,7 +74,7 @@ GutenbergKit infers nothing about WordPress.com: no `wp.com` or `wordpress.com` 
 
 `GBKitGlobal` carries `authHeaderDomains` to the web editor, so it applies the list the native side was configured with.
 
-On the web side, a request made by `path` is for the site's API — the root URL middleware joins the path to `siteApiRoot` — and always carries the header. A request made by `url` alone is checked against the scope. `credentials: 'omit'` is set only when the header is attached.
+On the web side, a request made by `path` is for the site's API — the root URL middleware joins the path to `siteApiRoot` — and always carries the header. A request made by `url` alone is checked against the scope. When the app passes an `authHeader`, every request is sent with `credentials: 'omit'`, whether or not it carries the header. A request with credentials fails the CORS check against a server that answers `Access-Control-Allow-Origin: *`, as `public-api.wordpress.com` does.
 
 jQuery AJAX requests are scoped separately, in `src/utils/ajax.js`, to the origin of `siteURL`. They do not consult `authHeaderDomains`.
 
