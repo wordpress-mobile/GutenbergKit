@@ -531,6 +531,21 @@ struct RestRelayHandleTests {
         #expect(exchange.url?.absoluteString == "https://example.com/final")
     }
 
+    @Test("answers with the URL a site API redirect led to")
+    func answersWithSiteAPIRedirectTarget() async throws {
+        // The page asked for the `www.` alias, which the relay sends to the
+        // configured host. The redirect stays inside the API root, so it is
+        // followed.
+        let exchange = try await relay(
+            target: Self.relayTarget("https://www.example.com/wp-json/wp/v2/posts"),
+            responseBody: Data("final".utf8),
+            redirects: ["/wp-json/wp/v2/posts": "https://www.example.com/wp-json/wp/v2/pages"]
+        )
+
+        #expect(String(decoding: exchange.response.body, as: UTF8.self) == "final")
+        #expect(exchange.url?.absoluteString == "https://www.example.com/wp-json/wp/v2/pages")
+    }
+
     // MARK: - Helpers
 
     /// The relay target for a request to `url`, encoded as the page encodes it
