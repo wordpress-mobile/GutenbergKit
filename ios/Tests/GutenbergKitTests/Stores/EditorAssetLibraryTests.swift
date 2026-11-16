@@ -1989,7 +1989,7 @@ struct EditorAssetLibraryTests {
 
         let session = ParkedURLSession()
         defer { session.release() }
-        let library = makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"))
+        let library = makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example))
         let destination = await library.bundleRoot(for: manifest.checksum).standardizedFileURL
 
         let build = Task { try await library.buildBundle(for: manifest) }
@@ -2302,7 +2302,7 @@ struct EditorAssetLibraryTests {
 
         let session = ParkedURLSession()
         defer { session.release() }
-        let library = makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"))
+        let library = makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example))
         let destination = await library.bundleRoot(for: manifest.checksum).standardizedFileURL
 
         let build = Task { try await library.buildBundle(for: manifest) }
@@ -2345,8 +2345,8 @@ struct EditorAssetLibraryTests {
         defer { session.release() }
         let storageRoot = URL.randomTemporaryDirectory
         let libraries = [
-            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"), storageRoot: storageRoot),
-            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"), storageRoot: storageRoot),
+            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example), storageRoot: storageRoot),
+            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example), storageRoot: storageRoot),
         ]
         let destination = await libraries[0].bundleRoot(for: manifest.checksum).standardizedFileURL
 
@@ -2374,8 +2374,8 @@ struct EditorAssetLibraryTests {
         defer { session.release() }
         let storageRoot = URL.randomTemporaryDirectory
         let libraries = [
-            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"), storageRoot: storageRoot),
-            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token"), storageRoot: storageRoot),
+            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example), storageRoot: storageRoot),
+            makeLibrary(httpClient: EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example), storageRoot: storageRoot),
         ]
         let destination = await libraries[0].bundleRoot(for: manifest.checksum).standardizedFileURL
         let earlierFetch = Date(timeIntervalSinceNow: -120)
@@ -2402,7 +2402,7 @@ struct EditorAssetLibraryTests {
         let session = ParkedURLSession()
         defer { session.release() }
         let storageRoot = URL.randomTemporaryDirectory
-        let client = EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token")
+        let client = EditorHTTPClient(urlSession: session, authHeader: "Bearer test-token", authorizationScope: .example)
         let inFlight = makeLibrary(httpClient: client, cachePolicy: .always, storageRoot: storageRoot)
         let refreshing = makeLibrary(httpClient: client, cachePolicy: .ignore, storageRoot: storageRoot)
         let destination = await inFlight.bundleRoot(for: manifest.checksum).standardizedFileURL

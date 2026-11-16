@@ -98,7 +98,8 @@ struct EditorHTTPClientTests {
         let authHeader = "Bearer test-token-12345"
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: authHeader
+            authHeader: authHeader,
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -114,7 +115,8 @@ struct EditorHTTPClientTests {
         let authHeader = "Bearer test-token-12345"
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: authHeader
+            authHeader: authHeader,
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
@@ -128,7 +130,7 @@ struct EditorHTTPClientTests {
     func downloadThrowsForFailureStatus() async throws {
         let spySession = SpyURLSession()
         spySession.downloadStatusCode = 404
-        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token", authorizationScope: .example)
 
         await #expect(throws: EditorHTTPClient.ClientError.self) {
             try await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!))
@@ -142,12 +144,103 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         spySession.downloadStatusCode = 404
         spySession.responseData = Data("Not Found".utf8)
-        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token")
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer test-token", authorizationScope: .example)
 
         _ = try? await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!))
 
         let file = try #require(spySession.downloadedFiles.first)
         #expect(!FileManager.default.fileExists(at: file))
+    }
+
+    // MARK: - Authorization Scope Tests
+
+    @Test(
+        "a request to another party's host goes out without the Authorization header",
+        arguments: [
+            "https://cdn.vendor.net/integration.js",
+            "https://example.com.vendor.net/script.js",
+            "http://example.com/wp-content/plugins/plugin/script.js",
+        ]
+    )
+    func requestOutsideScopeHasNoAuthorizationHeader(url: String) async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer test-token-12345",
+            authorizationScope: .example
+        )
+        let request = URLRequest(url: URL(string: url)!)
+
+        _ = try await client.download(request)
+        _ = try await client.perform(request)
+        _ = try await client.performRaw(request)
+
+        #expect(spySession.capturedRequests.count == 3)
+        #expect(spySession.capturedRequests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == nil })
+        // It's still this library's request
+        #expect(spySession.capturedRequests.allSatisfy { $0.value(forHTTPHeaderField: "User-Agent") != nil })
+    }
+
+    @Test("a client made for a configuration sends the site's credentials only to the site")
+    func clientForConfigurationScopesAuthorizationHeader() async throws {
+        let spySession = SpyURLSession()
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://example.com")!,
+            siteApiRoot: URL(string: "https://example.com/wp-json/")!
+        )
+        .setAuthHeader("Bearer test-token-12345")
+        .build()
+        let client = EditorHTTPClient(configuration: configuration, urlSession: spySession)
+
+        _ = try await client.download(URLRequest(url: URL(string: "https://example.com/wp-content/script.js")!))
+        _ = try await client.download(URLRequest(url: URL(string: "https://cdn.vendor.net/integration.js")!))
+
+        #expect(spySession.capturedRequests.map { $0.value(forHTTPHeaderField: "Authorization") } == [
+            "Bearer test-token-12345",
+            nil,
+        ])
+    }
+
+    @Test("a client made for a configuration sends the site's credentials to the places it names as well")
+    func clientForConfigurationAuthorizesNamedDomains() async throws {
+        let spySession = SpyURLSession()
+        let configuration = EditorConfigurationBuilder(
+            postType: .post,
+            siteURL: URL(string: "https://example.wordpress.com")!,
+            siteApiRoot: URL(string: "https://public-api.wordpress.com/")!
+        )
+        .setAuthHeader("Bearer test-token-12345")
+        .setAuthHeaderDomains(["*.wp.com"])
+        .build()
+        let client = EditorHTTPClient(configuration: configuration, urlSession: spySession)
+
+        _ = try await client.download(URLRequest(url: URL(string: "https://s0.wp.com/wp-content/script.js")!))
+        _ = try await client.download(URLRequest(url: URL(string: "https://cdn.vendor.net/integration.js")!))
+
+        #expect(spySession.capturedRequests.map { $0.value(forHTTPHeaderField: "Authorization") } == [
+            "Bearer test-token-12345",
+            nil,
+        ])
+    }
+
+    @Test("the upload client keeps the client's authorization scope")
+    func uploadClientKeepsAuthorizationScope() async throws {
+        let spySession = SpyURLSession()
+        let client = EditorHTTPClient(
+            urlSession: spySession,
+            authHeader: "Bearer test-token-12345",
+            authorizationScope: .example
+        )
+        let uploadClient = client.uploadClient()
+
+        _ = try await uploadClient.perform(URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!))
+        _ = try await uploadClient.perform(URLRequest(url: URL(string: "https://cdn.vendor.net/upload")!))
+
+        #expect(spySession.capturedRequests.map { $0.value(forHTTPHeaderField: "Authorization") } == [
+            "Bearer test-token-12345",
+            nil,
+        ])
     }
 
     // MARK: - Timeout Tests
@@ -159,6 +252,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -176,6 +270,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -191,7 +286,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -212,6 +308,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             requestTimeout: restTimeout
         )
 
@@ -229,7 +326,7 @@ struct EditorHTTPClientTests {
     @Test("uploadClient() raises URLRequest's 60s default so a slow server response can't orphan the attachment")
     func uploadClientRaisesDefaultTimeout() async throws {
         let spySession = SpyURLSession()
-        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token")
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token", authorizationScope: .example)
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/media")!)
         #expect(request.timeoutInterval == 60)
@@ -245,6 +342,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             requestTimeout: 15
         )
 
@@ -262,7 +360,7 @@ struct EditorHTTPClientTests {
     @Test("The REST client leaves the request's timeout alone when it has no requestTimeout")
     func restClientDoesNotApplyUploadFloor() async throws {
         let spySession = SpyURLSession()
-        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token")
+        let client = EditorHTTPClient(urlSession: spySession, authHeader: "Bearer token", authorizationScope: .example)
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
         _ = try await client.performRaw(request)
@@ -278,6 +376,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -300,7 +399,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -315,7 +415,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
@@ -335,6 +436,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -355,6 +457,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             requestTimeout: customTimeout
         )
 
@@ -379,6 +482,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -404,6 +508,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -429,6 +534,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: "Bearer token",
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -451,6 +557,7 @@ struct EditorHTTPClientTests {
         let client = EditorHTTPClient(
             urlSession: spySession,
             authHeader: authHeader,
+            authorizationScope: .example,
             delegate: spyDelegate
         )
 
@@ -469,7 +576,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -486,7 +594,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-content/file.js")!)
@@ -503,7 +612,8 @@ struct EditorHTTPClientTests {
         let spySession = SpyURLSession()
         let client = EditorHTTPClient(
             urlSession: spySession,
-            authHeader: "Bearer token"
+            authHeader: "Bearer token",
+            authorizationScope: .example
         )
 
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts")!)
@@ -525,8 +635,8 @@ struct EditorHTTPClientTests {
     func identicalRequestsShareAKey() async throws {
         let session = SpyURLSession()
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
-        let first = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
-        let second = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+        let first = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example).sharedRequest(for: request)
+        let second = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example).sharedRequest(for: request)
         #expect(first != nil)
         #expect(first == second)
     }
@@ -535,17 +645,17 @@ struct EditorHTTPClientTests {
     func requestsWithOtherCredentialsSessionsOrTimeoutsDontShare() async throws {
         let session = SpyURLSession()
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
-        let key = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a").sharedRequest(for: request)
+        let key = await EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example).sharedRequest(for: request)
 
-        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer b").sharedRequest(for: request) != key)
-        #expect(await EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a").sharedRequest(for: request) != key)
-        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer a", requestTimeout: 5).sharedRequest(for: request) != key)
+        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer b", authorizationScope: .example).sharedRequest(for: request) != key)
+        #expect(await EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a", authorizationScope: .example).sharedRequest(for: request) != key)
+        #expect(await EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example, requestTimeout: 5).sharedRequest(for: request) != key)
     }
 
     @Test("only safe requests without a body, from a client no delegate watches, are shared")
     func onlySafeUnwatchedRequestsAreShared() async throws {
         let session = SpyURLSession()
-        let client = EditorHTTPClient(urlSession: session, authHeader: "Bearer a")
+        let client = EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example)
         let url = URL(string: "https://example.com/wp-json/wp/v2/settings")!
 
         #expect(await client.sharedRequest(for: URLRequest(method: .OPTIONS, url: url)) != nil)
@@ -555,13 +665,13 @@ struct EditorHTTPClientTests {
         withBody.httpBody = Data("{}".utf8)
         #expect(await client.sharedRequest(for: withBody) == nil)
 
-        let watched = EditorHTTPClient(urlSession: session, authHeader: "Bearer a", delegate: SpyHTTPClientDelegate())
+        let watched = EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example, delegate: SpyHTTPClientDelegate())
         #expect(await watched.sharedRequest(for: URLRequest(url: url)) == nil)
     }
 
     @Test("a request that asks to skip the cache goes out alone")
     func aRequestThatSkipsTheCacheGoesOutAlone() async throws {
-        let client = EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a")
+        let client = EditorHTTPClient(urlSession: SpyURLSession(), authHeader: "Bearer a", authorizationScope: .example)
         var request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/posts/5")!)
 
         let freshAnswerPolicies: [URLRequest.CachePolicy] = [
@@ -582,8 +692,8 @@ struct EditorHTTPClientTests {
         defer { session.release() }
         let request = URLRequest(url: URL(string: "https://example.com/wp-json/wp/v2/types")!)
         let clients = [
-            EditorHTTPClient(urlSession: session, authHeader: "Bearer a"),
-            EditorHTTPClient(urlSession: session, authHeader: "Bearer a"),
+            EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example),
+            EditorHTTPClient(urlSession: session, authHeader: "Bearer a", authorizationScope: .example),
         ]
         let key = try #require(await clients[0].sharedRequest(for: request))
 

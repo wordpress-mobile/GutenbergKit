@@ -73,6 +73,14 @@ extension Data {
     }
 }
 
+extension EditorAuthorizationScope {
+    /// The scope of `https://example.com`, the site most tests make requests to.
+    static let example = EditorAuthorizationScope(
+        siteURL: URL(string: "https://example.com")!,
+        siteApiRoot: URL(string: "https://example.com/wp-json/")!
+    )
+}
+
 protocol MakesTestFixtures {
     static var testSiteURL: URL { get }
     static var testApiRoot: URL { get }

@@ -33,7 +33,7 @@ struct RESTAPIRepositoryTests: MakesTestFixtures {
         let repositories = (0..<2).map { _ in
             makeRepository(
                 configuration: configuration,
-                httpClient: EditorHTTPClient(urlSession: session, authHeader: configuration.authHeader)
+                httpClient: EditorHTTPClient(configuration: configuration, urlSession: session)
             )
         }
 

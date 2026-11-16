@@ -12,6 +12,7 @@ import org.wordpress.gutenberg.EditorHTTPClientProtocol
 import org.wordpress.gutenberg.Paths
 import org.wordpress.gutenberg.RESTAPIRepository
 import org.wordpress.gutenberg.model.EditorAssetBundle
+import org.wordpress.gutenberg.model.EditorAuthorizationScope
 import org.wordpress.gutenberg.model.EditorCachePolicy
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
@@ -95,7 +96,10 @@ class EditorService(
             tempStorageRoot: File? = null,
             cacheRoot: File? = null
         ): EditorService {
-            val client = httpClient ?: EditorHTTPClient(authHeader = configuration.authHeader)
+            val client = httpClient ?: EditorHTTPClient(
+                authHeader = configuration.authHeader,
+                authorizationScope = EditorAuthorizationScope(configuration)
+            )
 
             val restRepository = RESTAPIRepository(
                 configuration = configuration,

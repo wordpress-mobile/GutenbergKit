@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.wordpress.gutenberg.model.EditorAuthorizationScope
 import org.wordpress.gutenberg.model.EditorConfiguration
 import java.io.File
 import java.net.HttpURLConnection
@@ -48,8 +49,9 @@ class EditorAssetsLibrary(
                 val defaultUserAgent = System.getProperty("http.agent") ?: ""
                 connection.setRequestProperty("User-Agent", "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}")
 
-                // Set headers from configuration
-                if (configuration.authHeader.isNotEmpty()) {
+                // Set headers from configuration. The site's credentials go only where they
+                // may: a custom endpoint can be on another party's host.
+                if (configuration.authHeader.isNotEmpty() && EditorAuthorizationScope(configuration).allows(endpoint)) {
                     connection.setRequestProperty("Authorization", configuration.authHeader)
                 }
 

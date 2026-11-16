@@ -2,6 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { store as coreStore } from '@wordpress/core-data';
 import { select } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
+import { isWithinAuthorizationScope } from './authorization-scope';
 import { getGBKit, getPostPath, getPostReference } from './bridge';
 import { CALLER_TOKEN_HEADER } from './fetch-relay';
 import { info, warn, error as logError } from './logger';
@@ -211,11 +212,14 @@ function escapeRegExp( value ) {
  * Middleware that handles token-based authentication.
  *
  * When an auth header is present, this middleware:
- * 1. Adds the Authorization header to the request
- * 2. Sets credentials to 'omit' to prevent cookies from interfering with token authentication
+ * 1. Sets credentials to 'omit' on every request, to prevent cookies from interfering with token authentication
+ * 2. Adds the Authorization header to a request the site's credentials may go with
  *
  * This prevents authentication conflicts where browser cookies could disrupt
  * token-based authentication by being sent alongside the Authorization header.
+ *
+ * A request to anywhere but the site goes out without the header: the site's
+ * credentials are not for another party's service.
  *
  * @type {APIFetchMiddleware}
  */
@@ -224,11 +228,40 @@ function tokenAuthMiddleware( options, next ) {
 	options.headers = options.headers || {};
 
 	if ( authHeader ) {
-		options.headers.Authorization = authHeader;
-		options.credentials = 'omit'; // Avoid cookies disrupting token authentication
+		// Avoid cookies disrupting token authentication. Every request omits
+		// them, not only those that carry the header: a request with
+		// credentials fails the CORS check against `Access-Control-Allow-Origin: *`.
+		options.credentials = 'omit';
+
+		if ( isForSite( options ) ) {
+			options.headers.Authorization = authHeader;
+		}
 	}
 
 	return next( options );
+}
+
+/**
+ * Whether a request is one the site's credentials may go with.
+ *
+ * A request by `path` is for the site's API: the root URL middleware, which
+ * runs later, joins the path to the API root and replaces any `url`. So is a
+ * request by `namespace` and `endpoint`, which that middleware turns into a
+ * `path` first. A request by `url` alone can be for anywhere.
+ *
+ * @param {Object} options The api-fetch options.
+ * @return {boolean} Whether the request may carry the site's credentials.
+ */
+function isForSite( options ) {
+	if (
+		typeof options.path === 'string' ||
+		( typeof options.namespace === 'string' &&
+			typeof options.endpoint === 'string' )
+	) {
+		return true;
+	}
+
+	return isWithinAuthorizationScope( options.url, getGBKit() );
 }
 
 /**

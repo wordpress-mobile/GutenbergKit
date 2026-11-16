@@ -80,7 +80,7 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
     ) -> EditorViewController {
         EditorViewController(
             configuration: configuration,
-            httpClient: EditorHTTPClient(urlSession: session, authHeader: configuration.authHeader)
+            httpClient: EditorHTTPClient(configuration: configuration, urlSession: session)
         )
     }
 

@@ -57,7 +57,7 @@ struct EditorDependencyLoaderTests: MakesTestFixtures {
         let configuration = makeConfiguration()
         return EditorService(
             configuration: configuration,
-            httpClient: EditorHTTPClient(urlSession: session, authHeader: configuration.authHeader),
+            httpClient: EditorHTTPClient(configuration: configuration, urlSession: session),
             storageRoot: .randomTemporaryDirectory,
             cacheRoot: .randomTemporaryDirectory
         )
