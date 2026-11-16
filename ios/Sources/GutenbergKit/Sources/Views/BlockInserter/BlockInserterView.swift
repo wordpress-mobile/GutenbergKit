@@ -200,12 +200,17 @@ struct BlockInserterView: View {
                     }
                     selectedMediaItems = []
                 }
+                // The `.disabled` on the view body doesn't reach toolbar items.
+                // Starting a second import mid-way would overwrite the first
+                // one's error and hide its alert.
+                .disabled(viewModel.isProcessingMedia)
 
                 Button {
                     isShowingCamera = true
                 } label: {
                     Image(systemName: "camera")
                 }
+                .disabled(viewModel.isProcessingMedia)
             }
 
             Button {
