@@ -148,8 +148,10 @@ export function reportUploadProgress( id, sent, total ) {
  *   class can't see listeners, so it goes by whether the caller read `upload`
  *   before `send()`, as adding a listener does. A caller that read it then and
  *   added a listener afterwards hears events the browser wouldn't fire.
- * - The response has no `Content-Length`, because native code drops it. So
- *   download `progress` events have `lengthComputable` false and a `total` of 0.
+ * - On iOS 17 and 18, download `progress` for a compressed response with a
+ *   `Content-Length` differs from the browser's. The browser reports no total.
+ *   Here the total is the compressed size, until more bytes than that arrive.
+ *   From iOS 26, the browser does the same as here.
  *
  * @param {typeof XMLHttpRequest}        Base             The class to extend.
  * @param {Object}                       config           Relay configuration.

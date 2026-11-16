@@ -610,6 +610,12 @@ struct RestRelay: Sendable {
     /// WebKit doesn't act on either header in a scheme response: it neither
     /// decodes the body again nor cuts it to `Content-Length` (measured on
     /// macOS 27 and in the iOS 27.0 Simulator).
+    ///
+    /// On iOS 26 and later, the browser's own `XMLHttpRequest` reports download
+    /// progress against this encoded `Content-Length`, and a relayed one does the
+    /// same. iOS 17 and 18 report no total for an encoded response, so relayed
+    /// progress differs there. No choice of headers matches them (measured in the
+    /// Simulator on iOS 17.5, 18.6, 26.5 and 27.0).
     private static let responseHeadersToStrip: Set<String> = [
         "access-control-allow-origin", "access-control-allow-credentials",
         "access-control-allow-headers", "access-control-allow-methods",
