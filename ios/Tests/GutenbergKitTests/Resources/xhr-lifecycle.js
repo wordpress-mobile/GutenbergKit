@@ -54,6 +54,28 @@ function recordUpload() {
 	}
 }
 
+/** Records the sizes each `loadstart` gives, the request's and the upload's. */
+function recordStarts() {
+	const start = ( name ) => ( event ) =>
+		note(
+			`${ name } ${ event.loaded }/${ event.total } lengthComputable ${ event.lengthComputable }`
+		);
+	xhr.addEventListener( 'loadstart', start( 'loadstart' ) );
+	xhr.upload.addEventListener( 'loadstart', start( 'upload.loadstart' ) );
+}
+
+/**
+ * Form data with a text field and a file, as an upload from the editor sends.
+ *
+ * @return {FormData} The form data.
+ */
+function form() {
+	const data = new FormData();
+	data.append( 'title', 'Hello' );
+	data.append( 'file', new Blob( [ 'file bytes' ] ), 'a.txt' );
+	return data;
+}
+
 const ended = new Promise( ( resolve ) => {
 	xhr.addEventListener( 'loadend', () =>
 		// Long enough for any event that would follow by mistake.
@@ -139,11 +161,8 @@ const scenarios = {
 	},
 	postFormData() {
 		recordUpload();
-		const form = new FormData();
-		form.append( 'title', 'Hello' );
-		form.append( 'file', new Blob( [ 'file bytes' ] ), 'a.txt' );
 		xhr.open( 'POST', `${ origin }/echo` );
-		xhr.send( form );
+		xhr.send( form() );
 	},
 	abortBeforeResponse() {
 		xhr.open( 'GET', `${ origin }/delay` );
@@ -202,11 +221,8 @@ const scenarios = {
 	},
 	abortWhileFormDataIsRead() {
 		recordUpload();
-		const form = new FormData();
-		form.append( 'title', 'Hello' );
-		form.append( 'file', new Blob( [ 'file bytes' ] ), 'a.txt' );
 		xhr.open( 'POST', `${ origin }/echo` );
-		xhr.send( form );
+		xhr.send( form() );
 		xhr.abort();
 	},
 	timeoutBeforeResponse() {
@@ -246,6 +262,41 @@ const scenarios = {
 		xhr.open( 'POST', `${ origin }/echo` );
 		xhr.send( new Blob( [ 'a blob body' ], { type: 'text/plain' } ) );
 		callSentRequest();
+	},
+	callsWhileFormDataIsRead() {
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( form() );
+		callSentRequest();
+	},
+	startOfBlob() {
+		recordStarts();
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( new Blob( [ 'a blob body' ], { type: 'text/plain' } ) );
+	},
+	startOfFormData() {
+		recordStarts();
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( form() );
+	},
+	abortFromBlobLoadStart() {
+		recordUpload();
+		xhr.addEventListener( 'loadstart', () => xhr.abort(), { once: true } );
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( new Blob( [ 'a blob body' ] ) );
+	},
+	changeFormDataInLoadStart() {
+		recordStarts();
+		const data = form();
+		xhr.addEventListener( 'loadstart', () => data.append( 'late', 'x' ), {
+			once: true,
+		} );
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( data );
+	},
+	startOfEmptyBlob() {
+		recordStarts();
+		xhr.open( 'POST', `${ origin }/echo` );
+		xhr.send( new Blob( [] ) );
 	},
 	synchronousGet() {
 		xhr.open( 'GET', `${ origin }/echo`, false );
