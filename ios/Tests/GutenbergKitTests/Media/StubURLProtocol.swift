@@ -32,7 +32,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         var rest = Data()
         var restFailure: (any Error)?
         /// Redirects by path. A request for a path in here gets a `302` to the
-        /// URL it maps to, which may be relative, and the session follows it.
+        /// URL it maps to, which may be relative. The session follows it unless
+        /// the redirect is refused.
         var redirects: [String: String] = [:]
     }
 
@@ -198,6 +199,10 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
             var next = request
             next.url = target
             client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: redirect)
+            // As above: when the redirect is refused, the session ends with the 3xx.
+            // Without it, the task waits until it times out.
+            client?.urlProtocol(self, didReceive: redirect, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocolDidFinishLoading(self)
             return
         }
 
