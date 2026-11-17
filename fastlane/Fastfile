@@ -284,7 +284,11 @@ def previous_release_tag(version:, token:)
   releases = github_api(
     api_token: token,
     http_method: 'GET',
-    path: "/repos/#{GITHUB_REPO}/releases?per_page=100"
+    path: "/repos/#{GITHUB_REPO}/releases?per_page=100",
+    # The default handler logs the request headers, which carry the token.
+    error_handlers: {
+      '*' => ->(result) { UI.user_error!("Listing releases failed with #{result[:status]}: #{result[:body]}") }
+    }
   )[:json]
 
   candidates = releases.reject { |release| release['draft'] || release['prerelease'] }
