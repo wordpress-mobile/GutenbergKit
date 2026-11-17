@@ -319,7 +319,9 @@ end
 #
 # Calls the endpoint directly rather than through release-toolkit's
 # `get_prs_between_tags`, which since 15.3.0 sends an unset
-# `configuration_file_path` as `null`, failing GitHub's validation.
+# `configuration_file_path` as `null`, failing GitHub's validation. Revert to
+# `get_prs_between_tags` once a release-toolkit release includes
+# wordpress-mobile/release-toolkit#787.
 def generated_release_notes(version:, token:)
   github_api(
     api_token: token,
