@@ -316,16 +316,24 @@ end
 # Build the release body via GitHub's notes generator, pinned to an explicit
 # previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
 # one.
+#
+# Calls the endpoint directly rather than through release-toolkit's
+# `get_prs_between_tags`, which since 15.3.0 sends an unset
+# `configuration_file_path` as `null`, failing GitHub's validation.
 def generated_release_notes(version:, token:)
-  get_prs_between_tags(
-    repository: GITHUB_REPO,
-    tag_name: version,
-    previous_tag: previous_release_tag!(version: version, token: token),
-    # Hard fail on errors. Otherwise, we might get release notes reading something
-    # like "Error computing the list of PRs."
-    fail_on_error: true,
-    github_token: token
-  )
+  github_api(
+    api_token: token,
+    http_method: 'POST',
+    path: "/repos/#{GITHUB_REPO}/releases/generate-notes",
+    body: {
+      tag_name: version,
+      previous_tag_name: previous_release_tag!(version: version, token: token)
+    },
+    # The default handler logs the request headers, which carry the token.
+    error_handlers: {
+      '*' => ->(result) { UI.user_error!("Generating release notes failed with #{result[:status]}: #{result[:body]}") }
+    }
+  )[:json]['body']
 end
 
 def require_env_vars!(*keys)
