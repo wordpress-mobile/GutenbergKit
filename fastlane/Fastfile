@@ -277,9 +277,6 @@ end
 # fetched every tag, the API reports `prerelease` authoritatively, and it ignores
 # stray tags never published as releases (e.g. `vtest-s3-xcframework-*`).
 def previous_release_tag(version:, token:)
-  # Not fastlane's `github_api`: on a failed request it logs the headers, token included.
-  # No candidate returns nil, and both callers hard-error rather than publishing
-  # notes against a wrong base.
   releases = Fastlane::Helper::GithubHelper.new(github_token: token).client.releases(GITHUB_REPO)
 
   candidates = releases.reject { |release| release[:draft] || release[:prerelease] }
