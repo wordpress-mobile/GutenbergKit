@@ -1293,6 +1293,12 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return .allow
         }
 
+        // The editor's own resource schemes mean nothing outside the editor.
+        if let url = navigationAction.request.url, navigationPolicy.isResourceScheme(url) {
+            Logger.navigation.warning("Blocked navigation that would replace the editor with \(url.absoluteString, privacy: .private)")
+            return .cancel
+        }
+
         // External main frame navigation should open in the system browser.
         if let url = navigationAction.request.url {
             if let windowScene = webView.window?.windowScene {

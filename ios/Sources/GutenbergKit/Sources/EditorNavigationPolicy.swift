@@ -9,9 +9,13 @@ import WebKit
 struct EditorNavigationPolicy {
     /// URL schemes that are always allowed to load within the WebView.
     /// - `file`: Local bundled editor resources
+    private static let allowedSchemes: Set<String> = ["file"]
+
+    /// The editor's own resource schemes. They serve subresources and subframes, so a
+    /// navigation that would replace the editor's page with one of them is blocked.
     /// - `gbk-cache-https`: Cached remote assets served via custom scheme handler
     /// - `gbk-media-file`: Local media files from the device's photo library
-    private static let allowedSchemes: Set<String> = ["file", "gbk-cache-https", "gbk-media-file"]
+    private static let resourceSchemes: Set<String> = ["gbk-cache-https", "gbk-media-file"]
 
     /// Optional development server URL. Navigation to this host is always allowed.
     let devServerURL: URL?
@@ -83,6 +87,12 @@ struct EditorNavigationPolicy {
     func isAllowedScheme(_ url: URL) -> Bool {
         guard let scheme = url.scheme else { return false }
         return Self.allowedSchemes.contains(scheme)
+    }
+
+    /// Returns `true` if the URL uses one of the editor's own resource schemes.
+    func isResourceScheme(_ url: URL) -> Bool {
+        guard let scheme = url.scheme else { return false }
+        return Self.resourceSchemes.contains(scheme)
     }
 
     /// Returns `true` if the URL matches the configured dev server host.

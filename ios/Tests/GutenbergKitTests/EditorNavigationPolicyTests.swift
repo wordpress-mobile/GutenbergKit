@@ -9,28 +9,21 @@ struct EditorNavigationPolicyTests {
 
     // MARK: - Allowed Schemes
 
-    @Test("allows internal URL schemes (file, gbk-cache-https, gbk-media-file)")
+    @Test("allows the editor page's scheme (file)")
     func allowsInternalSchemes() {
         let policy = EditorNavigationPolicy()
-        let allowedUrls = [
-            "file:///path/to/index.html",
-            "gbk-cache-https://public-api.wordpress.com/wpcom/v2/editor-assets",
-            "gbk-media-file:///Uploads/test-image.jpg"
-        ]
-
-        for urlString in allowedUrls {
-            let url = URL(string: urlString)!
-            #expect(policy.isAllowedScheme(url), "Should allow scheme for: \(urlString)")
-        }
+        #expect(policy.isAllowedScheme(URL(string: "file:///path/to/index.html")!))
     }
 
-    @Test("does not allow external URL schemes (https, http, nil)")
+    @Test("does not allow external or resource URL schemes")
     func doesNotAllowExternalSchemes() {
         let policy = EditorNavigationPolicy()
         let disallowedUrls = [
             "https://wordpress.com/checkout/example.wordpress.com/premium",
             "http://example.com/page",
-            "//example.com/path"
+            "//example.com/path",
+            "gbk-cache-https://public-api.wordpress.com/wpcom/v2/editor-assets",
+            "gbk-media-file:///Uploads/test-image.jpg"
         ]
 
         for urlString in disallowedUrls {
@@ -69,23 +62,54 @@ struct EditorNavigationPolicyTests {
 
     // MARK: - Navigation Policy: Allowed Schemes Always Pass
 
-    @Test("allows internal scheme URLs regardless of navigation type")
+    @Test("allows the editor page regardless of navigation type")
     func allowsInternalSchemeUrlsRegardlessOfNavigationType() {
         let policy = EditorNavigationPolicy()
+        let url = URL(string: "file:///path/to/editor.html")!
+
+        // A reload after the web content process ends arrives as `.backForward`.
+        for navigationType: WKNavigationType in [.linkActivated, .other, .backForward, .reload] {
+            #expect(
+                policy.shouldAllowNavigation(url: url, navigationType: navigationType, isMainFrame: true),
+                "Should allow \(navigationType.rawValue) navigation to the editor page"
+            )
+        }
+    }
+
+    // MARK: - Navigation Policy: Resource Schemes
+
+    @Test("recognizes the editor's resource schemes")
+    func recognizesResourceSchemes() {
+        let policy = EditorNavigationPolicy()
+        #expect(policy.isResourceScheme(URL(string: "gbk-cache-https://example.com/asset.js")!))
+        #expect(policy.isResourceScheme(URL(string: "gbk-media-file:///Uploads/test-image.jpg")!))
+        #expect(!policy.isResourceScheme(URL(string: "file:///path/to/editor.html")!))
+        #expect(!policy.isResourceScheme(URL(string: "https://example.com/page")!))
+    }
+
+    @Test("blocks resource scheme URLs from replacing the editor page")
+    func blocksResourceSchemesInMainFrame() {
+        let policy = EditorNavigationPolicy()
         let urls = [
-            "file:///path/to/editor.html",
-            "gbk-cache-https://example.com/asset.js"
+            "gbk-cache-https://example.com/page.html",
+            "gbk-media-file:///Uploads/page.html"
         ]
 
         for urlString in urls {
             let url = URL(string: urlString)!
+            for navigationType: WKNavigationType in [.linkActivated, .other] {
+                #expect(
+                    !policy.shouldAllowNavigation(url: url, navigationType: navigationType, isMainFrame: true),
+                    "Should block main frame navigation to: \(urlString)"
+                )
+            }
             #expect(
-                policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true),
-                "Should allow link click to: \(urlString)"
+                !policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: nil),
+                "Should block new window navigation to: \(urlString)"
             )
             #expect(
-                policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true),
-                "Should allow JS navigation to: \(urlString)"
+                policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false),
+                "Should allow subframe navigation to: \(urlString)"
             )
         }
     }
