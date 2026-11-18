@@ -308,16 +308,16 @@ end
 # Build the release body via GitHub's notes generator, pinned to an explicit
 # previous tag. `set_github_release`'s `is_generate_release_notes` cannot express
 # one.
+#
+# Workaround: release-toolkit's `get_prs_between_tags` sends an unset
+# `configuration_file_path` as `null`, which GitHub rejects with a 422. Switch
+# back once a release-toolkit release includes wordpress-mobile/release-toolkit#787.
 def generated_release_notes(version:, token:)
-  get_prs_between_tags(
-    repository: GITHUB_REPO,
+  Fastlane::Helper::GithubHelper.new(github_token: token).client.post(
+    "#{Octokit::Repository.path(GITHUB_REPO)}/releases/generate-notes",
     tag_name: version,
-    previous_tag: previous_release_tag!(version: version, token: token),
-    # Hard fail on errors. Otherwise, we might get release notes reading something
-    # like "Error computing the list of PRs."
-    fail_on_error: true,
-    github_token: token
-  )
+    previous_tag_name: previous_release_tag!(version: version, token: token)
+  ).body
 end
 
 def require_env_vars!(*keys)
