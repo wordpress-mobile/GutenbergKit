@@ -95,6 +95,21 @@ struct EditorNavigationPolicy {
         return Self.resourceSchemes.contains(scheme)
     }
 
+    /// Returns `true` if a page with this security origin is the editor's own: the bundled
+    /// `file:` page, or the dev server when one is configured.
+    func isEditorOrigin(scheme: String, host: String, port: Int) -> Bool {
+        if scheme == "file" {
+            return true
+        }
+        guard let devServerURL, let devScheme = devServerURL.scheme, let devHost = devServerURL.host else {
+            return false
+        }
+        // `WKSecurityOrigin` reports a default port as 0.
+        return scheme.caseInsensitiveCompare(devScheme) == .orderedSame
+            && host.caseInsensitiveCompare(devHost) == .orderedSame
+            && port == (devServerURL.port ?? 0)
+    }
+
     /// Returns `true` if the URL matches the configured dev server host.
     func isDevServerURL(_ url: URL) -> Bool {
         guard let devServerURL else { return false }

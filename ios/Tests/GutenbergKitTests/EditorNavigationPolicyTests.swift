@@ -60,6 +60,33 @@ struct EditorNavigationPolicyTests {
         #expect(!policyWithDevServer.isDevServerURL(externalUrl))
     }
 
+    // MARK: - Editor Origin
+
+    @Test("recognizes the bundled editor page's origin")
+    func recognizesBundledEditorOrigin() {
+        let policy = EditorNavigationPolicy()
+        #expect(policy.isEditorOrigin(scheme: "file", host: "", port: 0))
+    }
+
+    @Test("recognizes the dev server's origin when configured")
+    func recognizesDevServerOrigin() {
+        let policy = EditorNavigationPolicy(devServerURL: URL(string: "http://localhost:5173")!)
+        #expect(policy.isEditorOrigin(scheme: "http", host: "localhost", port: 5173))
+        #expect(!policy.isEditorOrigin(scheme: "http", host: "localhost", port: 8080))
+        #expect(!policy.isEditorOrigin(scheme: "https", host: "localhost", port: 5173))
+        #expect(!policy.isEditorOrigin(scheme: "http", host: "example.com", port: 5173))
+    }
+
+    @Test("does not recognize other origins as the editor's")
+    func doesNotRecognizeOtherOrigins() {
+        let policy = EditorNavigationPolicy()
+        #expect(!policy.isEditorOrigin(scheme: "gbk-cache-https", host: "example.com", port: 0))
+        #expect(!policy.isEditorOrigin(scheme: "gbk-media-file", host: "", port: 0))
+        #expect(!policy.isEditorOrigin(scheme: "https", host: "example.com", port: 0))
+        #expect(!policy.isEditorOrigin(scheme: "http", host: "localhost", port: 5173))
+        #expect(!policy.isEditorOrigin(scheme: "", host: "", port: 0))
+    }
+
     // MARK: - Navigation Policy: Allowed Schemes Always Pass
 
     @Test("allows the editor page regardless of navigation type")

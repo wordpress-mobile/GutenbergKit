@@ -1253,7 +1253,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandlerWithReply
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
-        guard Self.isFromMainFrame(message) else {
+        guard isFromEditorPage(message) else {
             return (nil, nil)
         }
         guard message.name == "requestLatestContent" else {
@@ -1321,7 +1321,7 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandler
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard Self.isFromMainFrame(message) else {
+        guard isFromEditorPage(message) else {
             return
         }
         guard let message = EditorJSMessage(message: message) else {
@@ -1333,12 +1333,17 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
     }
 
-    /// The editor posts every bridge message from its main window, so messages a subframe
-    /// posts through its own handlers, such as from a cross-origin or sandboxed embed, are
-    /// dropped. Revisit this if editor code that calls the bridge ever runs inside a subframe.
-    private static func isFromMainFrame(_ message: WKScriptMessage) -> Bool {
-        guard message.frameInfo.isMainFrame else {
-            Logger.bridge.debug("Dropped '\(message.name)' bridge message from a subframe")
+    /// The editor posts every bridge message from its own page in the main window, so
+    /// messages from any other page are dropped: one a subframe posts through its own
+    /// handlers, such as from a cross-origin or sandboxed embed, or one from a page that
+    /// isn't the editor's. Revisit this if editor code that calls the bridge ever runs
+    /// inside a subframe.
+    private func isFromEditorPage(_ message: WKScriptMessage) -> Bool {
+        let frame = message.frameInfo
+        let origin = frame.securityOrigin
+        guard frame.isMainFrame,
+              navigationPolicy.isEditorOrigin(scheme: origin.protocol, host: origin.host, port: origin.port) else {
+            Logger.bridge.debug("Dropped '\(message.name, privacy: .public)' bridge message from outside the editor page")
             return false
         }
         return true
