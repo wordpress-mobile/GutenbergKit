@@ -6,7 +6,7 @@ import PackageDescription
 // Always building the resources framework from local source for the time being.
 //
 // We'll follow up with more automation to build and use the binary target option later on.
-let resourcesMode: DependencyMode = .local
+let resourcesMode: DependencyMode = .release(version: "pr-builds/915", checksum: "a792d531e1c58e39e3dc8886799237e775e41865334718417decb7e1490904ff")
 
 let gutenbergKitResources: Target = resourcesMode.target
 
