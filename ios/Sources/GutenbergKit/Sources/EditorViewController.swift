@@ -1034,7 +1034,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didLogNetworkRequest: networkRequest)
             }
         } catch {
-            // Capture detailed diagnostic information for crash reporting
+            // Drop the message rather than terminate: one bad message shouldn't take down the app.
             let messageType = message.type
             let messageBodyDescription = String(describing: message.body)
 
@@ -1046,10 +1046,6 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 """
 
             NSLog("❌ GutenbergKit Message Decode Error: %@", errorMessage)
-
-            assertionFailure(errorMessage)
-
-            fatalError(errorMessage)
         }
     }
 
