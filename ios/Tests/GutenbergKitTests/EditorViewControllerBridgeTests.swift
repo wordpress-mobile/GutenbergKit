@@ -99,33 +99,13 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         #expect(spy.historyStates == [[true, true]])
     }
 
-    /// Posts a valid message from a sandboxed (null-origin) iframe, then reports the
-    /// reply it got for the latest content, or the error it hit instead.
-    private static let subframeScript = #"""
-        const frame = document.createElement('iframe');
-        frame.sandbox = 'allow-scripts';
-        frame.srcdoc = `<script>
-            (async () => {
-                try {
-                    const handlers = window.webkit.messageHandlers;
-                    handlers.editorDelegate.postMessage({ message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } });
-                    const content = await handlers.requestLatestContent.postMessage(null);
-                    parent.postMessage({ content: content ?? null }, '*');
-                } catch (error) {
-                    parent.postMessage({ error: String(error) }, '*');
-                }
-            })();
-        <\/script>`;
-        const reply = new Promise((resolve) => {
-            window.addEventListener('message', (event) => {
-                if (event.source === frame.contentWindow) {
-                    resolve(event.data);
-                }
-            });
-        });
-        document.body.append(frame);
-        return JSON.stringify(await reply);
-        """#
+    /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
+    /// Pair every call with `removeStorage(for:)`: nothing else deletes the site's files.
+    private func makeIsolatedConfiguration() -> EditorConfiguration {
+        makeConfiguration(
+            siteURL: URL(string: "https://\(UUID().uuidString).example.invalid")!
+        )
+    }
 
     /// An editor showing a blank `file://` page, as the editor's own page is, with its
     /// bridge wired to `delegate`.
@@ -157,13 +137,33 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         return editor
     }
 
-    /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
-    /// Pair every call with `removeStorage(for:)`: nothing else deletes the site's files.
-    private func makeIsolatedConfiguration() -> EditorConfiguration {
-        makeConfiguration(
-            siteURL: URL(string: "https://\(UUID().uuidString).example.invalid")!
-        )
-    }
+    /// Posts a valid message from a sandboxed (null-origin) iframe, then reports the
+    /// reply it got for the latest content, or the error it hit instead.
+    private static let subframeScript = #"""
+        const frame = document.createElement('iframe');
+        frame.sandbox = 'allow-scripts';
+        frame.srcdoc = `<script>
+            (async () => {
+                try {
+                    const handlers = window.webkit.messageHandlers;
+                    handlers.editorDelegate.postMessage({ message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } });
+                    const content = await handlers.requestLatestContent.postMessage(null);
+                    parent.postMessage({ content: content ?? null }, '*');
+                } catch (error) {
+                    parent.postMessage({ error: String(error) }, '*');
+                }
+            })();
+        <\/script>`;
+        const reply = new Promise((resolve) => {
+            window.addEventListener('message', (event) => {
+                if (event.source === frame.contentWindow) {
+                    resolve(event.data);
+                }
+            });
+        });
+        document.body.append(frame);
+        return JSON.stringify(await reply);
+        """#
 
     private func removeStorage(for configuration: EditorConfiguration) {
         try? FileManager.default.removeItem(at: Paths.storageRoot(for: configuration))
