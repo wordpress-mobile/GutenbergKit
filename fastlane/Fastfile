@@ -281,10 +281,15 @@ def previous_release_tag(version:, token:)
   # preceding stable release only after 100 *consecutive* prereleases — far off
   # at the current ratio. It fails safe: no candidate returns nil, and both
   # callers hard-error rather than publishing notes against a wrong base.
+  path = "/repos/#{GITHUB_REPO}/releases?per_page=100"
   releases = github_api(
     api_token: token,
     http_method: 'GET',
-    path: "/repos/#{GITHUB_REPO}/releases?per_page=100"
+    path: path,
+    # The default handler logs the request headers, which carry the token.
+    error_handlers: {
+      '*' => ->(result) { UI.user_error!("Listing releases (GET #{path}) failed with #{result[:status]}: #{result[:body]}") }
+    }
   )[:json]
 
   candidates = releases.reject { |release| release['draft'] || release['prerelease'] }
