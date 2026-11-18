@@ -1262,6 +1262,9 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandlerWithReply
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
+        guard Self.isFromMainFrame(message) else {
+            return (nil, nil)
+        }
         guard message.name == "requestLatestContent" else {
             return (nil, "Unknown message handler: \(message.name)")
         }
@@ -1321,12 +1324,26 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandler
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard Self.isFromMainFrame(message) else {
+            return
+        }
         guard let message = EditorJSMessage(message: message) else {
             return NSLog("Unsupported message: \(message.body)")
         }
         MainActor.assumeIsolated {
             delegate?.controller(self, didReceiveMessage: message)
         }
+    }
+
+    /// The editor posts every bridge message from its main window, so messages from
+    /// subframes (e.g. embeds) are dropped. Revisit this if editor code that calls the
+    /// bridge ever runs inside a subframe.
+    private static func isFromMainFrame(_ message: WKScriptMessage) -> Bool {
+        guard message.frameInfo.isMainFrame else {
+            Logger.bridge.debug("Dropped '\(message.name)' bridge message from a subframe")
+            return false
+        }
+        return true
     }
 }
 
