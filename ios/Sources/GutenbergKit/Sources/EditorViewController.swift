@@ -1327,9 +1327,9 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         }
     }
 
-    /// The editor posts every bridge message from its main window, so messages from
-    /// subframes (e.g. embeds) are dropped. Revisit this if editor code that calls the
-    /// bridge ever runs inside a subframe.
+    /// The editor posts every bridge message from its main window, so messages a subframe
+    /// posts through its own handlers, such as from a cross-origin or sandboxed embed, are
+    /// dropped. Revisit this if editor code that calls the bridge ever runs inside a subframe.
     private static func isFromMainFrame(_ message: WKScriptMessage) -> Bool {
         guard message.frameInfo.isMainFrame else {
             Logger.bridge.debug("Dropped '\(message.name)' bridge message from a subframe")
