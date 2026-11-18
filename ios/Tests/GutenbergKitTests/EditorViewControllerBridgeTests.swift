@@ -45,8 +45,14 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
     }
 
     @MainActor
-    @Test("drops a message it can't decode, and keeps handling the next")
-    func dropsUndecodableMessages() async throws {
+    @Test("drops a message it can't decode, and keeps handling the next", arguments: [
+        "undefined",
+        "null",
+        "5",
+        "{ hasUndo: new Date(), hasRedo: false }",
+        "{ hasUndo: NaN, hasRedo: false }",
+    ])
+    func dropsUndecodableMessages(_ body: String) async throws {
         let session = ParkedURLSession()
         let configuration = makeIsolatedConfiguration()
         defer { removeStorage(for: configuration) }
@@ -57,7 +63,7 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         _ = try await editor.webView.callAsyncJavaScript(
             """
             const delegate = window.webkit.messageHandlers.editorDelegate;
-            delegate.postMessage({ message: 'onEditorHistoryChanged' });
+            delegate.postMessage({ message: 'onEditorHistoryChanged', body: \(body) });
             delegate.postMessage({ message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } });
             """,
             contentWorld: .page
