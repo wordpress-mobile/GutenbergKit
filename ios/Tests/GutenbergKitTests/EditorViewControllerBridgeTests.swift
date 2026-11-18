@@ -73,6 +73,32 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         #expect(spy.historyStates == [[true, true]])
     }
 
+    @MainActor
+    @Test("drops a message it doesn't recognize, and keeps handling the next", arguments: [
+        "'%@%@%@%@%@%@%@%@%@%@%@%@%@%@%@%@'",
+        "{ message: 'unknown', body: '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s' }",
+    ])
+    func dropsUnrecognizedMessages(_ message: String) async throws {
+        let session = ParkedURLSession()
+        let configuration = makeIsolatedConfiguration()
+        defer { removeStorage(for: configuration) }
+        defer { session.release() }
+        let spy = BridgeDelegateSpy()
+        let editor = try await makeLoadedEditor(configuration: configuration, session: session, delegate: spy)
+
+        _ = try await editor.webView.callAsyncJavaScript(
+            """
+            const delegate = window.webkit.messageHandlers.editorDelegate;
+            delegate.postMessage(\(message));
+            delegate.postMessage({ message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } });
+            """,
+            contentWorld: .page
+        )
+
+        try await waitUntil { !spy.historyStates.isEmpty }
+        #expect(spy.historyStates == [[true, true]])
+    }
+
     /// Posts a valid message from a sandboxed (null-origin) iframe, then reports the
     /// reply it got for the latest content.
     private static let subframeScript = #"""

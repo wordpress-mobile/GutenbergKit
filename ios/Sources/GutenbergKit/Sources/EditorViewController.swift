@@ -1035,17 +1035,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             }
         } catch {
             // Drop the message rather than terminate: one bad message shouldn't take down the app.
-            let messageType = message.type
-            let messageBodyDescription = String(describing: message.body)
-
-            let errorMessage = """
-                Failed to decode editor message:
-                - Message type: \(messageType)
-                - Decode error: \(error)
-                - Message body: \(messageBodyDescription)
-                """
-
-            NSLog("❌ GutenbergKit Message Decode Error: %@", errorMessage)
+            // The body is private, as it can carry post content.
+            Logger.bridge.error("""
+                Failed to decode '\(message.type.rawValue, privacy: .public)' bridge message: \
+                \(String(describing: error), privacy: .public); body: \
+                \(String(describing: message.body), privacy: .private)
+                """)
         }
     }
 
@@ -1324,7 +1319,8 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             return
         }
         guard let message = EditorJSMessage(message: message) else {
-            return NSLog("Unsupported message: \(message.body)")
+            Logger.bridge.error("Unsupported bridge message: \(String(describing: message.body), privacy: .private)")
+            return
         }
         MainActor.assumeIsolated {
             delegate?.controller(self, didReceiveMessage: message)
