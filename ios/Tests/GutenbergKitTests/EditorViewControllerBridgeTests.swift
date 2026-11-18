@@ -8,7 +8,7 @@ import UIKit
 
 /// How the editor's bridge handles the messages a page posts to it, sent from a real
 /// web view. The dependency fetch is parked, so the editor never replaces the test page.
-@Suite("EditorViewController bridge messages")
+@Suite("EditorViewController bridge messages", .timeLimit(.minutes(5)))
 struct EditorViewControllerBridgeTests: MakesTestFixtures {
     static let testSiteURL = URL(string: "https://test.example.com")!
     static let testApiRoot = URL(string: "https://test.example.com/wp-json/wp/v2")!
@@ -100,20 +100,28 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
     }
 
     /// Posts a valid message from a sandboxed (null-origin) iframe, then reports the
-    /// reply it got for the latest content.
+    /// reply it got for the latest content, or the error it hit instead.
     private static let subframeScript = #"""
         const frame = document.createElement('iframe');
         frame.sandbox = 'allow-scripts';
         frame.srcdoc = `<script>
             (async () => {
-                const handlers = window.webkit.messageHandlers;
-                handlers.editorDelegate.postMessage({ message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } });
-                const content = await handlers.requestLatestContent.postMessage(null);
-                parent.postMessage({ content: content ?? null }, '*');
+                try {
+                    const handlers = window.webkit.messageHandlers;
+                    handlers.editorDelegate.postMessage({ message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } });
+                    const content = await handlers.requestLatestContent.postMessage(null);
+                    parent.postMessage({ content: content ?? null }, '*');
+                } catch (error) {
+                    parent.postMessage({ error: String(error) }, '*');
+                }
             })();
         <\/script>`;
         const reply = new Promise((resolve) => {
-            window.addEventListener('message', (event) => resolve(event.data), { once: true });
+            window.addEventListener('message', (event) => {
+                if (event.source === frame.contentWindow) {
+                    resolve(event.data);
+                }
+            });
         });
         document.body.append(frame);
         return JSON.stringify(await reply);
@@ -139,7 +147,13 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         let page = directory.appending(component: "index.html")
         try Data("<!doctype html><title>Bridge</title><body></body>".utf8).write(to: page)
         editor.webView.loadFileURL(page, allowingReadAccessTo: directory)
-        try await waitUntil { !editor.webView.isLoading && editor.webView.url?.lastPathComponent == "index.html" }
+        // Longer than `patientTimeout`: on CI a web view's first page can take over a minute
+        // to load (see `loadBlankPage` in `EditorViewControllerMediaTeardownTests`).
+        try await waitUntil(timeout: .seconds(180)) {
+            !editor.webView.isLoading && editor.webView.url?.lastPathComponent == "index.html"
+        }
+        // The page is in memory once loaded, and needs nothing more from its directory.
+        try? FileManager.default.removeItem(at: directory)
         return editor
     }
 
