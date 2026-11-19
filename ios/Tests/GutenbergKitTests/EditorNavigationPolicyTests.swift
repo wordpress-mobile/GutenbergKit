@@ -141,6 +141,16 @@ struct EditorNavigationPolicyTests {
         }
     }
 
+    @Test("blocks resource scheme URLs on the dev server's host from replacing the editor page")
+    func blocksResourceSchemesOnDevServerHostInMainFrame() {
+        let policy = EditorNavigationPolicy(devServerURL: URL(string: "http://localhost:5173")!)
+        let url = URL(string: "gbk-cache-https://localhost:8888/wp-content/plugins/example/index.js")!
+
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
+        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
+        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false))
+    }
+
     // MARK: - Navigation Policy: Subframe Navigation (Video/Embed Support)
 
     @Test("allows subframe navigation to external URLs (videos, embeds)")

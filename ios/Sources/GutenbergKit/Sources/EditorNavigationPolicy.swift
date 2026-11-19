@@ -28,7 +28,7 @@ struct EditorNavigationPolicy {
     ///
     /// - Parameter navigationAction: The navigation action to evaluate.
     /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it
-    ///   should be opened in the system browser.
+    ///   must not. The caller opens a refused external URL in the system browser.
     @MainActor
     func shouldAllowNavigation(for navigationAction: WKNavigationAction) -> Bool {
         shouldAllowNavigation(
@@ -46,7 +46,7 @@ struct EditorNavigationPolicy {
     ///   - url: The URL being navigated to.
     ///   - navigationType: The type of navigation (link click, JavaScript, etc.).
     ///   - isMainFrame: Whether the navigation targets the main frame (`true`), a subframe (`false`), or unknown (`nil`).
-    /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it should open externally.
+    /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it must not.
     func shouldAllowNavigation(url: URL?, navigationType: WKNavigationType, isMainFrame: Bool?) -> Bool {
         guard let url else {
             return false
@@ -55,6 +55,11 @@ struct EditorNavigationPolicy {
         // Allow local editor resources and custom URL schemes
         if isAllowedScheme(url) {
             return true
+        }
+
+        // The editor's resource schemes load only in subframes, even on the dev server's host
+        if isResourceScheme(url) {
+            return isMainFrame == false
         }
 
         // Allow navigation to dev server URL if configured
