@@ -176,4 +176,23 @@ class GutenbergViewBridgeTest {
 
         assertTrue(received.isEmpty())
     }
+
+    // Hosts build their own requests from these, as WordPress-Android does with
+    // OkHttp, which rejects a POST without a body.
+    @Test
+    fun `survives a host failing to handle a network request`() {
+        view.setNetworkRequestListener(object : GutenbergView.NetworkRequestListener {
+            override fun onNetworkRequest(request: RecordedNetworkRequest) {
+                throw IllegalArgumentException("method POST must have a request body.")
+            }
+        })
+
+        receive(
+            """{"message":"onNetworkRequest","body":{"url":"https://example.com","method":"POST",""" +
+                """"requestHeaders":{},"status":200,"responseHeaders":{},"duration":5}}"""
+        )
+        receive("""{"message":"onEditorContentChanged","body":{}}""")
+
+        assertEquals("later messages still arrive", listOf("contentChanged"), received)
+    }
 }

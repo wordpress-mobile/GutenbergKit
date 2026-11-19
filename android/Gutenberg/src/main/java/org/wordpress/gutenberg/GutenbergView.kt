@@ -1794,8 +1794,14 @@ class GutenbergView : FrameLayout {
         modalDialogStateListener?.onModalDialogClosed(dialogType)
     }
 
+    /** Reports [request] to the host. A failing listener is logged, as diagnostics shouldn't crash the app. */
+    @Suppress("TooGenericExceptionCaught") // Hosts build their own requests from these, which can throw anything.
     private fun onNetworkRequest(request: RecordedNetworkRequest) {
-        networkRequestListener?.onNetworkRequest(request)
+        try {
+            networkRequestListener?.onNetworkRequest(request)
+        } catch (e: Exception) {
+            Log.e(TAG, "The host failed to handle a network request: ${e.message}")
+        }
     }
 
     fun resetFilePathCallback() {
