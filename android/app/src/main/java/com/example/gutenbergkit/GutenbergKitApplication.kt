@@ -3,7 +3,10 @@ package com.example.gutenbergkit
 import android.app.Application
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.StrictMode
+import android.os.strictmode.Violation
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -83,19 +86,26 @@ class GutenbergKitApplication : Application() {
     }
 
     private fun enableStrictMode() {
-        // A ThreadPolicy violation crashes the demo, so new main-thread disk or
-        // network work in the library fails loudly during development. The log
-        // keeps the full violation, not just the crash.
+        // A ThreadPolicy violation from GutenbergKit or demo code crashes the
+        // demo, so new main-thread disk or network work fails loudly during
+        // development. Other violations, such as a system service's own disk
+        // reads reported back over Binder, are only logged. Before API 28 there
+        // is no listener to tell them apart, so every violation is only logged.
         // VmPolicy stays on penaltyLog — VM violations like
         // LeakedClosableObject fire during GC and would crash at unpredictable
         // times unrelated to the offending code path.
-        StrictMode.setThreadPolicy(
-            StrictMode.ThreadPolicy.Builder()
-                .detectAll()
-                .penaltyLog()
-                .penaltyDeath()
-                .build()
-        )
+        val threadPolicy = StrictMode.ThreadPolicy.Builder()
+            .detectAll()
+            .penaltyLog()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Runs inline so the crash happens where penaltyDeath would.
+            threadPolicy.penaltyListener({ it.run() }) { violation ->
+                if (isOwnViolation(violation)) {
+                    throw IllegalStateException("StrictMode ThreadPolicy violation", violation)
+                }
+            }
+        }
+        StrictMode.setThreadPolicy(threadPolicy.build())
         StrictMode.setVmPolicy(
             StrictMode.VmPolicy.Builder()
                 .detectAll()
@@ -103,6 +113,17 @@ class GutenbergKitApplication : Application() {
                 .build()
         )
     }
+
+    /**
+     * Whether [violation]'s stack has a GutenbergKit or demo frame. A violation
+     * reported back over Binder carries only the remote process's stack, so it
+     * never matches, even when our code made the call.
+     */
+    @RequiresApi(Build.VERSION_CODES.P)
+    private fun isOwnViolation(violation: Violation): Boolean =
+        violation.stackTrace.any { frame ->
+            OWN_PACKAGES.any { frame.className.startsWith(it) }
+        }
 
     /**
      * Returns the account with the given [id], including the local WordPress
@@ -169,5 +190,9 @@ class GutenbergKitApplication : Application() {
     private fun extractWpComSiteId(siteApiRoot: String): String? {
         val regex = Regex("""public-api\.wordpress\.com/.+/sites/(\d+)""")
         return regex.find(siteApiRoot)?.groupValues?.get(1)
+    }
+
+    private companion object {
+        val OWN_PACKAGES = listOf("org.wordpress.gutenberg.", "com.example.gutenbergkit.")
     }
 }
