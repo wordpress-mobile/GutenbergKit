@@ -78,7 +78,7 @@ class GutenbergViewBridgeTest {
     }
 
     private fun receive(json: String) {
-        view.receiveBridgeMessage(json)
+        view.postBridgeMessageJson(json)
         idle()
     }
 

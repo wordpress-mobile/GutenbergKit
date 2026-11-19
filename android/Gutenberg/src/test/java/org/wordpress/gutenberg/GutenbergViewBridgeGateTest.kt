@@ -1,0 +1,199 @@
+package org.wordpress.gutenberg
+
+import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
+import android.widget.TextView
+import kotlinx.coroutines.test.TestScope
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.Mockito.mock
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.wordpress.gutenberg.model.EditorConfiguration
+import org.wordpress.gutenberg.model.EditorDependencies
+import org.wordpress.gutenberg.views.EditorErrorView
+
+/** Which pages the bridge hears, and how it answers them. */
+@RunWith(RobolectricTestRunner::class)
+class GutenbergViewBridgeGateTest {
+
+    private fun siteView(siteUrl: String = "https://example.com") = GutenbergView(
+        EditorConfiguration.builder(siteUrl, "$siteUrl/wp-json/").build(),
+        EditorDependencies.empty,
+        TestScope(),
+        RuntimeEnvironment.getApplication()
+    ).also { idle() }
+
+    /** The editor document for [siteUrl], mirroring the fallback in `loadEditor`. */
+    private fun editorUrl(siteUrl: String = "https://example.com") = BuildConfig.GUTENBERG_EDITOR_URL
+        .ifEmpty { "$siteUrl/assets/index.html" }
+
+    private val registrar get() = GutenbergView.bridgeRegistrar as FakeEditorBridgeRegistrar
+
+    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    private fun GutenbergView.trackAvailability(): MutableList<String> {
+        val events = mutableListOf<String>()
+        setEditorDidBecomeAvailable { events += "available" }
+        return events
+    }
+
+    private fun GutenbergView.isReady(): Boolean {
+        val callback = RecordingTitleAndContentCallback()
+        getTitleAndContent("", callback)
+        idle()
+        return callback.errors.none { it is EditorNotReadyException }
+    }
+
+    private fun latestContentRequest(id: Int = 1) =
+        """{"message":"requestLatestContent","body":{"id":$id}}"""
+
+    @Test
+    fun `exposes the bridge to the editor's origin`() {
+        val view = siteView()
+
+        assertEquals(listOf(view.editorWebView to webOrigin(editorUrl())), registrar.registrations)
+    }
+
+    @Test
+    fun `exposes the bridge to the editor's origin on a site's non-default port`() {
+        siteView("http://localhost:8888")
+
+        assertEquals(webOrigin(editorUrl("http://localhost:8888")), registrar.registrations.single().second)
+    }
+
+    @Test
+    fun `exposes the bridge again in the web view that replaces one whose renderer died`() {
+        val view = siteView()
+        view.postBridgeMessage("onEditorLoaded")
+        idle()
+        val deadWebView = view.editorWebView
+
+        deadWebView.webViewClient.onRenderProcessGone(deadWebView, mock(RenderProcessGoneDetail::class.java))
+        idle()
+
+        assertNotSame(deadWebView, view.editorWebView)
+        assertEquals(listOf(deadWebView, view.editorWebView), registrar.registrations.map { it.first })
+    }
+
+    @Test
+    fun `hears the editor page in the main frame`() {
+        val view = siteView()
+        val events = view.trackAvailability()
+
+        view.postBridgeMessage("onEditorLoaded")
+        idle()
+
+        assertEquals(listOf("available"), events)
+        assertTrue(view.isReady())
+    }
+
+    @Test
+    fun `drops messages from a subframe`() {
+        val view = siteView()
+        val events = view.trackAvailability()
+
+        view.postBridgeMessageJson("""{"message":"onEditorLoaded","body":{}}""", isMainFrame = false)
+        val replies = view.postBridgeMessageJson(latestContentRequest(), isMainFrame = false)
+        idle()
+
+        assertTrue(events.isEmpty())
+        assertTrue(replies.isEmpty())
+        assertFalse(view.isReady())
+    }
+
+    @Test
+    fun `accepts messages only from the editor's origin`() {
+        val view = siteView()
+        val events = view.trackAvailability()
+
+        for (origin in listOf("https://other.example", "null")) {
+            view.postBridgeMessageJson("""{"message":"onEditorLoaded","body":{}}""", sourceOrigin = origin)
+            val replies = view.postBridgeMessageJson(latestContentRequest(), sourceOrigin = origin)
+            idle()
+
+            assertTrue(replies.isEmpty())
+        }
+
+        assertTrue(events.isEmpty())
+        assertFalse(view.isReady())
+    }
+
+    @Test
+    fun `answers a request for the latest content with the host's content`() {
+        val view = siteView()
+        view.setLatestContentProvider(object : GutenbergView.LatestContentProvider {
+            override fun getLatestContent() = GutenbergView.LatestContent("Title", "<p>Content</p>")
+        })
+
+        val reply = JSONObject(view.postBridgeMessageJson(latestContentRequest(id = 7)).single())
+
+        assertEquals("requestLatestContent", reply.getString("message"))
+        assertEquals(7, reply.getJSONObject("body").getInt("id"))
+        val result = reply.getJSONObject("body").getJSONObject("result")
+        assertEquals("Title", result.getString("title"))
+        assertEquals("<p>Content</p>", result.getString("content"))
+    }
+
+    @Test
+    fun `answers a request for the latest content when the host has none`() {
+        val view = siteView()
+
+        val reply = JSONObject(view.postBridgeMessageJson(latestContentRequest()).single())
+
+        assertTrue(reply.getJSONObject("body").isNull("result"))
+    }
+
+    @Test
+    fun `shows the load error rather than the editor when the WebView can't restrict the bridge`() {
+        GutenbergView.bridgeRegistrar = FakeEditorBridgeRegistrar(isSupported = false)
+
+        val view = siteView()
+
+        assertTrue("nothing is exposed", registrar.registrations.isEmpty())
+        assertEquals(View.INVISIBLE, view.editorWebView.visibility)
+        val errorView = view.children().filterIsInstance<EditorErrorView>().single()
+        assertEquals(View.VISIBLE, errorView.visibility)
+        val message = RuntimeEnvironment.getApplication().getString(R.string.gbk_editor_webview_unsupported)
+        assertTrue(errorView.texts().contains(message))
+        assertNull("the editor never loads", view.editorWebView.url)
+    }
+
+    @Test
+    fun `webOrigin writes a URL's origin as WebView does`() {
+        assertEquals("https://example.com", webOrigin("https://Example.com:443/assets/index.html"))
+        assertEquals("http://10.0.2.2:5173", webOrigin("http://10.0.2.2:5173/"))
+        assertEquals("http://localhost:8888", webOrigin("HTTP://localhost:8888"))
+        assertNull(webOrigin("null"))
+        assertNull(webOrigin("about:blank"))
+    }
+
+    private fun webOrigin(url: String) = GutenbergView.webOrigin(url)
+
+    private fun ViewGroup.children(): List<View> = (0 until childCount).map { getChildAt(it) }
+
+    private fun View.texts(): List<String> = when (this) {
+        is TextView -> listOf(text.toString())
+        is ViewGroup -> children().flatMap { it.texts() }
+        else -> emptyList()
+    }
+
+    private class RecordingTitleAndContentCallback : GutenbergView.TitleAndContentCallback {
+        val errors = mutableListOf<Throwable>()
+
+        override fun onResult(title: CharSequence, content: CharSequence) = Unit
+
+        override fun onError(error: Throwable) {
+            errors += error
+        }
+    }
+}

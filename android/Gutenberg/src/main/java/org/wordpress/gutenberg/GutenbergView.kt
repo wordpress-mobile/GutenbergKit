@@ -20,7 +20,6 @@ import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -35,6 +34,7 @@ import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
+import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CancellationException
@@ -142,6 +142,14 @@ class GutenbergView : FrameLayout {
 
     /** The editor document [loadEditor] loaded, the only page given the editor globals. */
     private var editorUri: Uri? = null
+
+    /** The origin of [editorUri], the only origin whose pages get the bridge. */
+    @VisibleForTesting
+    internal var editorOrigin: String? = null
+        private set
+
+    /** The web view the bridge was last exposed in. A web view accepts the bridge once. */
+    private var bridgeWebView: WebView? = null
 
     /** Web views created for new windows that have not navigated yet. */
     private val popupWebViews = mutableSetOf<WebView>()
@@ -550,7 +558,7 @@ class GutenbergView : FrameLayout {
         val defaultUserAgent = webView.settings.userAgentString
         webView.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
 
-        webView.addJavascriptInterface(this, "editorDelegate")
+        exposeBridge()
 
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
@@ -706,6 +714,25 @@ class GutenbergView : FrameLayout {
                 return true
             }
         }
+    }
+
+    /**
+     * Exposes the bridge as `window.editorDelegate` to the editor's origin alone.
+     * [receiveBridgeMessage] also drops what doesn't come from the main frame.
+     */
+    private fun exposeBridge() {
+        val origin = editorOrigin ?: return
+        if (bridgeWebView === webView) return
+        bridgeRegistrar.register(webView, origin) { _, message, sourceOrigin, isMainFrame, replyProxy ->
+            // `data` throws for any other type, and a page can post an `ArrayBuffer`.
+            val json = message.takeIf { it.type == WebMessageCompat.TYPE_STRING }?.data
+            if (json == null) {
+                Log.w(TAG, "Dropped a bridge message that isn't a string")
+                return@register
+            }
+            receiveBridgeMessage(json, sourceOrigin.toString(), isMainFrame) { reply -> replyProxy.postMessage(reply) }
+        }
+        bridgeWebView = webView
     }
 
     /** Whether [url] is the editor document, ignoring an explicit default port or empty path. */
@@ -881,16 +908,25 @@ class GutenbergView : FrameLayout {
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
             .build()
 
-        // Transition to spinner phase (WebView initialization)
-        showSpinnerPhase()
-
-        initializeWebView()
-
         val assetUrl = "$assetScheme://$assetAuthority$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
         editorUri = Uri.parse(editorUrl)
+        editorOrigin = webOrigin(editorUrl)
+
+        // The bridge needs each message's frame and origin to accept only the
+        // editor's. A WebView that can run the editor's scripts has the feature.
+        if (!bridgeRegistrar.isSupported()) {
+            Log.e(TAG, "This WebView can't restrict the bridge to the editor, so the editor won't load")
+            showErrorPhase(Exception(context.getString(R.string.gbk_editor_webview_unsupported)))
+            return
+        }
+
+        // Transition to spinner phase (WebView initialization)
+        showSpinnerPhase()
+
+        initializeWebView()
 
         WebStorage.getInstance().deleteAllData()
         webView.clearCache(true)
@@ -1253,7 +1289,8 @@ class GutenbergView : FrameLayout {
      *
      * Asked each time the editor page loads, including when it reloads after a
      * crash. Return the newest title and content the host holds, including
-     * anything saved during this session.
+     * anything saved during this session. Asked on the main thread, so it
+     * should answer from memory.
      */
     interface LatestContentProvider {
         /**
@@ -1328,34 +1365,38 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    /** Receives every message the editor page posts to the bridge. */
-    @JavascriptInterface
-    fun postMessage(json: String) {
-        receiveBridgeMessage(json)
-    }
-
     /**
-     * Dispatches a bridge message to its handler by name. A message that can't be
-     * read, has an unknown name, or lacks a field its handler needs is dropped and
-     * logged. Bodies stay out of the log, as they can carry post content.
+     * Dispatches a bridge message to its handler by name, answering a request
+     * through [reply]. The editor posts from its own page in the main frame, so
+     * only messages from the main frame of the editor's origin are handled.
+     *
+     * A message that can't be read, has an unknown name, or lacks a field its
+     * handler needs is dropped and logged. Bodies stay out of the log, as they can
+     * carry post content.
      */
     @VisibleForTesting
-    internal fun receiveBridgeMessage(json: String) {
+    internal fun receiveBridgeMessage(json: String, sourceOrigin: String, isMainFrame: Boolean, reply: (String) -> Unit) {
+        val origin = editorOrigin
+        if (!isMainFrame || origin == null || webOrigin(sourceOrigin) != origin) {
+            Log.d(TAG, "Dropped a bridge message from outside the editor page")
+            return
+        }
         val message = EditorBridgeMessage.parse(json)
         if (message == null) {
             Log.w(TAG, "Dropped a bridge message that isn't a message object")
             return
         }
         try {
-            dispatchBridgeMessage(message)
+            dispatchBridgeMessage(message, reply)
         } catch (e: JSONException) {
             Log.w(TAG, "Dropped a '${message.name}' bridge message with a missing or invalid field: ${e.message}")
         }
     }
 
-    private fun dispatchBridgeMessage(message: EditorBridgeMessage) {
+    private fun dispatchBridgeMessage(message: EditorBridgeMessage, reply: (String) -> Unit) {
         val body = message.body
         when (message.name) {
+            "requestLatestContent" -> reply(latestContentReply(body.get("id")))
             "onEditorLoaded" -> onEditorLoaded()
             "onEditorUnavailable" -> onEditorUnavailable()
             "onEditorContentChanged" -> onEditorContentChanged()
@@ -1374,6 +1415,19 @@ class GutenbergView : FrameLayout {
             "onNetworkRequest" -> onNetworkRequest(body)
             else -> Log.w(TAG, "Dropped a bridge message with an unknown name")
         }
+    }
+
+    /**
+     * Answers the page's request [requestId] for the latest content, which it makes
+     * while loading to recover edits after a reload. Always answers, with a null
+     * result when [LatestContentProvider] has none, as the page waits for it.
+     */
+    private fun latestContentReply(requestId: Any): String {
+        val content = latestContentProvider?.getLatestContent()?.let {
+            JSONObject().put("title", it.title).put("content", it.content)
+        }
+        val body = JSONObject().put("id", requestId).put("result", content ?: JSONObject.NULL)
+        return JSONObject().put("message", "requestLatestContent").put("body", body).toString()
     }
 
     private fun onEditorLoaded() {
@@ -1694,28 +1748,6 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    /**
-     * Called by JavaScript to request the latest persisted content.
-     *
-     * This method is invoked during editor initialization to recover content
-     * after WebView refresh. The host app provides content via [LatestContentProvider].
-     *
-     * @return JSON string with title and content fields, or null if unavailable.
-     */
-    @JavascriptInterface
-    fun requestLatestContent(): String? {
-        val content = latestContentProvider?.getLatestContent() ?: return null
-        return try {
-            JSONObject().apply {
-                put("title", content.title)
-                put("content", content.content)
-            }.toString()
-        } catch (e: JSONException) {
-            Log.e("GutenbergView", "Failed to serialize latest content", e)
-            null
-        }
-    }
-
     fun resetFilePathCallback() {
         filePathCallback = null
     }
@@ -1853,6 +1885,21 @@ class GutenbergView : FrameLayout {
 
         /** The empty page that holds the frame once the editor stops reloading. */
         private const val BLANK_PAGE_URL = "about:blank"
+
+        /** Exposes the bridge to editor pages. Tests replace it, as Robolectric has no WebView provider. */
+        @VisibleForTesting
+        internal var bridgeRegistrar: EditorBridgeRegistrar = WebViewEditorBridgeRegistrar
+
+        /**
+         * Returns [url]'s origin as WebView writes one, `scheme://host[:port]`, with
+         * the port only when it isn't the scheme's default. Null when [url] has no
+         * scheme or host, as an opaque origin's `null` doesn't.
+         */
+        internal fun webOrigin(url: String): String? {
+            val scheme = Uri.parse(url).scheme?.lowercase() ?: return null
+            val authority = originAuthority(url) ?: return null
+            return "$scheme://$authority"
+        }
 
         /**
          * Returns [url]'s origin authority: its host, plus its port when that port

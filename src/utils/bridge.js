@@ -320,10 +320,12 @@ export async function requestLatestContent() {
 		}
 	}
 
-	if ( window.editorDelegate?.requestLatestContent ) {
+	if ( window.editorDelegate ) {
 		try {
-			const result = window.editorDelegate.requestLatestContent();
-			return result ? JSON.parse( result ) : null;
+			return (
+				( await requestFromAndroidHost( 'requestLatestContent' ) ) ??
+				null
+			);
 		} catch ( err ) {
 			error( 'Failed to request content from Android host', err );
 			return null;
@@ -331,6 +333,44 @@ export async function requestLatestContent() {
 	}
 
 	return null;
+}
+
+let androidRequestCount = 0;
+
+/**
+ * Posts a request to the Android bridge and resolves with the result of its
+ * reply. Native code replies to every request it receives, tagged with the
+ * request's `id`.
+ *
+ * There is deliberately no timeout: resolving without the host's content would
+ * start the editor from stale content, which is worse than waiting.
+ *
+ * @param {string} message The request's message name.
+ *
+ * @return {Promise<?Object>} The reply's result.
+ */
+function requestFromAndroidHost( message ) {
+	const delegate = window.editorDelegate;
+	const id = ++androidRequestCount;
+
+	return new Promise( ( resolve ) => {
+		function onReply( event ) {
+			let reply;
+			try {
+				reply = JSON.parse( event.data );
+			} catch {
+				return;
+			}
+			if ( reply?.message !== message || reply.body?.id !== id ) {
+				return;
+			}
+			delegate.removeEventListener( 'message', onReply );
+			resolve( reply.body.result );
+		}
+
+		delegate.addEventListener( 'message', onReply );
+		delegate.postMessage( JSON.stringify( { message, body: { id } } ) );
+	} );
 }
 
 /**
