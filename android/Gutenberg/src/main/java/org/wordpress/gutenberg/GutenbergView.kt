@@ -45,6 +45,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -1442,7 +1449,7 @@ class GutenbergView : FrameLayout {
         }
         return try {
             parseBridgeCall(message, reply)
-        } catch (e: JSONException) {
+        } catch (e: IllegalArgumentException) {
             Log.w(TAG, "Dropped a '${message.name}' bridge message with a missing or invalid field: ${e.message}")
             null
         }
@@ -1452,22 +1459,24 @@ class GutenbergView : FrameLayout {
     private fun parseBridgeCall(message: EditorBridgeMessage, reply: (String) -> Unit): (() -> Unit)? {
         val body = message.body
         return when (message.name) {
-            "requestLatestContent" -> body.get("id").let { id -> { reply(latestContentReply(id)) } }
+            "requestLatestContent" -> requireNotNull(body["id"]) { "The 'id' field is missing" }
+                .let { id -> { reply(latestContentReply(id)) } }
             "onEditorLoaded" -> ::onEditorLoaded
             "onEditorUnavailable" -> ::onEditorUnavailable
             "onEditorContentChanged" -> ::onEditorContentChanged
-            "onEditorHistoryChanged" -> (body.getBoolean("hasUndo") to body.getBoolean("hasRedo"))
+            "onEditorHistoryChanged" -> (body.requireBoolean("hasUndo") to body.requireBoolean("hasRedo"))
                 .let { (hasUndo, hasRedo) -> { onEditorHistoryChanged(hasUndo, hasRedo) } }
-            "onEditorSaveAvailabilityChanged" -> SaveAvailability(body.getBoolean("isSaveable"), body.getBoolean("isSavingLocked"))
-                .let { availability -> { onEditorSaveAvailabilityChanged(availability) } }
-            "onEditorFeaturedImageChanged" -> body.getLong("mediaID").let { id -> { onEditorFeaturedImageChanged(id) } }
-            "onBlocksChanged" -> body.getBoolean("isEmpty").let { isEmpty -> { onBlocksChanged(isEmpty) } }
+            "onEditorSaveAvailabilityChanged" ->
+                SaveAvailability(body.requireBoolean("isSaveable"), body.requireBoolean("isSavingLocked"))
+                    .let { availability -> { onEditorSaveAvailabilityChanged(availability) } }
+            "onEditorFeaturedImageChanged" -> body.requireLong("mediaID").let { id -> { onEditorFeaturedImageChanged(id) } }
+            "onBlocksChanged" -> body.requireBoolean("isEmpty").let { isEmpty -> { onBlocksChanged(isEmpty) } }
             "openMediaLibrary" -> parseMediaLibraryConfig(body).let { config -> { openMediaLibrary(config) } }
             "onEditorExceptionLogged" -> parseJsException(body)?.let { exception -> { onEditorExceptionLogged(exception) } }
             "showBlockInserter" -> parseBlockInserterPayload(body).let { payload -> { showBlockInserter(payload) } }
-            "onAutocompleterTriggered" -> body.getString("type").let { type -> { onAutocompleterTriggered(type) } }
-            "onModalDialogOpened" -> body.getString("dialogType").let { type -> { onModalDialogOpened(type) } }
-            "onModalDialogClosed" -> body.getString("dialogType").let { type -> { onModalDialogClosed(type) } }
+            "onAutocompleterTriggered" -> body.requireString("type").let { type -> { onAutocompleterTriggered(type) } }
+            "onModalDialogOpened" -> body.requireString("dialogType").let { type -> { onModalDialogOpened(type) } }
+            "onModalDialogClosed" -> body.requireString("dialogType").let { type -> { onModalDialogClosed(type) } }
             "onNetworkRequest" -> RecordedNetworkRequest.fromJson(body).let { request -> { onNetworkRequest(request) } }
             else -> {
                 Log.w(TAG, "Dropped a bridge message with an unknown name")
@@ -1476,42 +1485,34 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    private fun parseMediaLibraryConfig(json: JSONObject): OpenMediaLibraryConfig {
-        val allowedTypes = if (json.has("allowedTypes")) {
-            val allowedTypesArray = json.getJSONArray("allowedTypes")
-            Array(allowedTypesArray.length()) { index ->
-                MediaType.getEnum(allowedTypesArray.getString(index))
-            }
-        } else {
-            emptyArray()
-        }
+    private fun parseMediaLibraryConfig(json: JsonObject): OpenMediaLibraryConfig {
+        val allowedTypes = json["allowedTypes"]?.let { types ->
+            require(types is JsonArray) { "The 'allowedTypes' field isn't a list" }
+            types.map { MediaType.getEnum(it.text()) }.toTypedArray()
+        } ?: emptyArray()
 
-        val multiple = json.getBoolean("multiple")
+        val multiple = json.requireBoolean("multiple")
 
-        val value = if (json.has("value")) {
+        val value = json["value"]?.let { value ->
             if (multiple) {
-                val valueArray = json.getJSONArray("value")
-                Value.Multiple(IntArray(valueArray.length()) { index ->
-                    valueArray.getInt(index)
-                })
+                require(value is JsonArray) { "The 'value' field isn't a list" }
+                Value.Multiple(value.map { requireNotNull(it.asLongOrNull()) { "A 'value' isn't a number" }.toInt() }.toIntArray())
             } else {
-                Value.Single(json.getInt("value"))
+                Value.Single(json.requireLong("value").toInt())
             }
-        } else {
-            null
         }
 
         return OpenMediaLibraryConfig(
             allowedTypes = allowedTypes,
             multiple = multiple,
             value = value,
-            contextId = json.getString("contextId")
+            contextId = json.requireString("contextId")
         )
     }
 
     /** Reads the exception the editor logged, or null when its shape is wrong. */
     @Suppress("TooGenericExceptionCaught") // Gson reports a body of the wrong shape with several runtime exceptions.
-    private fun parseJsException(json: JSONObject): GutenbergJsException? = try {
+    private fun parseJsException(json: JsonObject): GutenbergJsException? = try {
         GutenbergJsException.fromString(json.toString())
     } catch (e: RuntimeException) {
         Log.w(TAG, "Dropped an exception the editor logged, which couldn't be read: ${e.message}")
@@ -1520,8 +1521,8 @@ class GutenbergView : FrameLayout {
 
     /** Reads the inserter's payload, or null when it can't be read, so the user is told. */
     @Suppress("TooGenericExceptionCaught") // Any failure means the same to the user: no inserter.
-    private fun parseBlockInserterPayload(json: JSONObject): BlockInserterPayload? = try {
-        BlockInserterPayload.fromJson(json.toString())
+    private fun parseBlockInserterPayload(json: JsonObject): BlockInserterPayload? = try {
+        BlockInserterPayload.fromJson(json)
     } catch (e: Exception) {
         Log.e(TAG, "Failed to parse showBlockInserter payload", e)
         null
@@ -1533,18 +1534,20 @@ class GutenbergView : FrameLayout {
      * result when [LatestContentProvider] has none or fails, as the page waits for it.
      */
     @Suppress("TooGenericExceptionCaught") // A failing host starts the editor from its opening content, not a crash.
-    private fun latestContentReply(requestId: Any): String {
+    private fun latestContentReply(requestId: JsonElement): String {
         val latest = try {
             latestContentProvider?.getLatestContent()
         } catch (e: RuntimeException) {
             Log.e(TAG, "The host failed to provide the latest content, so the editor starts from its opening content", e)
             null
         }
-        val content = latest?.let {
-            JSONObject().put("title", it.title).put("content", it.content)
-        }
-        val body = JSONObject().put("id", requestId).put("result", content ?: JSONObject.NULL)
-        return JSONObject().put("message", "requestLatestContent").put("body", body).toString()
+        return buildJsonObject {
+            put("message", "requestLatestContent")
+            putJsonObject("body") {
+                put("id", requestId)
+                put("result", latest?.let { buildJsonObject { put("title", it.title); put("content", it.content) } } ?: JsonNull)
+            }
+        }.toString()
     }
 
     private fun onEditorLoaded() {

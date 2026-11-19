@@ -1,5 +1,8 @@
 package org.wordpress.gutenberg
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
 
 data class RecordedNetworkRequest(
@@ -14,28 +17,30 @@ data class RecordedNetworkRequest(
     val duration: Int
 ) {
     companion object {
-        fun fromJson(json: JSONObject): RecordedNetworkRequest {
+        fun fromJson(json: JSONObject): RecordedNetworkRequest =
+            fromJson(Json.parseToJsonElement(json.toString()).jsonObject)
+
+        /**
+         * Reads the request the editor recorded. Fails with IllegalArgumentException
+         * when a required field is missing or can't be read as its type.
+         */
+        internal fun fromJson(json: JsonObject): RecordedNetworkRequest {
             return RecordedNetworkRequest(
-                url = json.getString("url"),
-                method = json.getString("method"),
-                requestHeaders = jsonObjectToMap(json.getJSONObject("requestHeaders")),
-                requestBody = json.optString("requestBody").takeIf { it.isNotEmpty() },
-                status = json.getInt("status"),
-                statusText = json.optString("statusText", ""),
-                responseHeaders = jsonObjectToMap(json.getJSONObject("responseHeaders")),
-                responseBody = json.optString("responseBody").takeIf { it.isNotEmpty() },
-                duration = json.getInt("duration")
+                url = json.requireString("url"),
+                method = json.requireString("method"),
+                requestHeaders = headers(json, "requestHeaders"),
+                requestBody = json.optText("requestBody")?.takeIf { it.isNotEmpty() },
+                status = json.requireLong("status").toInt(),
+                statusText = json.optText("statusText") ?: "",
+                responseHeaders = headers(json, "responseHeaders"),
+                responseBody = json.optText("responseBody")?.takeIf { it.isNotEmpty() },
+                duration = json.requireLong("duration").toInt()
             )
         }
 
-        private fun jsonObjectToMap(jsonObject: JSONObject): Map<String, String> {
-            val map = mutableMapOf<String, String>()
-            val keys = jsonObject.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                map[key] = jsonObject.getString(key)
-            }
-            return map
+        private fun headers(json: JsonObject, name: String): Map<String, String> {
+            val headers = requireNotNull(json[name] as? JsonObject) { "The '$name' field isn't an object" }
+            return headers.mapValues { (_, value) -> value.text() }
         }
     }
 }

@@ -10,7 +10,7 @@ class EditorBridgeMessageTest {
         val message = EditorBridgeMessage.parse("""{"message":"onModalDialogOpened","body":{"dialogType":"inserter"}}""")
 
         assertEquals("onModalDialogOpened", message?.name)
-        assertEquals("inserter", message?.body?.getString("dialogType"))
+        assertEquals("inserter", message?.body?.requireString("dialogType"))
     }
 
     @Test
@@ -18,7 +18,7 @@ class EditorBridgeMessageTest {
         val message = EditorBridgeMessage.parse("""{"message":"onEditorLoaded"}""")
 
         assertEquals("onEditorLoaded", message?.name)
-        assertEquals(0, message?.body?.length())
+        assertEquals(0, message?.body?.size)
     }
 
     @Test

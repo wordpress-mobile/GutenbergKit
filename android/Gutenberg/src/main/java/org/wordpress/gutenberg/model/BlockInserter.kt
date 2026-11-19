@@ -2,6 +2,7 @@ package org.wordpress.gutenberg.model
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Payload delivered to the host app when the web editor requests the native
@@ -24,6 +25,10 @@ data class BlockInserterPayload(
 
         fun fromJson(jsonString: String): BlockInserterPayload =
             json.decodeFromString(serializer(), jsonString)
+
+        /** Decodes a payload the bridge already parsed, without writing it out again. */
+        internal fun fromJson(element: JsonElement): BlockInserterPayload =
+            json.decodeFromJsonElement(serializer(), element)
     }
 }
 
