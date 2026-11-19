@@ -277,23 +277,10 @@ end
 # fetched every tag, the API reports `prerelease` authoritatively, and it ignores
 # stray tags never published as releases (e.g. `vtest-s3-xcframework-*`).
 def previous_release_tag(version:, token:)
-  # Single unpaginated page. Releases come back newest-first, so this misses the
-  # preceding stable release only after 100 *consecutive* prereleases — far off
-  # at the current ratio. It fails safe: no candidate returns nil, and both
-  # callers hard-error rather than publishing notes against a wrong base.
-  path = "/repos/#{GITHUB_REPO}/releases?per_page=100"
-  releases = github_api(
-    api_token: token,
-    http_method: 'GET',
-    path: path,
-    # The default handler logs the request headers, which carry the token.
-    error_handlers: {
-      '*' => ->(result) { UI.user_error!("Listing releases (GET #{path}) failed with #{result[:status]}: #{result[:body]}") }
-    }
-  )[:json]
+  releases = Fastlane::Helper::GithubHelper.new(github_token: token).client.releases(GITHUB_REPO)
 
-  candidates = releases.reject { |release| release['draft'] || release['prerelease'] }
-                       .map { |release| release['tag_name'] }
+  candidates = releases.reject { |release| release[:draft] || release[:prerelease] }
+                       .map { |release| release[:tag_name] }
                        .reject { |tag| tag == version }
                        .grep(/\Av\d+\.\d+\.\d+\z/)
                        .map { |tag| [tag, Gem::Version.new(tag.delete_prefix('v'))] }
