@@ -5,8 +5,9 @@ disk I/O on the main thread, leaked closables, registration leaks, and similar
 issues introduced inside the GutenbergKit library surface during local
 development.
 
-`ThreadPolicy` violations **crash the demo**, so new main-thread disk or network
-work fails loudly during development. `VmPolicy` violations are logged only.
+`ThreadPolicy` violations from GutenbergKit or demo code **crash the demo**, so
+new main-thread disk or network work fails loudly during development. Other
+`ThreadPolicy` violations and all `VmPolicy` violations are logged only.
 
 Some other library calls do disk or SSL work on the caller's thread, so the demo
 makes them on `Dispatchers.IO`.
@@ -18,13 +19,17 @@ makes them on `Dispatchers.IO`.
 (`BuildConfig.DEBUG`). Release builds are unaffected.
 
 ```kotlin
-StrictMode.setThreadPolicy(
-    StrictMode.ThreadPolicy.Builder()
-        .detectAll()
-        .penaltyLog()
-        .penaltyDeath()
-        .build()
-)
+val threadPolicy = StrictMode.ThreadPolicy.Builder()
+    .detectAll()
+    .penaltyLog()
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+    threadPolicy.penaltyListener({ it.run() }) { violation ->
+        if (isOwnViolation(violation)) {
+            throw IllegalStateException("StrictMode ThreadPolicy violation", violation)
+        }
+    }
+}
+StrictMode.setThreadPolicy(threadPolicy.build())
 StrictMode.setVmPolicy(
     StrictMode.VmPolicy.Builder()
         .detectAll()
@@ -43,6 +48,15 @@ Configuration notes:
     `detectFileUriExposure`, `detectCleartextNetwork`, etc.
 -   **`Application.onCreate()`** is the right place — earlier is better so the
     policy covers everything that follows.
+-   **Only violations with an `org.wordpress.gutenberg` or
+    `com.example.gutenbergkit` stack frame crash.** System services report
+    their own violations back to the calling app over Binder, and some vendors'
+    services read the disk on common paths. On Samsung devices, haptic feedback
+    on long-press paste and opening the photo picker both did. Those violations
+    carry only the remote process's stack, so they never match and are only
+    logged. Before API 28 there is no `penaltyListener`, so nothing crashes.
+-   **The listener throws instead of using `penaltyDeath()`,** which would skip
+    the listener. It runs inline, so the crash happens at the same point.
 -   **`VmPolicy` stays on `penaltyLog()`.** VM violations like
     `LeakedClosableObject` fire during GC and would crash at unpredictable
     times unrelated to the offending code path, which is unhelpful as a signal.
