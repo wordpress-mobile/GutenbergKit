@@ -99,6 +99,36 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         #expect(spy.historyStates == [[true, true]])
     }
 
+    @MainActor
+    @Test("survives a failed navigation whose URL looks like a format string")
+    func survivesFailedNavigationWithFormatSpecifiers() async throws {
+        let session = ParkedURLSession()
+        let configuration = makeIsolatedConfiguration()
+        defer { removeStorage(for: configuration) }
+        defer { session.release() }
+        let spy = BridgeDelegateSpy()
+        let editor = try await makeLoadedEditor(configuration: configuration, session: session, delegate: spy)
+
+        // A missing file next to the page: the navigation is allowed, then fails to load.
+        _ = try await editor.webView.callAsyncJavaScript(
+            "location.href = 'missing' + '%40s'.repeat(20) + '.html';",
+            contentWorld: .page
+        )
+        try await waitUntil { !editor.webView.isLoading }
+        try await Task.sleep(for: .milliseconds(500))
+
+        _ = try await editor.webView.callAsyncJavaScript(
+            """
+            window.webkit.messageHandlers.editorDelegate.postMessage(
+                { message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } }
+            );
+            """,
+            contentWorld: .page
+        )
+        try await waitUntil { !spy.historyStates.isEmpty }
+        #expect(spy.historyStates == [[true, true]])
+    }
+
     /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
     /// Pair every call with `removeStorage(for:)`: nothing else deletes the site's files.
     private func makeIsolatedConfiguration() -> EditorConfiguration {

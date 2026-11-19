@@ -1280,12 +1280,13 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         NSLog("navigation: \(String(describing: navigation))")
     }
 
+    // The error describes the failing URL, so it's logged as a value, never as a format string.
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        NSLog("didFailNavigation: \(error)")
+        Logger.navigation.error("didFailNavigation: \(String(describing: error), privacy: .private)")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        NSLog("didFailProvisionalNavigation: \(error)")
+        Logger.navigation.error("didFailProvisionalNavigation: \(String(describing: error), privacy: .private)")
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
