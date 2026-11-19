@@ -129,17 +129,76 @@ struct RestRelayHandleTests {
         }
     }
 
-    @Test("sends the page's Authorization to the rest of the site as it is, and adds nothing")
-    func keepsCallerCredentialForRestOfSite() async throws {
-        // VideoPress asks `admin-ajax.php` for its upload token with
+    @Test("adds the site credential to the site's admin-ajax.php, and keeps a caller's own")
+    func addsSiteCredentialForSiteAJAX() async throws {
+        // A plugin asks `admin-ajax.php` for a token with
         // `apiFetch( { url: ajaxurl } )`. It is the site, but not its REST API.
-        let target = Self.relayTarget("https://example.com/wp-admin/admin-ajax.php")
+        let target = Self.relayTarget("https://example.com/wp-admin/admin-ajax.php?action=example-action")
 
-        let withHeader = try await relay(target: target, headers: ["Authorization": "Bearer test-token"])
-        #expect(withHeader.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
+        let withoutHeader = try await relay(target: target, method: "POST")
+        #expect(withoutHeader.upstream.url?.absoluteString == "https://example.com/wp-admin/admin-ajax.php?action=example-action")
+        #expect(withoutHeader.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
 
-        let withoutHeader = try await relay(target: target)
-        #expect(withoutHeader.upstream.value(forHTTPHeaderField: "Authorization") == nil)
+        let withHeader = try await relay(target: target, headers: ["Authorization": "Bearer own-key"])
+        #expect(withHeader.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer own-key")
+    }
+
+    @Test("adds the site credential to admin-ajax.php below a site in a subdirectory")
+    func addsSiteCredentialForSubdirectorySiteAJAX() async throws {
+        let exchange = try await relay(
+            target: Self.relayTarget("https://example.com/blog/wp-admin/admin-ajax.php"),
+            siteApiRoot: "https://example.com/blog/wp-json/",
+            siteURL: "https://example.com/blog/"
+        )
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
+    }
+
+    @Test("adds nothing to the rest of the site, or to the other places the app names")
+    func addsNoSiteCredentialElsewhereInScope() async throws {
+        // All of these are within the authorization scope, but WordPress
+        // accepts the credential at none of them, or the app named them for
+        // native requests only.
+        for url in [
+            "https://example.com/",
+            "https://example.com/wp-content/uploads/2026/11/photo.jpg",
+            "https://example.com/wp-login.php",
+            "https://example.com/xmlrpc.php",
+            // PHP serves these as `xmlrpc.php` and `index.php`.
+            "https://example.com/xmlrpc.php/wp-admin/admin-ajax.php",
+            "https://example.com/index.php/wp-admin/admin-ajax.php",
+            // Another site in a subdirectory multisite.
+            "https://example.com/b/wp-admin/admin-ajax.php",
+            "https://example.com/wp-admin/admin-ajax.php/",
+            "https://s0.wp.com/wp-content/js/script.js",
+        ] {
+            let exchange = try await relay(target: Self.relayTarget(url), authHeaderDomains: ["*.wp.com"])
+
+            #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil, "\(url)")
+        }
+    }
+
+    @Test("adds nothing to admin-ajax.php on another origin")
+    func addsNoSiteCredentialForAnotherOriginsAJAX() async throws {
+        for url in [
+            "https://example.org/wp-admin/admin-ajax.php",
+            "https://example.com:8443/wp-admin/admin-ajax.php",
+            "https://www.example.com/wp-admin/admin-ajax.php",
+            "https://example.com.example.org/wp-admin/admin-ajax.php",
+        ] {
+            let exchange = try await relay(target: Self.relayTarget(url))
+
+            #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil, "\(url)")
+        }
+    }
+
+    @Test("adds nothing to admin-ajax.php over http when the site is https")
+    func addsNoSiteCredentialForCleartextSiteAJAX() async throws {
+        // Another origin, and within the scope only over https. The relay
+        // sends it, since plain http to the site's own host is allowed.
+        let exchange = try await relay(target: Self.relayTarget("http://example.com/wp-admin/admin-ajax.php"))
+
+        #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
     @Test("sends a joined Authorization as it is, wherever it goes")
@@ -158,9 +217,9 @@ struct RestRelayHandleTests {
     }
 
     @Test(
-        "replaces nothing, and adds the site credential only to a site API request without one",
+        "replaces nothing, and adds the site credential only to a request the relay signs that has none",
         arguments: [
-            // (caller's value, to the site API, expected)
+            // (caller's value, adding the site credential, expected)
             (nil, true, "Bearer test-token"),
             (nil, false, nil),
             ("Bearer own-key", true, "Bearer own-key"),
@@ -172,13 +231,14 @@ struct RestRelayHandleTests {
             ("", true, ""),
         ] as [(String?, Bool, String?)]
     )
-    func authorizationRule(callerValue: String?, toSiteAPI: Bool, expected: String?) {
-        #expect(Self.siteRelay(authHeader: "Bearer test-token").authorization(sentByCaller: callerValue, toSiteAPI: toSiteAPI) == expected)
+    func authorizationRule(callerValue: String?, addingSiteCredential: Bool, expected: String?) {
+        let relay = Self.siteRelay(authHeader: "Bearer test-token")
+        #expect(relay.authorization(sentByCaller: callerValue, addingSiteCredential: addingSiteCredential) == expected)
     }
 
     @Test("adds nothing when the editor has no site credential")
     func addsNothingWithoutSiteCredential() {
-        #expect(Self.siteRelay(authHeader: "").authorization(sentByCaller: nil, toSiteAPI: true) == nil)
+        #expect(Self.siteRelay(authHeader: "").authorization(sentByCaller: nil, addingSiteCredential: true) == nil)
     }
 
     private static func siteRelay(authHeader: String) -> RestRelay {
@@ -596,7 +656,8 @@ struct RestRelayHandleTests {
         redirects: [String: String] = [:],
         observer: (any EditorHTTPClientDelegate)? = nil,
         siteApiRoot: String = "https://example.com/wp-json/",
-        siteURL: String = "https://example.com"
+        siteURL: String = "https://example.com",
+        authHeaderDomains: [String] = []
     ) async throws -> Exchange {
         let stub = StubURLProtocol.Stub(
             status: status,
@@ -615,7 +676,9 @@ struct RestRelayHandleTests {
                 siteURL: URL(string: siteURL)!,
                 siteApiRoot: URL(string: siteApiRoot)!,
                 authHeader: "Bearer test-token"
-            ).build(),
+            )
+            .setAuthHeaderDomains(authHeaderDomains)
+            .build(),
             session: stubbed.session,
             observer: observer
         )

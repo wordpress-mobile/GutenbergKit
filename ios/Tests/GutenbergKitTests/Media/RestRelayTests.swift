@@ -219,10 +219,55 @@ struct RestRelayTests {
             // A sibling of the root: `/wp-json` must not match `/wp-jsonx/`.
             "https://example.com/wp-jsonx/secrets",
             // The same host outside the root.
-            "https://example.com/wp-admin/admin-ajax.php",
+            "https://example.com/wp-content/uploads/photo.jpg",
         ] {
             #expect(isOtherHost(url), "\(url)")
         }
+    }
+
+    // MARK: - admin-ajax.php
+
+    @Test("sends the site's admin-ajax.php where it was going, query included")
+    func sendsSiteAJAX() {
+        for url in [
+            "https://example.com/wp-admin/admin-ajax.php",
+            "https://example.com/wp-admin/admin-ajax.php?action=example-action",
+            "https://EXAMPLE.com:443/wp-admin/admin-ajax.php",
+        ] {
+            #expect(isSiteAJAX(url), "\(url)")
+        }
+    }
+
+    @Test("finds admin-ajax.php below a site in a subdirectory, with or without its trailing slash")
+    func sendsSubdirectorySiteAJAX() {
+        for siteURL in ["https://example.com/blog", "https://example.com/blog/"] {
+            #expect(isSiteAJAX("https://example.com/blog/wp-admin/admin-ajax.php", siteURL: siteURL), "\(siteURL)")
+            #expect(isOtherHost("https://example.com/wp-admin/admin-ajax.php", siteURL: siteURL), "\(siteURL)")
+        }
+    }
+
+    @Test("admin-ajax.php anywhere else is another host")
+    func otherAJAXIsAnotherHost() {
+        for url in [
+            "http://example.com/wp-admin/admin-ajax.php",
+            "https://example.com:8443/wp-admin/admin-ajax.php",
+            "https://www.example.com/wp-admin/admin-ajax.php",
+            "https://example.org/wp-admin/admin-ajax.php",
+            "https://example.com/b/wp-admin/admin-ajax.php",
+            "https://example.com/wp-admin/admin-ajax.php/",
+            "https://example.com/xmlrpc.php/wp-admin/admin-ajax.php",
+            "https://example.com/wp-admin/admin-ajax.php%2F",
+        ] {
+            #expect(isOtherHost(url), "\(url)")
+        }
+    }
+
+    @Test("admin-ajax.php below a WordPress.com API root is the site's only on the site's origin")
+    func siteAJAXOnWordPressComSite() {
+        let root = URL(string: "https://public-api.wordpress.com/")!
+        #expect(isSiteAJAX("https://example.wordpress.com/wp-admin/admin-ajax.php", root: root, siteURL: "https://example.wordpress.com"))
+        // Below the API root, so it is a site API request, not the site's `admin-ajax.php`.
+        #expect(siteAPIURL("https://public-api.wordpress.com/wp-admin/admin-ajax.php", root: root) != nil)
     }
 
     @Test("a different site in a subdirectory multisite is another host")
@@ -551,11 +596,11 @@ struct RestRelayTests {
 
     // MARK: - Helpers
 
-    private func makeRelay(apiRoot: URL) -> RestRelay {
+    private func makeRelay(apiRoot: URL, siteURL: String = "https://example.com") -> RestRelay {
         RestRelay(
             configuration: EditorConfigurationBuilder(
                 postType: .post,
-                siteURL: URL(string: "https://example.com")!,
+                siteURL: URL(string: siteURL)!,
                 siteApiRoot: apiRoot,
                 authHeader: "Bearer test-token"
             ).build()
@@ -579,8 +624,14 @@ struct RestRelayTests {
 
     /// Whether the relay sends a request for `url` where it was going, as a
     /// request for another host.
-    private func isOtherHost(_ url: String, root: URL = RestRelayTests.prettyRoot) -> Bool {
-        makeRelay(apiRoot: root).destination(of: URL(string: url)!) == .otherHost(URL(string: url)!)
+    private func isOtherHost(_ url: String, root: URL = RestRelayTests.prettyRoot, siteURL: String = "https://example.com") -> Bool {
+        makeRelay(apiRoot: root, siteURL: siteURL).destination(of: URL(string: url)!) == .otherHost(URL(string: url)!)
+    }
+
+    /// Whether the relay sends a request for `url` where it was going, as a
+    /// request for the site's `admin-ajax.php`.
+    private func isSiteAJAX(_ url: String, root: URL = RestRelayTests.prettyRoot, siteURL: String = "https://example.com") -> Bool {
+        makeRelay(apiRoot: root, siteURL: siteURL).destination(of: URL(string: url)!) == .siteAJAX(URL(string: url)!)
     }
 
     /// Whether the relay refuses a request for `url`.
