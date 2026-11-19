@@ -115,10 +115,10 @@ struct RestRelayHandleTests {
         #expect(exchange.upstream.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
-    @Test("sends the site credential the page attached to another host as it is")
+    @Test("sends a caller's Authorization to another host as it is, even the site credential")
     func keepsPageSentSiteCredentialForAnotherHost() async throws {
-        // Which hosts get the site credential is the page's decision. The page
-        // holds the credential, so removing it here would protect nothing.
+        // The relay never removes a caller's header, even one that matches the
+        // site credential: it can't tell a copy from a plugin's own token.
         for target in ["https://example.org/api", "https://example.com/b/wp-json/wp/v2/posts"] {
             let exchange = try await relay(
                 target: Self.relayTarget(target),

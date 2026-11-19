@@ -170,27 +170,17 @@ answers `401`, so it can't start, finish, or cancel a session, or delete media. 
 preflight never carries the token, so `gbk-upload:` answers one with its CORS headers alone,
 as Android's loopback server does.
 
-The editor's frames fall into two groups:
-
-| Frames                                                   | Origin       | Reads `window.GBKit` | Can use the schemes |
-| -------------------------------------------------------- | ------------ | -------------------- | ------------------- |
-| The editor page; embed previews                          | the editor's | yes                  | yes                 |
-| The Custom HTML preview; embeds from untrusted providers | `null`       | no                   | no                  |
-
-Gutenberg's `SandBox` runs embed previews with `allowSameOrigin`. Core reduces an embed from
-a provider it doesn't trust to a `sandbox="allow-scripts"` iframe.
-
-The token doesn't reach the first group. Code at the editor's origin can call the editor's own
-functions, so nothing on the request tells it apart from the editor. That group already has
-the credential through `GBKit.authHeader`, so the schemes give it nothing new. Its scripts
-come from the providers core trusts with their embed HTML (`wp_filter_oembed_result`), and
-they have the same reach in wp-admin. Keeping the check to the token, rather than to the main
-frame, also keeps same-origin scripts working if the editor's canvas moves into an iframe.
+The token separates frames by origin. A frame with a `null` origin, such as the Custom HTML
+preview, can't read `window.GBKit`, so it can't use the schemes. Code at the editor's origin
+can read it and call the editor's own functions, so nothing on the request tells it apart
+from the editor. Keeping the check to the token, rather than to the main frame, also keeps
+same-origin scripts working if the editor's canvas moves into an iframe.
 
 The relay also sends requests for other hosts, so a plugin's call to its own service works
 under Lockdown Mode. The page sends every request for another origin to one URL,
 `gbk-rest://relay/fetch?url=…`, and native code decides how to send it. That gives the
-editor page a response from any `https` URL without CORS. Plain `http` goes only to the site's own
+editor page a response from any `https` URL without CORS, which it can already read without
+Lockdown Mode. Plain `http` goes only to the site's own
 host — the API root's or the site URL's — on any port. Any other `http` request gets a `426`
 before anything is sent. A device on the local network, or this device itself, can't present
 a valid certificate for another host's name, so a name pointed at one fails before anything
@@ -199,12 +189,13 @@ redirect is followed only to an `http` or `https` URL, and never from `https` to
 URL with a user name or password is refused, as `fetch` refuses one: `URLSession` would store
 it and send it on later requests to that host.
 
-Native code adds the site credential only to a request for the site's REST API, to a URL it
-builds from the configured root. It never removes or replaces an `Authorization` the page
-sent, wherever the request goes, even when that is the site credential. Which hosts get the
-site credential is the page's decision, made before the request reaches native code:
-removing it there would protect nothing, because the page already holds the credential and
-can send it anywhere. Without Lockdown Mode the editor page can already read those responses.
+Native code owns the site credential for relayed requests; the page never holds it. It adds
+the credential to a request for the site's REST API, at a URL it builds from the configured
+root, and to a request for the site's `admin-ajax.php` at the page's `ajaxurl`, where core
+accepts it only for the actions a plugin opts in. Both stay
+within the site's [authorization scope](authorization.md), and no other request gets it.
+Native code never removes or replaces an `Authorization` the page
+sent, such as a plugin's own token, wherever the request goes.
 
 ### Where a relayed request differs from the browser's
 

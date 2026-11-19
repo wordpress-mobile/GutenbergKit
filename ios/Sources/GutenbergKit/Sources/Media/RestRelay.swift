@@ -55,13 +55,11 @@ import OSLog
 ///   names, so a caller-supplied one wins. There is no boundary here to
 ///   defend: every route reachable that way is one the editor may request
 ///   through the relay directly.
+/// - The page never holds the site credential: `GBKitGlobal` leaves it out
+///   whenever the relay is on, and native code decides which requests get it.
 /// - A caller's own `Authorization` is sent as it is, wherever the request
-///   goes, even when it is the site credential. Jetpack AI signs its requests
-///   to WordPress.com with a token of its own, and the editor's jQuery AJAX setup
-///   sends the site credential to the site's `admin-ajax.php`. Which hosts the page sends the site
-///   credential to is decided on the page, before the request reaches the
-///   relay. Removing it here would protect nothing: the page already holds the
-///   credential, so it can send it anywhere.
+///   goes. A plugin may sign requests to its own service with a token of its
+///   own.
 /// - The relay reaches any `https` URL, so a caller can read another host's
 ///   response without CORS. Without Lockdown Mode the editor page can do that
 ///   anyway.

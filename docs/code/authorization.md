@@ -4,7 +4,7 @@
 
 The host app hands GutenbergKit a site's credentials as `authHeader`. The editor makes requests to more places than the site: it downloads plugin and theme assets from whichever hosts the site names, and a block can call another party's service through `apiFetch( { url } )`. Those hosts have no business receiving the site's credentials.
 
-GutenbergKit therefore sends the `Authorization` header only to requests within the site's **authorization scope**. The same rule is implemented once on each platform, and all three implementations must agree.
+GutenbergKit therefore sends the `Authorization` header only to requests within the site's **authorization scope**: the most any request may carry it to. The same rule is implemented once on each platform, and all three implementations must agree. A path may sign less than the scope allows, as the iOS relay does (see [below](#ios-rest-relay)).
 
 ## The Rule
 
@@ -68,9 +68,9 @@ GutenbergKit infers nothing about WordPress.com: no `wp.com` or `wordpress.com` 
 
 | Platform | Rule                                                               | Applied by                                                                                                                             |
 | -------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| iOS      | `EditorAuthorizationScope`                                         | `EditorHTTPClient`, for REST requests, asset downloads, and media uploads                                                              |
+| iOS      | `EditorAuthorizationScope`                                         | `EditorHTTPClient`, for REST requests, asset downloads, and media uploads; `RestRelay` signs a subset of it                            |
 | Android  | `EditorAuthorizationScope`                                         | `EditorHTTPClient.perform` and `download`, and the manifest request of the `EditorAssetsLibrary` in the `org.wordpress.gutenberg` root |
-| Web      | `isWithinAuthorizationScope` in `src/utils/authorization-scope.js` | `tokenAuthMiddleware` in `src/utils/api-fetch.js`                                                                                      |
+| Web      | `isWithinAuthorizationScope` in `src/utils/authorization-scope.js` | `tokenAuthMiddleware` in `src/utils/api-fetch.js`, when the page holds the credential (Android)                                        |
 
 `GBKitGlobal` carries `authHeaderDomains` to the web editor, so it applies the list the native side was configured with.
 
@@ -80,7 +80,18 @@ jQuery AJAX requests are scoped separately, in `src/utils/ajax.js`, to the origi
 
 Android's native media client (`InternalMediaClient`) builds its URLs from `siteApiRoot`, so it is within the scope by construction.
 
-iOS relays the page's own requests through native code (`RestRelay`). The relay adds the site's credentials only to a request for the site's REST API that has no `Authorization` of its own, and it does not consult `authHeaderDomains`. A request that already carries a header is sent on as it is, so which other hosts get the header is decided on the page, by `tokenAuthMiddleware`.
+### iOS REST relay
+
+On iOS the page never holds the credential: `GBKitGlobal` leaves out `authHeader` while the REST relay is on, so neither `tokenAuthMiddleware` nor the jQuery AJAX setup sends one. Native code (`RestRelay`) adds it to the page's relayed requests instead.
+
+The relay signs only the part of the scope that page requests need:
+
+-   **The site's REST API**, at a URL the relay builds from `siteApiRoot`.
+-   **The site's `admin-ajax.php`**, exactly as `ajaxurl` names it. Core accepts the credential there only for actions a plugin opts in to.
+
+The relay adds it to nothing else, and it does not consult `authHeaderDomains`. Those still apply to `EditorHTTPClient`, whose requests come from native code: REST calls, the asset manifest and its downloads, and media uploads.
+
+A request that already carries an `Authorization`, such as a plugin's own token, is sent on as it is.
 
 ### Constructing a Client
 
