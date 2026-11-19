@@ -1376,7 +1376,7 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    fun onEditorLoaded() {
+    private fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
         handler.post {
@@ -1423,7 +1423,7 @@ class GutenbergView : FrameLayout {
      * again. Without this, calls keep reaching a web view that can no longer
      * answer them.
      */
-    fun onEditorUnavailable() {
+    private fun onEditorUnavailable() {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
         showEditorCrashPhase()
@@ -1528,26 +1528,26 @@ class GutenbergView : FrameLayout {
         isWebViewBlank = true
     }
 
-    fun onEditorContentChanged() {
+    private fun onEditorContentChanged() {
         contentChangeListener?.onContentChanged()
     }
 
-    fun onEditorHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
+    private fun onEditorHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
         historyChangeListener?.onHistoryChanged(hasUndo, hasRedo)
     }
 
-    fun onEditorSaveAvailabilityChanged(isSaveable: Boolean, isSavingLocked: Boolean) {
+    private fun onEditorSaveAvailabilityChanged(isSaveable: Boolean, isSavingLocked: Boolean) {
         val availability = SaveAvailability(isSaveable, isSavingLocked)
         handler.post {
             saveAvailabilityListener?.onSaveAvailabilityChanged(availability)
         }
     }
 
-    fun onEditorFeaturedImageChanged(mediaID: Long) {
+    private fun onEditorFeaturedImageChanged(mediaID: Long) {
         featuredImageChangeListener?.onFeaturedImageChanged(mediaID)
     }
 
-    fun onBlocksChanged(isEmpty: Boolean) {
+    private fun onBlocksChanged(isEmpty: Boolean) {
         if(isEmpty) {
             Log.i("GutenbergView", "BlocksChanged (empty)")
         } else {
@@ -1555,7 +1555,7 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    fun openMediaLibrary(jsonObj: JSONObject) {
+    private fun openMediaLibrary(jsonObj: JSONObject) {
         try {
             // Parse allowedTypes
             val allowedTypes = if (jsonObj.has("allowedTypes")) {
@@ -1617,7 +1617,7 @@ class GutenbergView : FrameLayout {
     }
 
     @Suppress("TooGenericExceptionCaught") // Gson reports a body of the wrong shape with several runtime exceptions.
-    fun onEditorExceptionLogged(exception: JSONObject) {
+    private fun onEditorExceptionLogged(exception: JSONObject) {
         val parsedException = try {
             GutenbergJsException.fromString(exception.toString())
         } catch (e: RuntimeException) {
@@ -1627,7 +1627,7 @@ class GutenbergView : FrameLayout {
         logJsExceptionListener?.onLogJsException(parsedException)
     }
 
-    fun showBlockInserter(payload: JSONObject) {
+    private fun showBlockInserter(payload: JSONObject) {
         val parsed = try {
             BlockInserterPayload.fromJson(payload.toString())
         } catch (e: Exception) {
@@ -1663,27 +1663,27 @@ class GutenbergView : FrameLayout {
         dialog.show()
     }
 
-    fun onAutocompleterTriggered(type: String) {
+    private fun onAutocompleterTriggered(type: String) {
         handler.post {
             autocompleterTriggeredListener?.onAutocompleterTriggered(type)
         }
     }
 
-    fun onModalDialogOpened(dialogType: String) {
+    private fun onModalDialogOpened(dialogType: String) {
         handler.post {
             openModalDialogs.add(dialogType)
             modalDialogStateListener?.onModalDialogOpened(dialogType)
         }
     }
 
-    fun onModalDialogClosed(dialogType: String) {
+    private fun onModalDialogClosed(dialogType: String) {
         handler.post {
             openModalDialogs.remove(dialogType)
             modalDialogStateListener?.onModalDialogClosed(dialogType)
         }
     }
 
-    fun onNetworkRequest(requestData: JSONObject) {
+    private fun onNetworkRequest(requestData: JSONObject) {
         handler.post {
             try {
                 val request = RecordedNetworkRequest.fromJson(requestData)

@@ -37,7 +37,7 @@ class GutenbergViewRenderProcessGoneTest {
         .ifEmpty { "https://example.com/assets/index.html" }
 
     private fun loadedSiteView() = siteView().also { view ->
-        view.onEditorLoaded()
+        view.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
     }
 
@@ -106,9 +106,9 @@ class GutenbergViewRenderProcessGoneTest {
                 closed += dialogType
             }
         })
-        view.onModalDialogOpened("block-inspector")
-        view.onModalDialogOpened("block-inserter")
-        view.onModalDialogClosed("block-inserter")
+        view.postBridgeMessage("onModalDialogOpened", "dialogType" to "block-inspector")
+        view.postBridgeMessage("onModalDialogOpened", "dialogType" to "block-inserter")
+        view.postBridgeMessage("onModalDialogClosed", "dialogType" to "block-inserter")
         shadowOf(Looper.getMainLooper()).idle()
         closed.clear()
 
@@ -146,7 +146,7 @@ class GutenbergViewRenderProcessGoneTest {
     fun `a renderer death after an automatic recovery offers a reload instead of looping`() {
         val view = loadedSiteView()
         killRenderer(view)
-        view.onEditorLoaded()
+        view.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
         killRenderer(view)
@@ -159,13 +159,13 @@ class GutenbergViewRenderProcessGoneTest {
     fun `an automatic reload over a replacing page does not allow another automatic recovery`() {
         val view = loadedSiteView()
         killRenderer(view)
-        view.onEditorLoaded()
+        view.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
         val webView = view.editorWebView
         webView.webViewClient.onPageStarted(webView, "https://example.com/a-page/", null)
         shadowOf(Looper.getMainLooper()).idle()
-        view.onEditorLoaded()
+        view.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
         killRenderer(view)
 
@@ -176,13 +176,13 @@ class GutenbergViewRenderProcessGoneTest {
     fun `reloading from the crash notice allows another automatic recovery`() {
         val view = loadedSiteView()
         killRenderer(view)
-        view.onEditorLoaded()
+        view.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
         killRenderer(view)
 
         view.reloadEditor()
         shadowOf(Looper.getMainLooper()).idle()
-        view.onEditorLoaded()
+        view.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
         killRenderer(view)
 
