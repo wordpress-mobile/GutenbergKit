@@ -74,6 +74,12 @@ steps:
           - $CI_TOOLKIT_PLUGIN
           - $NVM_PLUGIN
 
+    - label: ':ios: [DO NOT MERGE] Validate Release Notes'
+      key: validate-release-notes
+      if: build.pull_request.id != null
+      command: .buildkite/validate-release-notes.sh
+      plugins: *plugins
+
     - label: ':javascript: Lint Web'
       key: lint-web
       notify:
