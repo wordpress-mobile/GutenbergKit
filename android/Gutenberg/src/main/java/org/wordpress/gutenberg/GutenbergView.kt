@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import org.json.JSONTokener
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
@@ -1085,8 +1086,10 @@ class GutenbergView : FrameLayout {
      * never report itself loaded, with nothing saying why.
      */
     private fun reportMissingBridge() {
-        webView.evaluateJavascript(MISSING_BRIDGE_CHECK_SCRIPT) { origin ->
-            if (origin == null || origin == "null") return@evaluateJavascript
+        webView.evaluateJavascript(MISSING_BRIDGE_CHECK_SCRIPT) { result ->
+            // The result is JSON: `null` with the bridge, the origin as a string without.
+            if (result == null || result == "null") return@evaluateJavascript
+            val origin = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull() ?: result
             Log.e(TAG, "The editor page at $origin has no bridge, which is exposed only to $editorOrigin")
         }
     }
