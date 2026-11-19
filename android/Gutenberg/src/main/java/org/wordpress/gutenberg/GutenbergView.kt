@@ -746,7 +746,7 @@ class GutenbergView : FrameLayout {
         val origin = editorOrigin ?: return
         if (bridgeWebView === webView) return
         bridgeRegistrar.register(webView, origin) { _, message, sourceOrigin, isMainFrame, replyProxy ->
-            // `data` throws for any other type, and a page can post an `ArrayBuffer`.
+            // `data` throws for any other type, and a message can be an `ArrayBuffer`.
             val json = message.takeIf { it.type == WebMessageCompat.TYPE_STRING }?.data
             if (json == null) {
                 Log.w(TAG, "Dropped a bridge message that isn't a string")
