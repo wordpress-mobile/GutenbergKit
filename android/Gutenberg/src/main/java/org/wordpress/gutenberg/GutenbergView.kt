@@ -1328,7 +1328,54 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /** Receives every message the editor page posts to the bridge. */
     @JavascriptInterface
+    fun postMessage(json: String) {
+        receiveBridgeMessage(json)
+    }
+
+    /**
+     * Dispatches a bridge message to its handler by name. A message that can't be
+     * read, has an unknown name, or lacks a field its handler needs is dropped and
+     * logged. Bodies stay out of the log, as they can carry post content.
+     */
+    @VisibleForTesting
+    internal fun receiveBridgeMessage(json: String) {
+        val message = EditorBridgeMessage.parse(json)
+        if (message == null) {
+            Log.w(TAG, "Dropped a bridge message that isn't a message object")
+            return
+        }
+        try {
+            dispatchBridgeMessage(message)
+        } catch (e: JSONException) {
+            Log.w(TAG, "Dropped a '${message.name}' bridge message with a missing or invalid field: ${e.message}")
+        }
+    }
+
+    private fun dispatchBridgeMessage(message: EditorBridgeMessage) {
+        val body = message.body
+        when (message.name) {
+            "onEditorLoaded" -> onEditorLoaded()
+            "onEditorUnavailable" -> onEditorUnavailable()
+            "onEditorContentChanged" -> onEditorContentChanged()
+            "onEditorHistoryChanged" ->
+                onEditorHistoryChanged(body.getBoolean("hasUndo"), body.getBoolean("hasRedo"))
+            "onEditorSaveAvailabilityChanged" ->
+                onEditorSaveAvailabilityChanged(body.getBoolean("isSaveable"), body.getBoolean("isSavingLocked"))
+            "onEditorFeaturedImageChanged" -> onEditorFeaturedImageChanged(body.getLong("mediaID"))
+            "onBlocksChanged" -> onBlocksChanged(body.getBoolean("isEmpty"))
+            "openMediaLibrary" -> openMediaLibrary(body)
+            "onEditorExceptionLogged" -> onEditorExceptionLogged(body)
+            "showBlockInserter" -> showBlockInserter(body)
+            "onAutocompleterTriggered" -> onAutocompleterTriggered(body.getString("type"))
+            "onModalDialogOpened" -> onModalDialogOpened(body.getString("dialogType"))
+            "onModalDialogClosed" -> onModalDialogClosed(body.getString("dialogType"))
+            "onNetworkRequest" -> onNetworkRequest(body)
+            else -> Log.w(TAG, "Dropped a bridge message with an unknown name")
+        }
+    }
+
     fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
@@ -1376,7 +1423,6 @@ class GutenbergView : FrameLayout {
      * again. Without this, calls keep reaching a web view that can no longer
      * answer them.
      */
-    @JavascriptInterface
     fun onEditorUnavailable() {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
@@ -1482,17 +1528,14 @@ class GutenbergView : FrameLayout {
         isWebViewBlank = true
     }
 
-    @JavascriptInterface
     fun onEditorContentChanged() {
         contentChangeListener?.onContentChanged()
     }
 
-    @JavascriptInterface
     fun onEditorHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
         historyChangeListener?.onHistoryChanged(hasUndo, hasRedo)
     }
 
-    @JavascriptInterface
     fun onEditorSaveAvailabilityChanged(isSaveable: Boolean, isSavingLocked: Boolean) {
         val availability = SaveAvailability(isSaveable, isSavingLocked)
         handler.post {
@@ -1500,12 +1543,10 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    @JavascriptInterface
     fun onEditorFeaturedImageChanged(mediaID: Long) {
         featuredImageChangeListener?.onFeaturedImageChanged(mediaID)
     }
 
-    @JavascriptInterface
     fun onBlocksChanged(isEmpty: Boolean) {
         if(isEmpty) {
             Log.i("GutenbergView", "BlocksChanged (empty)")
@@ -1514,11 +1555,8 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    @JavascriptInterface
-    fun openMediaLibrary(jsonString: String) {
+    fun openMediaLibrary(jsonObj: JSONObject) {
         try {
-            val jsonObj = JSONObject(jsonString)
-
             // Parse allowedTypes
             val allowedTypes = if (jsonObj.has("allowedTypes")) {
                 val allowedTypesArray = jsonObj.getJSONArray("allowedTypes")
@@ -1578,16 +1616,20 @@ class GutenbergView : FrameLayout {
         evaluateIfLoaded("window.blockInserter?.onClose?.();")
     }
 
-    @JavascriptInterface
-    fun onEditorExceptionLogged(exception: String) {
-        val parsedException = GutenbergJsException.fromString(exception)
+    @Suppress("TooGenericExceptionCaught") // Gson reports a body of the wrong shape with several runtime exceptions.
+    fun onEditorExceptionLogged(exception: JSONObject) {
+        val parsedException = try {
+            GutenbergJsException.fromString(exception.toString())
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Dropped an exception the editor logged, which couldn't be read: ${e.message}")
+            return
+        }
         logJsExceptionListener?.onLogJsException(parsedException)
     }
 
-    @JavascriptInterface
-    fun showBlockInserter(payload: String) {
+    fun showBlockInserter(payload: JSONObject) {
         val parsed = try {
-            BlockInserterPayload.fromJson(payload)
+            BlockInserterPayload.fromJson(payload.toString())
         } catch (e: Exception) {
             Log.e("GutenbergView", "Failed to parse showBlockInserter payload", e)
             handler.post {
@@ -1621,14 +1663,12 @@ class GutenbergView : FrameLayout {
         dialog.show()
     }
 
-    @JavascriptInterface
     fun onAutocompleterTriggered(type: String) {
         handler.post {
             autocompleterTriggeredListener?.onAutocompleterTriggered(type)
         }
     }
 
-    @JavascriptInterface
     fun onModalDialogOpened(dialogType: String) {
         handler.post {
             openModalDialogs.add(dialogType)
@@ -1636,7 +1676,6 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    @JavascriptInterface
     fun onModalDialogClosed(dialogType: String) {
         handler.post {
             openModalDialogs.remove(dialogType)
@@ -1644,12 +1683,10 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    @JavascriptInterface
-    fun onNetworkRequest(requestData: String) {
+    fun onNetworkRequest(requestData: JSONObject) {
         handler.post {
             try {
-                val json = JSONObject(requestData)
-                val request = RecordedNetworkRequest.fromJson(json)
+                val request = RecordedNetworkRequest.fromJson(requestData)
                 networkRequestListener?.onNetworkRequest(request)
             } catch (e: Exception) {
                 Log.e("GutenbergView", "Error parsing network request: ${e.message}")

@@ -45,9 +45,14 @@ test.describe( 'Post entity seeding', () => {
 			window.contentChangedCount = 0;
 			window.featuredImageChanges = [];
 			window.editorDelegate = {
-				onEditorContentChanged: () => window.contentChangedCount++,
-				onEditorFeaturedImageChanged: ( mediaID ) =>
-					window.featuredImageChanges.push( mediaID ),
+				postMessage: ( json ) => {
+					const { message, body } = JSON.parse( json );
+					if ( message === 'onEditorContentChanged' ) {
+						window.contentChangedCount++;
+					} else if ( message === 'onEditorFeaturedImageChanged' ) {
+						window.featuredImageChanges.push( body.mediaID );
+					}
+				},
 			};
 		} );
 

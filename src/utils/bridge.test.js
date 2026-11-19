@@ -641,30 +641,33 @@ describe( 'showBlockInserter', () => {
 	} );
 
 	it( 'is a no-op when window.blockInserter is unavailable', () => {
-		const editorDelegate = { showBlockInserter: vi.fn() };
+		const editorDelegate = { postMessage: vi.fn() };
 		window.editorDelegate = editorDelegate;
 
 		showBlockInserter( { x: 0, y: 0, width: 10, height: 10 } );
 
-		expect( editorDelegate.showBlockInserter ).not.toHaveBeenCalled();
+		expect( editorDelegate.postMessage ).not.toHaveBeenCalled();
 	} );
 
-	it( 'passes a JSON-stringified payload to the Android bridge', () => {
+	it( 'passes a JSON-stringified message to the Android bridge', () => {
 		window.blockInserter = sampleInserter;
-		const editorDelegate = { showBlockInserter: vi.fn() };
+		const editorDelegate = { postMessage: vi.fn() };
 		window.editorDelegate = editorDelegate;
 
 		const sourceRect = { x: 1, y: 2, width: 3, height: 4 };
 		showBlockInserter( sourceRect );
 
-		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
-		const arg = editorDelegate.showBlockInserter.mock.calls[ 0 ][ 0 ];
+		expect( editorDelegate.postMessage ).toHaveBeenCalledTimes( 1 );
+		const arg = editorDelegate.postMessage.mock.calls[ 0 ][ 0 ];
 		expect( typeof arg ).toBe( 'string' );
 		expect( JSON.parse( arg ) ).toEqual( {
-			sections: sampleInserter.sections,
-			patterns: sampleInserter.patterns,
-			patternCategories: sampleInserter.patternCategories,
-			sourceRect,
+			message: 'showBlockInserter',
+			body: {
+				sections: sampleInserter.sections,
+				patterns: sampleInserter.patterns,
+				patternCategories: sampleInserter.patternCategories,
+				sourceRect,
+			},
 		} );
 	} );
 
@@ -694,7 +697,7 @@ describe( 'showBlockInserter', () => {
 
 	it( 'dispatches to both bridges when both are present', () => {
 		window.blockInserter = sampleInserter;
-		const editorDelegate = { showBlockInserter: vi.fn() };
+		const editorDelegate = { postMessage: vi.fn() };
 		const postMessage = vi.fn();
 		window.editorDelegate = editorDelegate;
 		window.webkit = {
@@ -705,7 +708,7 @@ describe( 'showBlockInserter', () => {
 
 		showBlockInserter();
 
-		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
+		expect( editorDelegate.postMessage ).toHaveBeenCalledTimes( 1 );
 		expect( postMessage ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
@@ -731,16 +734,19 @@ describe( 'onEditorSaveAvailabilityChanged', () => {
 		}
 	} );
 
-	// The Android interface receives the payload values positionally.
-	it( 'passes isSaveable then isSavingLocked to the Android bridge', () => {
-		const editorDelegate = { onEditorSaveAvailabilityChanged: vi.fn() };
+	// `GutenbergView` reads these keys on Android.
+	it( 'passes a keyed message to the Android bridge', () => {
+		const editorDelegate = { postMessage: vi.fn() };
 		window.editorDelegate = editorDelegate;
 
 		onEditorSaveAvailabilityChanged( true, false );
 
 		expect(
-			editorDelegate.onEditorSaveAvailabilityChanged
-		).toHaveBeenCalledWith( true, false );
+			JSON.parse( editorDelegate.postMessage.mock.calls[ 0 ][ 0 ] )
+		).toEqual( {
+			message: 'onEditorSaveAvailabilityChanged',
+			body: { isSaveable: true, isSavingLocked: false },
+		} );
 	} );
 
 	// `EditorSaveAvailability` decodes these keys on iOS.

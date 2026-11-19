@@ -8,7 +8,13 @@ test.describe( 'onEditorContentChanged', () => {
 		await page.addInitScript( () => {
 			window.contentChangedCount = 0;
 			window.editorDelegate = {
-				onEditorContentChanged: () => window.contentChangedCount++,
+				postMessage: ( json ) => {
+					if (
+						JSON.parse( json ).message === 'onEditorContentChanged'
+					) {
+						window.contentChangedCount++;
+					}
+				},
 			};
 		} );
 

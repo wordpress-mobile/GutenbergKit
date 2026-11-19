@@ -9,6 +9,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import kotlinx.coroutines.test.TestScope
+import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 import org.junit.Rule
@@ -548,7 +549,7 @@ class GutenbergViewTest {
     @Test
     fun `onEditorUnavailable dismisses the block inserter`() {
         gutenbergView.onEditorLoaded()
-        gutenbergView.showBlockInserter("{}")
+        gutenbergView.showBlockInserter(JSONObject())
         shadowOf(Looper.getMainLooper()).idle()
         val inserter = ShadowDialog.getLatestDialog()
         assertTrue("the inserter is open before the crash", inserter.isShowing)
