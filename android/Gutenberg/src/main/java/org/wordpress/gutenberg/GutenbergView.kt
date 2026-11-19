@@ -42,6 +42,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
@@ -57,6 +58,7 @@ import org.wordpress.gutenberg.views.EditorProgressView
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 
 const val DEFAULT_ASSET_DOMAIN = "appassets.androidplatform.net"
 const val ASSET_PATH_INDEX = "/assets/index.html"
@@ -150,6 +152,13 @@ class GutenbergView : FrameLayout {
 
     /** The web view the bridge was last exposed in. A web view accepts the bridge once. */
     private var bridgeWebView: WebView? = null
+
+    /**
+     * Counts the pages bridge messages can come from. It goes up whenever the page
+     * that sent the messages still being parsed goes away: a main-frame page
+     * starting, the web view being replaced, or the view detaching.
+     */
+    private var bridgePage = 0
 
     /** Web views created for new windows that have not navigated yet. */
     private val popupWebViews = mutableSetOf<WebView>()
@@ -1011,6 +1020,7 @@ class GutenbergView : FrameLayout {
         // is not ready until it reports `onEditorLoaded`.
         isEditorLoaded = false
         didFireEditorLoaded = false
+        bridgePage++
 
         if (url == null) return
 
@@ -1390,6 +1400,11 @@ class GutenbergView : FrameLayout {
      * A message that can't be read, has an unknown name, or lacks a field its
      * handler needs is dropped and logged. Bodies stay out of the log, as they can
      * carry post content.
+     *
+     * Messages can be large, such as the inserter's, so they're parsed on
+     * [bridgeParsingExecutor], one at a time to keep their order, and handled on
+     * the main thread. A message whose page has gone by then is dropped, so a late
+     * `onEditorLoaded` can't mark the next page ready.
      */
     @VisibleForTesting
     internal fun receiveBridgeMessage(json: String, sourceOrigin: String, isMainFrame: Boolean, reply: (String) -> Unit) {
@@ -1398,40 +1413,114 @@ class GutenbergView : FrameLayout {
             Log.d(TAG, "Dropped a bridge message from outside the editor page")
             return
         }
-        val message = EditorBridgeMessage.parse(json)
-        if (message == null) {
-            Log.w(TAG, "Dropped a bridge message that isn't a message object")
-            return
-        }
-        try {
-            dispatchBridgeMessage(message, reply)
-        } catch (e: JSONException) {
-            Log.w(TAG, "Dropped a '${message.name}' bridge message with a missing or invalid field: ${e.message}")
+        val page = bridgePage
+        bridgeParsingExecutor.execute {
+            val call = parseBridgeCall(json, reply) ?: return@execute
+            handler.post {
+                if (page != bridgePage) {
+                    Log.d(TAG, "Dropped a bridge message from a page that has since gone")
+                    return@post
+                }
+                call()
+            }
         }
     }
 
-    private fun dispatchBridgeMessage(message: EditorBridgeMessage, reply: (String) -> Unit) {
-        val body = message.body
-        when (message.name) {
-            "requestLatestContent" -> reply(latestContentReply(body.get("id")))
-            "onEditorLoaded" -> onEditorLoaded()
-            "onEditorUnavailable" -> onEditorUnavailable()
-            "onEditorContentChanged" -> onEditorContentChanged()
-            "onEditorHistoryChanged" ->
-                onEditorHistoryChanged(body.getBoolean("hasUndo"), body.getBoolean("hasRedo"))
-            "onEditorSaveAvailabilityChanged" ->
-                onEditorSaveAvailabilityChanged(body.getBoolean("isSaveable"), body.getBoolean("isSavingLocked"))
-            "onEditorFeaturedImageChanged" -> onEditorFeaturedImageChanged(body.getLong("mediaID"))
-            "onBlocksChanged" -> onBlocksChanged(body.getBoolean("isEmpty"))
-            "openMediaLibrary" -> openMediaLibrary(body)
-            "onEditorExceptionLogged" -> onEditorExceptionLogged(body)
-            "showBlockInserter" -> showBlockInserter(body)
-            "onAutocompleterTriggered" -> onAutocompleterTriggered(body.getString("type"))
-            "onModalDialogOpened" -> onModalDialogOpened(body.getString("dialogType"))
-            "onModalDialogClosed" -> onModalDialogClosed(body.getString("dialogType"))
-            "onNetworkRequest" -> onNetworkRequest(body)
-            else -> Log.w(TAG, "Dropped a bridge message with an unknown name")
+    /**
+     * Reads [json] into the handler call it asks for, or null when it's dropped.
+     * Runs off the main thread, so it only parses: no view state, no host code.
+     */
+    private fun parseBridgeCall(json: String, reply: (String) -> Unit): (() -> Unit)? {
+        val message = EditorBridgeMessage.parse(json)
+        if (message == null) {
+            Log.w(TAG, "Dropped a bridge message that isn't a message object")
+            return null
         }
+        return try {
+            parseBridgeCall(message, reply)
+        } catch (e: JSONException) {
+            Log.w(TAG, "Dropped a '${message.name}' bridge message with a missing or invalid field: ${e.message}")
+            null
+        }
+    }
+
+    @Suppress("CyclomaticComplexMethod") // One branch per message, as iOS's `EditorJSMessage.MessageType`.
+    private fun parseBridgeCall(message: EditorBridgeMessage, reply: (String) -> Unit): (() -> Unit)? {
+        val body = message.body
+        return when (message.name) {
+            "requestLatestContent" -> body.get("id").let { id -> { reply(latestContentReply(id)) } }
+            "onEditorLoaded" -> ::onEditorLoaded
+            "onEditorUnavailable" -> ::onEditorUnavailable
+            "onEditorContentChanged" -> ::onEditorContentChanged
+            "onEditorHistoryChanged" -> (body.getBoolean("hasUndo") to body.getBoolean("hasRedo"))
+                .let { (hasUndo, hasRedo) -> { onEditorHistoryChanged(hasUndo, hasRedo) } }
+            "onEditorSaveAvailabilityChanged" -> SaveAvailability(body.getBoolean("isSaveable"), body.getBoolean("isSavingLocked"))
+                .let { availability -> { onEditorSaveAvailabilityChanged(availability) } }
+            "onEditorFeaturedImageChanged" -> body.getLong("mediaID").let { id -> { onEditorFeaturedImageChanged(id) } }
+            "onBlocksChanged" -> body.getBoolean("isEmpty").let { isEmpty -> { onBlocksChanged(isEmpty) } }
+            "openMediaLibrary" -> parseMediaLibraryConfig(body).let { config -> { openMediaLibrary(config) } }
+            "onEditorExceptionLogged" -> parseJsException(body)?.let { exception -> { onEditorExceptionLogged(exception) } }
+            "showBlockInserter" -> parseBlockInserterPayload(body).let { payload -> { showBlockInserter(payload) } }
+            "onAutocompleterTriggered" -> body.getString("type").let { type -> { onAutocompleterTriggered(type) } }
+            "onModalDialogOpened" -> body.getString("dialogType").let { type -> { onModalDialogOpened(type) } }
+            "onModalDialogClosed" -> body.getString("dialogType").let { type -> { onModalDialogClosed(type) } }
+            "onNetworkRequest" -> RecordedNetworkRequest.fromJson(body).let { request -> { onNetworkRequest(request) } }
+            else -> {
+                Log.w(TAG, "Dropped a bridge message with an unknown name")
+                null
+            }
+        }
+    }
+
+    private fun parseMediaLibraryConfig(json: JSONObject): OpenMediaLibraryConfig {
+        val allowedTypes = if (json.has("allowedTypes")) {
+            val allowedTypesArray = json.getJSONArray("allowedTypes")
+            Array(allowedTypesArray.length()) { index ->
+                MediaType.getEnum(allowedTypesArray.getString(index))
+            }
+        } else {
+            emptyArray()
+        }
+
+        val multiple = json.getBoolean("multiple")
+
+        val value = if (json.has("value")) {
+            if (multiple) {
+                val valueArray = json.getJSONArray("value")
+                Value.Multiple(IntArray(valueArray.length()) { index ->
+                    valueArray.getInt(index)
+                })
+            } else {
+                Value.Single(json.getInt("value"))
+            }
+        } else {
+            null
+        }
+
+        return OpenMediaLibraryConfig(
+            allowedTypes = allowedTypes,
+            multiple = multiple,
+            value = value,
+            contextId = json.getString("contextId")
+        )
+    }
+
+    /** Reads the exception the editor logged, or null when its shape is wrong. */
+    @Suppress("TooGenericExceptionCaught") // Gson reports a body of the wrong shape with several runtime exceptions.
+    private fun parseJsException(json: JSONObject): GutenbergJsException? = try {
+        GutenbergJsException.fromString(json.toString())
+    } catch (e: RuntimeException) {
+        Log.w(TAG, "Dropped an exception the editor logged, which couldn't be read: ${e.message}")
+        null
+    }
+
+    /** Reads the inserter's payload, or null when it can't be read, so the user is told. */
+    @Suppress("TooGenericExceptionCaught") // Any failure means the same to the user: no inserter.
+    private fun parseBlockInserterPayload(json: JSONObject): BlockInserterPayload? = try {
+        BlockInserterPayload.fromJson(json.toString())
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to parse showBlockInserter payload", e)
+        null
     }
 
     /**
@@ -1597,6 +1686,7 @@ class GutenbergView : FrameLayout {
         webView = createWebView()
         addView(webView, 0)
         isWebViewBlank = true
+        bridgePage++
     }
 
     private fun onEditorContentChanged() {
@@ -1607,8 +1697,7 @@ class GutenbergView : FrameLayout {
         historyChangeListener?.onHistoryChanged(hasUndo, hasRedo)
     }
 
-    private fun onEditorSaveAvailabilityChanged(isSaveable: Boolean, isSavingLocked: Boolean) {
-        val availability = SaveAvailability(isSaveable, isSavingLocked)
+    private fun onEditorSaveAvailabilityChanged(availability: SaveAvailability) {
         handler.post {
             saveAvailabilityListener?.onSaveAvailabilityChanged(availability)
         }
@@ -1626,44 +1715,10 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    private fun openMediaLibrary(jsonObj: JSONObject) {
-        try {
-            // Parse allowedTypes
-            val allowedTypes = if (jsonObj.has("allowedTypes")) {
-                val allowedTypesArray = jsonObj.getJSONArray("allowedTypes")
-                Array(allowedTypesArray.length()) { index ->
-                    MediaType.getEnum(allowedTypesArray.getString(index))
-                }
-            } else {
-                emptyArray()
-            }
-
-            // Parse multiple
-            val multiple = jsonObj.getBoolean("multiple")
-
-            // Parse value
-            val value = if (jsonObj.has("value")) {
-                if (multiple) {
-                    val valueArray = jsonObj.getJSONArray("value")
-                    Value.Multiple(IntArray(valueArray.length()) { index ->
-                        valueArray.getInt(index)
-                    })
-                } else {
-                    Value.Single(jsonObj.getInt("value"))
-                }
-            } else {
-                null
-            }
-
-            // Store contextId to pass back when media is selected
-            val contextId = jsonObj.getString("contextId")
-            currentMediaContextId = contextId
-
-            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value, contextId = contextId)
-            openMediaLibraryListener?.onOpenMediaLibrary(config)
-        } catch (e: JSONException) {
-            e.printStackTrace()
-        }
+    private fun openMediaLibrary(config: OpenMediaLibraryConfig) {
+        // Store contextId to pass back when media is selected
+        currentMediaContextId = config.contextId
+        openMediaLibraryListener?.onOpenMediaLibrary(config)
     }
 
     fun setMediaUploadAttachment(media: String) {
@@ -1687,33 +1742,21 @@ class GutenbergView : FrameLayout {
         evaluateIfLoaded("window.blockInserter?.onClose?.();")
     }
 
-    @Suppress("TooGenericExceptionCaught") // Gson reports a body of the wrong shape with several runtime exceptions.
-    private fun onEditorExceptionLogged(exception: JSONObject) {
-        val parsedException = try {
-            GutenbergJsException.fromString(exception.toString())
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "Dropped an exception the editor logged, which couldn't be read: ${e.message}")
-            return
-        }
-        logJsExceptionListener?.onLogJsException(parsedException)
+    private fun onEditorExceptionLogged(exception: GutenbergJsException) {
+        logJsExceptionListener?.onLogJsException(exception)
     }
 
-    private fun showBlockInserter(payload: JSONObject) {
-        val parsed = try {
-            BlockInserterPayload.fromJson(payload.toString())
-        } catch (e: Exception) {
-            Log.e("GutenbergView", "Failed to parse showBlockInserter payload", e)
-            handler.post {
-                Toast.makeText(
-                    context,
-                    R.string.gbk_block_inserter_failure,
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
+    /** Presents the inserter for [payload], or says it can't when the payload couldn't be read. */
+    private fun showBlockInserter(payload: BlockInserterPayload?) {
+        if (payload == null) {
+            Toast.makeText(
+                context,
+                R.string.gbk_block_inserter_failure,
+                Toast.LENGTH_LONG,
+            ).show()
             return
         }
-
-        handler.post { presentBlockInserter(parsed) }
+        presentBlockInserter(payload)
     }
 
     private fun presentBlockInserter(payload: BlockInserterPayload) {
@@ -1754,15 +1797,8 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    private fun onNetworkRequest(requestData: JSONObject) {
-        handler.post {
-            try {
-                val request = RecordedNetworkRequest.fromJson(requestData)
-                networkRequestListener?.onNetworkRequest(request)
-            } catch (e: Exception) {
-                Log.e("GutenbergView", "Error parsing network request: ${e.message}")
-            }
-        }
+    private fun onNetworkRequest(request: RecordedNetworkRequest) {
+        networkRequestListener?.onNetworkRequest(request)
     }
 
     fun resetFilePathCallback() {
@@ -1799,6 +1835,7 @@ class GutenbergView : FrameLayout {
         super.onDetachedFromWindow()
         stopNetworkMonitoring()
         isDetached = true
+        bridgePage++
         editorPageJob?.cancel()
         uploadServer?.stop()
         uploadServer = null
@@ -1906,6 +1943,13 @@ class GutenbergView : FrameLayout {
         /** Evaluates to the page's origin when it has no bridge, and to null otherwise. */
         @VisibleForTesting
         internal const val MISSING_BRIDGE_CHECK_SCRIPT = "window.editorDelegate ? null : location.origin"
+
+        /**
+         * Parses bridge messages one at a time, off the main thread. Tests replace it
+         * to parse in place.
+         */
+        @VisibleForTesting
+        internal var bridgeParsingExecutor: Executor = Dispatchers.Default.limitedParallelism(1).asExecutor()
 
         /** Exposes the bridge to editor pages. Tests replace it, as Robolectric has no WebView provider. */
         @VisibleForTesting

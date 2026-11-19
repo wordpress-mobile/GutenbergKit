@@ -22,6 +22,7 @@ import org.robolectric.Shadows.shadowOf
 import org.wordpress.gutenberg.model.EditorConfiguration
 import org.wordpress.gutenberg.model.EditorDependencies
 import org.wordpress.gutenberg.views.EditorErrorView
+import java.util.concurrent.Executor
 
 /** Which pages the bridge hears, and how it answers them. */
 @RunWith(RobolectricTestRunner::class)
@@ -167,6 +168,97 @@ class GutenbergViewBridgeGateTest {
         val message = RuntimeEnvironment.getApplication().getString(R.string.gbk_editor_webview_unsupported)
         assertTrue(errorView.texts().contains(message))
         assertNull("the editor never loads", view.editorWebView.url)
+    }
+
+    /** Holds parsing work until [runAll], as a busy parsing thread would. */
+    private class QueuedExecutor : Executor {
+        private val queue = ArrayDeque<Runnable>()
+
+        override fun execute(command: Runnable) {
+            queue.addLast(command)
+        }
+
+        fun runAll() {
+            while (queue.isNotEmpty()) queue.removeFirst().run()
+        }
+    }
+
+    private fun queueParsing() = QueuedExecutor().also { GutenbergView.bridgeParsingExecutor = it }
+
+    private fun GutenbergView.receive(json: String) =
+        receiveBridgeMessage(json, checkNotNull(editorOrigin), isMainFrame = true) {}
+
+    @Test
+    fun `handles messages only once they're parsed, in the order they arrived`() {
+        val view = siteView()
+        val events = mutableListOf<String>()
+        view.setContentChangeListener(object : GutenbergView.ContentChangeListener {
+            override fun onContentChanged() {
+                events += "contentChanged"
+            }
+        })
+        view.setHistoryChangeListener(object : GutenbergView.HistoryChangeListener {
+            override fun onHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
+                events += "history"
+            }
+        })
+        val parsing = queueParsing()
+
+        view.receive("""{"message":"onEditorHistoryChanged","body":{"hasUndo":true,"hasRedo":false}}""")
+        view.receive("""{"message":"onEditorContentChanged","body":{}}""")
+        idle()
+        assertTrue("nothing is handled before it's parsed", events.isEmpty())
+
+        parsing.runAll()
+        idle()
+
+        assertEquals(listOf("history", "contentChanged"), events)
+    }
+
+    @Test
+    fun `drops a message whose page was replaced before it was handled`() {
+        val view = siteView()
+        val events = view.trackAvailability()
+        val parsing = queueParsing()
+
+        view.receive("""{"message":"onEditorLoaded","body":{}}""")
+        view.editorWebView.webViewClient.onPageStarted(view.editorWebView, editorUrl(), null)
+        parsing.runAll()
+        idle()
+
+        assertTrue("the old page can't mark the new one ready", events.isEmpty())
+        assertFalse(view.isReady())
+    }
+
+    @Test
+    fun `drops a message whose web view was replaced before it was handled`() {
+        val view = siteView()
+        view.postBridgeMessage("onEditorLoaded")
+        val parsing = queueParsing()
+        var unavailable = 0
+        view.setEditorDidBecomeUnavailable { unavailable++ }
+
+        view.receive("""{"message":"onEditorUnavailable","body":{}}""")
+        view.editorWebView.webViewClient.onRenderProcessGone(view.editorWebView, mock(RenderProcessGoneDetail::class.java))
+        idle()
+        val unavailableFromRendererDeath = unavailable
+        parsing.runAll()
+        idle()
+
+        assertEquals("only the renderer death is reported", unavailableFromRendererDeath, unavailable)
+    }
+
+    @Test
+    fun `drops a message that is handled after the view detached`() {
+        val view = siteView()
+        val parsing = queueParsing()
+
+        view.receive("""{"message":"onEditorLoaded","body":{}}""")
+        View::class.java.getDeclaredMethod("onDetachedFromWindow").apply { isAccessible = true }.invoke(view)
+        parsing.runAll()
+        idle()
+
+        assertFalse("a detached editor stays unready", view.isReady())
     }
 
     @Test
