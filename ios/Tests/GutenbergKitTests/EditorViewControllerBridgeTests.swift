@@ -154,6 +154,8 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
 
         let directory = URL.randomTemporaryDirectory
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // The page is in memory once loaded, and needs nothing more from its directory.
+        defer { try? FileManager.default.removeItem(at: directory) }
         let page = directory.appending(component: "index.html")
         try Data("<!doctype html><title>Bridge</title><body></body>".utf8).write(to: page)
         editor.webView.loadFileURL(page, allowingReadAccessTo: directory)
@@ -162,8 +164,6 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         try await waitUntil(timeout: .seconds(180)) {
             !editor.webView.isLoading && editor.webView.url?.lastPathComponent == "index.html"
         }
-        // The page is in memory once loaded, and needs nothing more from its directory.
-        try? FileManager.default.removeItem(at: directory)
         return editor
     }
 
