@@ -1404,7 +1404,8 @@ class GutenbergView : FrameLayout {
      * Messages can be large, such as the inserter's, so they're parsed on
      * [bridgeParsingExecutor], one at a time to keep their order, and handled on
      * the main thread. A message whose page has gone by then is dropped, so a late
-     * `onEditorLoaded` can't mark the next page ready.
+     * `onEditorLoaded` can't mark the next page ready. Handlers run within that
+     * check rather than posting again, which would let them outlive their page.
      */
     @VisibleForTesting
     internal fun receiveBridgeMessage(json: String, sourceOrigin: String, isMainFrame: Boolean, reply: (String) -> Unit) {
@@ -1539,38 +1540,31 @@ class GutenbergView : FrameLayout {
     private fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
-        handler.post {
-            // The editor can become unavailable before this runs, which resets
-            // readiness and shows the crash notice. Carrying on would report the
-            // editor available again and replace that notice with the ready phase.
-            if (!isEditorLoaded) return@post
-
-            lastKnownConnectivity?.let { isConnected ->
-                if (!isConnected) dispatchConnectivityEvent(false)
+        lastKnownConnectivity?.let { isConnected ->
+            if (!isConnected) dispatchConnectivityEvent(false)
+        }
+        if(!didFireEditorLoaded) {
+            // The web editor always starts in visual mode, so restore code
+            // editor mode when the host enabled it, including after a reload.
+            if (textEditorEnabled) {
+                webView.evaluateJavascript("editor.switchEditorMode('text');", null)
             }
-            if(!didFireEditorLoaded) {
-                // The web editor always starts in visual mode, so restore code
-                // editor mode when the host enabled it, including after a reload.
-                if (textEditorEnabled) {
-                    webView.evaluateJavascript("editor.switchEditorMode('text');", null)
-                }
-                editorDidBecomeAvailableListener?.onEditorAvailable(this)
-                this.didFireEditorLoaded = true
-                showReadyPhase()
+            editorDidBecomeAvailableListener?.onEditorAvailable(this)
+            this.didFireEditorLoaded = true
+            showReadyPhase()
 
-                if (!hasAutofocused && configuration.isNewEmptyPost) {
-                    hasAutofocused = true
+            if (!hasAutofocused && configuration.isNewEmptyPost) {
+                hasAutofocused = true
 
-                    // Focus the editor content
-                    webView.evaluateJavascript("editor.focus();", null)
+                // Focus the editor content
+                webView.evaluateJavascript("editor.focus();", null)
 
-                    // Request focus on the WebView and show the soft keyboard
-                    handler.postDelayed({
-                        webView.requestFocus()
-                        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                        imm?.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
-                    }, 100)
-                }
+                // Request focus on the WebView and show the soft keyboard
+                handler.postDelayed({
+                    webView.requestFocus()
+                    val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                    imm?.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
+                }, 100)
             }
         }
     }
@@ -1587,11 +1581,9 @@ class GutenbergView : FrameLayout {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
         showEditorCrashPhase()
-        handler.post {
-            // Picks made in an open inserter can no longer reach the editor.
-            blockInserterDialog?.dismiss()
-            editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
-        }
+        // Picks made in an open inserter can no longer reach the editor.
+        blockInserterDialog?.dismiss()
+        editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
     }
 
     /**
@@ -1698,9 +1690,7 @@ class GutenbergView : FrameLayout {
     }
 
     private fun onEditorSaveAvailabilityChanged(availability: SaveAvailability) {
-        handler.post {
-            saveAvailabilityListener?.onSaveAvailabilityChanged(availability)
-        }
+        saveAvailabilityListener?.onSaveAvailabilityChanged(availability)
     }
 
     private fun onEditorFeaturedImageChanged(mediaID: Long) {
@@ -1778,23 +1768,17 @@ class GutenbergView : FrameLayout {
     }
 
     private fun onAutocompleterTriggered(type: String) {
-        handler.post {
-            autocompleterTriggeredListener?.onAutocompleterTriggered(type)
-        }
+        autocompleterTriggeredListener?.onAutocompleterTriggered(type)
     }
 
     private fun onModalDialogOpened(dialogType: String) {
-        handler.post {
-            openModalDialogs.add(dialogType)
-            modalDialogStateListener?.onModalDialogOpened(dialogType)
-        }
+        openModalDialogs.add(dialogType)
+        modalDialogStateListener?.onModalDialogOpened(dialogType)
     }
 
     private fun onModalDialogClosed(dialogType: String) {
-        handler.post {
-            openModalDialogs.remove(dialogType)
-            modalDialogStateListener?.onModalDialogClosed(dialogType)
-        }
+        openModalDialogs.remove(dialogType)
+        modalDialogStateListener?.onModalDialogClosed(dialogType)
     }
 
     private fun onNetworkRequest(request: RecordedNetworkRequest) {

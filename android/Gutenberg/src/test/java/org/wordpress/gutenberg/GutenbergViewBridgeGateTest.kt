@@ -202,9 +202,19 @@ class GutenbergViewBridgeGateTest {
                 events += "history"
             }
         })
+        view.setSaveAvailabilityListener { events += "saveAvailability" }
+        view.setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
+            override fun onModalDialogOpened(dialogType: String) {
+                events += "dialogOpened"
+            }
+
+            override fun onModalDialogClosed(dialogType: String) = Unit
+        })
         val parsing = queueParsing()
 
         view.receive("""{"message":"onEditorHistoryChanged","body":{"hasUndo":true,"hasRedo":false}}""")
+        view.receive("""{"message":"onEditorSaveAvailabilityChanged","body":{"isSaveable":true,"isSavingLocked":false}}""")
+        view.receive("""{"message":"onModalDialogOpened","body":{"dialogType":"inserter"}}""")
         view.receive("""{"message":"onEditorContentChanged","body":{}}""")
         idle()
         assertTrue("nothing is handled before it's parsed", events.isEmpty())
@@ -212,7 +222,31 @@ class GutenbergViewBridgeGateTest {
         parsing.runAll()
         idle()
 
-        assertEquals(listOf("history", "contentChanged"), events)
+        assertEquals(listOf("history", "saveAvailability", "dialogOpened", "contentChanged"), events)
+    }
+
+    @Test
+    fun `reports no dialog open after a renderer death that follows the dialog's message`() {
+        val view = siteView()
+        view.postBridgeMessage("onEditorLoaded")
+        val events = mutableListOf<String>()
+        view.setEditorDidBecomeUnavailable { events += "unavailable" }
+        view.setModalDialogStateListener(object : GutenbergView.ModalDialogStateListener {
+            override fun onModalDialogOpened(dialogType: String) {
+                events += "opened"
+            }
+
+            override fun onModalDialogClosed(dialogType: String) {
+                events += "closed"
+            }
+        })
+
+        view.receive("""{"message":"onModalDialogOpened","body":{"dialogType":"inserter"}}""")
+        shadowOf(Looper.getMainLooper()).runOneTask()
+        view.editorWebView.webViewClient.onRenderProcessGone(view.editorWebView, mock(RenderProcessGoneDetail::class.java))
+        idle()
+
+        assertEquals(listOf("opened", "closed", "unavailable"), events)
     }
 
     @Test
