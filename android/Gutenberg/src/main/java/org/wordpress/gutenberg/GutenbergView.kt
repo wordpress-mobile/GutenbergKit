@@ -1527,10 +1527,17 @@ class GutenbergView : FrameLayout {
     /**
      * Answers the page's request [requestId] for the latest content, which it makes
      * while loading to recover edits after a reload. Always answers, with a null
-     * result when [LatestContentProvider] has none, as the page waits for it.
+     * result when [LatestContentProvider] has none or fails, as the page waits for it.
      */
+    @Suppress("TooGenericExceptionCaught") // A failing host starts the editor from its opening content, not a crash.
     private fun latestContentReply(requestId: Any): String {
-        val content = latestContentProvider?.getLatestContent()?.let {
+        val latest = try {
+            latestContentProvider?.getLatestContent()
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "The host failed to provide the latest content, so the editor starts from its opening content", e)
+            null
+        }
+        val content = latest?.let {
             JSONObject().put("title", it.title).put("content", it.content)
         }
         val body = JSONObject().put("id", requestId).put("result", content ?: JSONObject.NULL)

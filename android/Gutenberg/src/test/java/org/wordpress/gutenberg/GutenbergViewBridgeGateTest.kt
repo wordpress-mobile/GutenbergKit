@@ -156,6 +156,18 @@ class GutenbergViewBridgeGateTest {
     }
 
     @Test
+    fun `answers a request for the latest content when the host fails to provide it`() {
+        val view = siteView()
+        view.setLatestContentProvider(object : GutenbergView.LatestContentProvider {
+            override fun getLatestContent(): GutenbergView.LatestContent? = error("no post")
+        })
+
+        val reply = JSONObject(view.postBridgeMessageJson(latestContentRequest()).single())
+
+        assertTrue(reply.getJSONObject("body").isNull("result"))
+    }
+
+    @Test
     fun `shows the load error rather than the editor when the WebView can't restrict the bridge`() {
         GutenbergView.bridgeRegistrar = FakeEditorBridgeRegistrar(isSupported = false)
 
