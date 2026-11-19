@@ -45,8 +45,11 @@
                 </data>
             </intent-filter>
         </activity>
+        <!-- Handle configuration changes in place, matching WordPress-Android, so
+             rotating or switching dark mode doesn't reload the editor and drop edits. -->
         <activity
             android:name=".EditorActivity"
+            android:configChanges="locale|screenLayout|orientation|screenSize|keyboard|keyboardHidden|smallestScreenSize|uiMode"
             android:exported="false" />
         <activity
             android:name=".SitePreparationActivity"
