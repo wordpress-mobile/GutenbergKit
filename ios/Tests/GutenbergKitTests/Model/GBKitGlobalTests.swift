@@ -115,6 +115,44 @@ struct GBKitGlobalTests: MakesTestFixtures {
     #expect(global.restRelay == nil)
   }
 
+  @Test("gives the page no site credential when the relay adds it")
+  func omitsAuthHeaderWithRelay() throws {
+    let configuration = makeConfiguration().toBuilder().setAuthHeader("Bearer secret").build()
+
+    let global = try GBKitGlobal(
+      configuration: configuration, dependencies: makeDependencies(),
+      restRelayEndpoint: "gbk-rest://relay/fetch"
+    )
+
+    #expect(global.authHeader == nil)
+    let json = try global.toString()
+    #expect(!json.contains("authHeader\""))
+    #expect(!json.contains("Bearer secret"))
+  }
+
+  @Test("gives the page the site credential when it sends its requests itself")
+  func mapsAuthHeaderWithoutRelay() throws {
+    let configuration = makeConfiguration().toBuilder().setAuthHeader("Bearer secret").build()
+
+    let global = try GBKitGlobal(configuration: configuration, dependencies: makeDependencies())
+
+    #expect(global.authHeader == "Bearer secret")
+    #expect(try global.toString().contains(#""authHeader":"Bearer secret""#))
+  }
+
+  @Test("gives the page no site credential in offline mode")
+  func omitsAuthHeaderOffline() throws {
+    let configuration = makeConfigurationBuilder()
+      .setAuthHeader("Bearer secret")
+      .setIsOfflineModeEnabled(true)
+      .build()
+
+    let global = try GBKitGlobal(configuration: configuration, dependencies: makeDependencies())
+
+    #expect(global.authHeader == nil)
+    #expect(try !global.toString().contains("Bearer secret"))
+  }
+
   @Test("maps authHeaderDomains from configuration, for the editor's own requests")
   func mapsAuthHeaderDomains() throws {
     let configuration = makeConfiguration().toBuilder()
