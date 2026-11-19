@@ -597,6 +597,11 @@ class GutenbergView : FrameLayout {
                 onEditorPageStarted(url)
             }
 
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                if (url != null && isEditorDocument(Uri.parse(url))) reportMissingBridge()
+            }
+
             @RequiresApi(Build.VERSION_CODES.O)
             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                 if (view === webView) onEditorRenderProcessGone(detail?.didCrash() == true)
@@ -1062,6 +1067,18 @@ class GutenbergView : FrameLayout {
     private fun reportOpenModalDialogsClosed() {
         openModalDialogs.forEach { modalDialogStateListener?.onModalDialogClosed(it) }
         openModalDialogs.clear()
+    }
+
+    /**
+     * Logs when the editor page finished loading without the bridge, as when its
+     * origin isn't the one [exposeBridge] allowed. The editor would otherwise
+     * never report itself loaded, with nothing saying why.
+     */
+    private fun reportMissingBridge() {
+        webView.evaluateJavascript(MISSING_BRIDGE_CHECK_SCRIPT) { origin ->
+            if (origin == null || origin == "null") return@evaluateJavascript
+            Log.e(TAG, "The editor page at $origin has no bridge, which is exposed only to $editorOrigin")
+        }
     }
 
     /**
@@ -1885,6 +1902,10 @@ class GutenbergView : FrameLayout {
 
         /** The empty page that holds the frame once the editor stops reloading. */
         private const val BLANK_PAGE_URL = "about:blank"
+
+        /** Evaluates to the page's origin when it has no bridge, and to null otherwise. */
+        @VisibleForTesting
+        internal const val MISSING_BRIDGE_CHECK_SCRIPT = "window.editorDelegate ? null : location.origin"
 
         /** Exposes the bridge to editor pages. Tests replace it, as Robolectric has no WebView provider. */
         @VisibleForTesting

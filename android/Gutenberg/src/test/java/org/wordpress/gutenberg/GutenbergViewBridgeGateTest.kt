@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.TestScope
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -166,6 +167,30 @@ class GutenbergViewBridgeGateTest {
         val message = RuntimeEnvironment.getApplication().getString(R.string.gbk_editor_webview_unsupported)
         assertTrue(errorView.texts().contains(message))
         assertNull("the editor never loads", view.editorWebView.url)
+    }
+
+    @Test
+    fun `checks the finished editor page for the bridge`() {
+        val view = siteView()
+
+        view.editorWebView.webViewClient.onPageFinished(view.editorWebView, editorUrl())
+
+        assertEquals(
+            GutenbergView.MISSING_BRIDGE_CHECK_SCRIPT,
+            shadowOf(view.editorWebView).lastEvaluatedJavascript
+        )
+    }
+
+    @Test
+    fun `leaves other finished pages unchecked`() {
+        val view = siteView()
+
+        view.editorWebView.webViewClient.onPageFinished(view.editorWebView, "https://other.example/")
+
+        assertNotEquals(
+            GutenbergView.MISSING_BRIDGE_CHECK_SCRIPT,
+            shadowOf(view.editorWebView).lastEvaluatedJavascript
+        )
     }
 
     @Test
