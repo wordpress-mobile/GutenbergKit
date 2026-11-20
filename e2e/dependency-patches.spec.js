@@ -66,10 +66,12 @@ test.describe( '@wordpress/block-editor patch', () => {
 		await openInserter( page );
 		await inserterTab( page, 'Media' ).click();
 
+		// The tab opens the first category with media, e.g., Openverse on an
+		// empty site, and each category has a search field.
 		await expect(
 			page
 				.getByRole( 'tabpanel', { name: 'Media' } )
-				.getByRole( 'searchbox', { name: 'Search Openverse' } )
+				.getByRole( 'searchbox' )
 		).toBeVisible();
 	} );
 
