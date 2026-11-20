@@ -288,6 +288,26 @@ describe( 'configureAjax', () => {
 			);
 			expect( mockJQueryAjaxPrefilter ).not.toHaveBeenCalled();
 		} );
+
+		it( 'should leave auth to the native relay without warning', () => {
+			bridge.getGBKit.mockReturnValue( {
+				siteURL: 'https://example.com',
+				restRelay: { endpoint: 'gbk-rest://relay/fetch' },
+			} );
+
+			configureAjax();
+
+			expect( logger.warn ).not.toHaveBeenCalledWith(
+				'Unable to configure AJAX auth without authHeader'
+			);
+			expect( logger.debug ).toHaveBeenCalledWith(
+				'AJAX auth left to the native relay'
+			);
+			expect( mockJQueryAjaxPrefilter ).not.toHaveBeenCalled();
+			expect( global.window.wp.ajax.settings.url ).toBe(
+				'https://example.com/wp-admin/admin-ajax.php'
+			);
+		} );
 	} );
 
 	describe( 'Integration tests', () => {

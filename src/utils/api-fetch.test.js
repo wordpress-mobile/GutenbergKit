@@ -103,6 +103,35 @@ describe( 'api-fetch credentials handling', () => {
 		expect( options.headers?.Authorization ).toBeUndefined();
 	} );
 
+	it( 'should send no Authorization when the native relay adds it', async () => {
+		bridge.getGBKit.mockReturnValue( {
+			siteURL: 'https://example.com',
+			siteApiRoot: 'https://example.com/wp-json/',
+			restRelay: { endpoint: 'gbk-rest://relay/fetch' },
+			siteApiNamespace: [],
+			namespaceExcludedPaths: [],
+		} );
+
+		for ( const request of [
+			{ path: '/wp/v2/posts' },
+			{
+				url: 'https://example.com/wp-admin/admin-ajax.php',
+				method: 'POST',
+			},
+		] ) {
+			try {
+				await apiFetch( request );
+			} catch {
+				// Ignore errors from the actual fetch
+			}
+		}
+
+		expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+		for ( const [ , options ] of global.fetch.mock.calls ) {
+			expect( options.headers?.Authorization ).toBeUndefined();
+		}
+	} );
+
 	it( 'should override existing credentials setting when authHeader is provided', async () => {
 		bridge.getGBKit.mockReturnValue( {
 			siteApiRoot: 'https://example.com/wp-json/',

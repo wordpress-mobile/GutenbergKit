@@ -221,6 +221,9 @@ function escapeRegExp( value ) {
  * A request to anywhere but the site goes out without the header: the site's
  * credentials are not for another party's service.
  *
+ * Without an auth header, as on iOS where native code adds it to relayed
+ * requests, this does nothing.
+ *
  * @type {APIFetchMiddleware}
  */
 function tokenAuthMiddleware( options, next ) {
