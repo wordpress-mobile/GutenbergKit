@@ -17,7 +17,9 @@ struct EditorJSMessage {
     }
 
     func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        guard let body else {
+        // `JSONSerialization` raises an uncatchable exception for a body it can't encode
+        // (e.g. `null`, a number, or a `Date`), so reject those as a thrown error instead.
+        guard let body, JSONSerialization.isValidJSONObject(body) else {
             throw URLError(.unknown)
         }
         let data = try JSONSerialization.data(withJSONObject: body, options: [])

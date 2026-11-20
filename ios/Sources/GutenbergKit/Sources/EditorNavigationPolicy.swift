@@ -9,9 +9,13 @@ import WebKit
 struct EditorNavigationPolicy {
     /// URL schemes that are always allowed to load within the WebView.
     /// - `file`: Local bundled editor resources
+    private static let allowedSchemes: Set<String> = ["file"]
+
+    /// The editor's own resource schemes. They serve subresources and subframes, so a
+    /// navigation that would replace the editor's page with one of them is blocked.
     /// - `gbk-cache-https`: Cached remote assets served via custom scheme handler
     /// - `gbk-media-file`: Local media files from the device's photo library
-    private static let allowedSchemes: Set<String> = ["file", "gbk-cache-https", "gbk-media-file"]
+    private static let resourceSchemes: Set<String> = ["gbk-cache-https", "gbk-media-file"]
 
     /// Optional development server URL. Navigation to this host is always allowed.
     let devServerURL: URL?
@@ -24,7 +28,7 @@ struct EditorNavigationPolicy {
     ///
     /// - Parameter navigationAction: The navigation action to evaluate.
     /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it
-    ///   should be opened in the system browser.
+    ///   must not. The caller opens a refused external URL in the system browser.
     @MainActor
     func shouldAllowNavigation(for navigationAction: WKNavigationAction) -> Bool {
         shouldAllowNavigation(
@@ -42,7 +46,7 @@ struct EditorNavigationPolicy {
     ///   - url: The URL being navigated to.
     ///   - navigationType: The type of navigation (link click, JavaScript, etc.).
     ///   - isMainFrame: Whether the navigation targets the main frame (`true`), a subframe (`false`), or unknown (`nil`).
-    /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it should open externally.
+    /// - Returns: `true` if the navigation should proceed in the WebView, `false` if it must not.
     func shouldAllowNavigation(url: URL?, navigationType: WKNavigationType, isMainFrame: Bool?) -> Bool {
         guard let url else {
             return false
@@ -51,6 +55,11 @@ struct EditorNavigationPolicy {
         // Allow local editor resources and custom URL schemes
         if isAllowedScheme(url) {
             return true
+        }
+
+        // The editor's resource schemes load only in subframes, even on the dev server's host
+        if isResourceScheme(url) {
+            return isMainFrame == false
         }
 
         // Allow navigation to dev server URL if configured
@@ -83,6 +92,27 @@ struct EditorNavigationPolicy {
     func isAllowedScheme(_ url: URL) -> Bool {
         guard let scheme = url.scheme else { return false }
         return Self.allowedSchemes.contains(scheme)
+    }
+
+    /// Returns `true` if the URL uses one of the editor's own resource schemes.
+    func isResourceScheme(_ url: URL) -> Bool {
+        guard let scheme = url.scheme else { return false }
+        return Self.resourceSchemes.contains(scheme)
+    }
+
+    /// Returns `true` if a page with this security origin is the editor's own: the bundled
+    /// `file:` page, or the dev server when one is configured.
+    func isEditorOrigin(scheme: String, host: String, port: Int) -> Bool {
+        if scheme == "file" {
+            return true
+        }
+        guard let devServerURL, let devScheme = devServerURL.scheme, let devHost = devServerURL.host else {
+            return false
+        }
+        // `WKSecurityOrigin` reports a default port as 0.
+        return scheme.caseInsensitiveCompare(devScheme) == .orderedSame
+            && host.caseInsensitiveCompare(devHost) == .orderedSame
+            && port == (devServerURL.port ?? 0)
     }
 
     /// Returns `true` if the URL matches the configured dev server host.
