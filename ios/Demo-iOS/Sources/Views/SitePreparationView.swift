@@ -369,7 +369,7 @@ class SitePreparationViewModel {
     private static func applyDemoAppDefaults(to configuration: EditorConfiguration) -> EditorConfiguration {
         configuration.toBuilder()
             .setNativeInserterEnabled(true)
-            .setLocale(DemoAppLocale.current)
+            .setLocale(Locale(identifier: DemoAppLocale.current))
             .build()
     }
 
