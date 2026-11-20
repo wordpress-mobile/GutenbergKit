@@ -396,7 +396,7 @@ class GutenbergViewTest {
 
     @Test
     fun `getTitleAndContent reports an error when the view detaches before the web view answers`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
         val callback = RecordingTitleAndContentCallback()
 
@@ -415,7 +415,7 @@ class GutenbergViewTest {
 
     @Test
     fun `getTitleAndContent reports an error when called after the view detaches`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
         shadowOf(gutenbergView).callOnDetachedFromWindow()
         val callback = RecordingTitleAndContentCallback()
@@ -432,7 +432,7 @@ class GutenbergViewTest {
         var notified: GutenbergView? = null
         gutenbergView.setEditorDidBecomeUnavailable { view -> notified = view }
 
-        gutenbergView.onEditorUnavailable()
+        gutenbergView.postBridgeMessage("onEditorUnavailable")
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(gutenbergView, notified)
@@ -443,7 +443,7 @@ class GutenbergViewTest {
         var notified: GutenbergView.SaveAvailability? = null
         gutenbergView.setSaveAvailabilityListener { availability -> notified = availability }
 
-        gutenbergView.onEditorSaveAvailabilityChanged(isSaveable = true, isSavingLocked = true)
+        gutenbergView.postBridgeMessage("onEditorSaveAvailabilityChanged", "isSaveable" to true, "isSavingLocked" to true)
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(GutenbergView.SaveAvailability(isSaveable = true, isSavingLocked = true), notified)
@@ -451,10 +451,10 @@ class GutenbergViewTest {
 
     @Test
     fun `onEditorUnavailable stops content reads from reaching the web view`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
-        gutenbergView.onEditorUnavailable()
+        gutenbergView.postBridgeMessage("onEditorUnavailable")
         shadowOf(Looper.getMainLooper()).idle()
 
         val shadowWebView = shadowOf(gutenbergView.editorWebView)
@@ -487,10 +487,10 @@ class GutenbergViewTest {
 
     @Test
     fun `onEditorUnavailable stops history commands from reaching the web view`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
-        gutenbergView.onEditorUnavailable()
+        gutenbergView.postBridgeMessage("onEditorUnavailable")
         shadowOf(Looper.getMainLooper()).idle()
 
         val shadowWebView = shadowOf(gutenbergView.editorWebView)
@@ -510,10 +510,10 @@ class GutenbergViewTest {
 
     @Test
     fun `onEditorUnavailable stops content changes from reaching the web view`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
-        gutenbergView.onEditorUnavailable()
+        gutenbergView.postBridgeMessage("onEditorUnavailable")
         shadowOf(Looper.getMainLooper()).idle()
 
         val shadowWebView = shadowOf(gutenbergView.editorWebView)
@@ -533,7 +533,7 @@ class GutenbergViewTest {
 
     @Test
     fun `setTitle reaches a loaded editor`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
         gutenbergView.setTitle("Title")
@@ -547,13 +547,13 @@ class GutenbergViewTest {
 
     @Test
     fun `onEditorUnavailable dismisses the block inserter`() {
-        gutenbergView.onEditorLoaded()
-        gutenbergView.showBlockInserter("{}")
+        gutenbergView.postBridgeMessage("onEditorLoaded")
+        gutenbergView.postBridgeMessage("showBlockInserter")
         shadowOf(Looper.getMainLooper()).idle()
         val inserter = ShadowDialog.getLatestDialog()
         assertTrue("the inserter is open before the crash", inserter.isShowing)
 
-        gutenbergView.onEditorUnavailable()
+        gutenbergView.postBridgeMessage("onEditorUnavailable")
         shadowOf(Looper.getMainLooper()).idle()
 
         assertFalse("picks from the inserter can no longer reach the editor", inserter.isShowing)
@@ -561,10 +561,10 @@ class GutenbergViewTest {
 
     @Test
     fun `onEditorUnavailable hides the web view until the editor reloads`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
-        gutenbergView.onEditorUnavailable()
+        gutenbergView.postBridgeMessage("onEditorUnavailable")
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(
@@ -585,7 +585,7 @@ class GutenbergViewTest {
 
     @Test
     fun `reloadEditor stops history commands until the editor loads again`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
         gutenbergView.reloadEditor()
@@ -610,12 +610,12 @@ class GutenbergViewTest {
     fun `a reloaded page is not ready until it loads even if the replaced page loads late`() {
         var available = false
         gutenbergView.setEditorDidBecomeAvailable { available = true }
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
         // The page a reload replaces can still report itself loaded.
         gutenbergView.reloadEditor()
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
         available = false
 
@@ -632,7 +632,7 @@ class GutenbergViewTest {
             shadowWebView.lastEvaluatedJavascript
         )
 
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
         assertTrue("the new page must report itself available once it loads", available)
@@ -640,7 +640,7 @@ class GutenbergViewTest {
 
     @Test
     fun `reloadEditor fails reads still waiting on the page it replaces`() {
-        gutenbergView.onEditorLoaded()
+        gutenbergView.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
         val callback = RecordingTitleAndContentCallback()
         gutenbergView.getTitleAndContent("original content", callback)
@@ -685,7 +685,7 @@ class GutenbergViewTest {
         )
         view.textEditorEnabled = true
 
-        view.onEditorLoaded()
+        view.postBridgeMessage("onEditorLoaded")
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(

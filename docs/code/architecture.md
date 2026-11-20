@@ -36,7 +36,9 @@ GutenbergKit/
 The web editor communicates with native code through platform-specific APIs:
 
 -   **iOS**: `window.webkit.messageHandlers`
--   **Android**: `window.editorDelegate`
+-   **Android**: `window.editorDelegate`, exposed with `addWebMessageListener`
+
+Both platforms receive `{ message, body }` messages, and accept them only from the main frame of the editor's origin.
 
 Common message types include:
 

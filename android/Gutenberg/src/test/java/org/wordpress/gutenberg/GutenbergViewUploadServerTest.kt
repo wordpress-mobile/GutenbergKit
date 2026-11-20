@@ -300,7 +300,7 @@ class GutenbergViewUploadServerTest {
             view.mediaProcessor = mock(MediaProcessor::class.java)
             startLoading()
             val server = uploadServerOf(view)
-            view.onEditorLoaded()
+            view.postBridgeMessage("onEditorLoaded")
             idle()
 
             killRenderer(view)

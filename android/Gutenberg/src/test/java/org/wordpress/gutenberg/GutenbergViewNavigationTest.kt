@@ -245,7 +245,7 @@ class GutenbergViewNavigationTest {
         val webView = siteView.editorWebView
         var unavailable = false
         siteView.setEditorDidBecomeUnavailable { unavailable = true }
-        siteView.onEditorLoaded()
+        siteView.postBridgeMessage("onEditorLoaded")
         idle()
 
         // A host's `loadUrl` never passes `shouldOverrideUrlLoading`.
@@ -273,7 +273,7 @@ class GutenbergViewNavigationTest {
                 closed += dialogType
             }
         })
-        siteView.onModalDialogOpened("block-inspector")
+        siteView.postBridgeMessage("onModalDialogOpened", "dialogType" to "block-inspector")
         idle()
 
         webView.webViewClient.onPageStarted(webView, "https://example.com/a-page/", null)
@@ -334,7 +334,7 @@ class GutenbergViewNavigationTest {
             webView.webViewClient.onPageStarted(webView, "https://example.com/a-page/", null)
             idle()
         }
-        siteView.onEditorLoaded()
+        siteView.postBridgeMessage("onEditorLoaded")
         idle()
         val callback = RecordingTitleAndContentCallback()
         siteView.getTitleAndContent("original content", callback)
