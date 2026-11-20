@@ -48,6 +48,30 @@ The `.wp-env.json` file at the project root configures the environment:
 -   A **media failure mu-plugin** (`wp-env/mu-plugins/gutenbergkit-media-failure.php`) can simulate a server-side image processing fatal on demand. Inactive by default — see [Simulating media upload failures](#simulating-media-upload-failures).
 -   **WP_DEBUG** and **WP_DEBUG_LOG** are enabled for development.
 
+WordPress core and both plugins are **pinned to explicit versions**. wp-env
+downloads whatever the URL resolves to, so unpinned URLs mean every CI run
+installs whatever shipped that day — and a third-party release can turn every
+open PR red without a line of code changing. That has happened: a Jetpack
+release began requiring `window.wp.theme`, and until #614 exposed it, no
+Jetpack block registered and the third-party block E2E tests failed on every
+branch that predated the fix.
+
+Pinning trades that for a manual bump. Nothing watches these versions —
+Dependabot does not read `.wp-env.json` — so raise them deliberately, in their
+own PR, where a failure is attributable to the upgrade rather than to whatever
+else is in flight:
+
+```json
+"core": "https://wordpress.org/wordpress-<version>.zip",
+"plugins": [
+    "https://downloads.wordpress.org/plugin/gutenberg.<version>.zip",
+    "https://downloads.wordpress.org/plugin/jetpack.<version>.zip"
+]
+```
+
+Bumping requires `make wp-env-start RESET=1`, since an existing environment
+keeps the version it was created with.
+
 ### Credential Provisioning
 
 The `bin/wp-env-setup.sh` script runs automatically after `wp-env start`:
