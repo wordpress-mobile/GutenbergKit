@@ -4,6 +4,8 @@ Sometimes there are problems with dependencies that can be solved by patching th
 
 Existing patches should be described and justified here.
 
+`e2e/dependency-patches.spec.js` tests the behavior each patch provides, since a patch can apply cleanly to a new version yet stop having an effect. Add a test there with each new patch, unless an existing test or the build already fails without it.
+
 ## Patches
 
 ### `@wordpress/block-editor`
