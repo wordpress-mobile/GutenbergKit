@@ -107,7 +107,7 @@ class AuthenticationManager {
             let client = WPComApiClient(authentication: .bearer(token: token))
             guard
                 let site = try? await client.sites.getSite(wpComSiteIdentifier: .slug(value: host)).data,
-                site.capabilities.hasCap(capability: .editPosts)
+                site.capabilities?.hasCap(capability: .editPosts) == true
             else {
                 continue
             }

@@ -1,6 +1,7 @@
 import Foundation
 import GutenbergKit
 import WordPressAPI
+import WordPressApiCache
 
 /// Opens a site's posts through wordpress-rs's `PostEditorService`, which reads the post, records
 /// every change in its working copy on the device, and sends the editor's requests for it.

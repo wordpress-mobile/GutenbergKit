@@ -15,6 +15,7 @@
 		246852562EAABB7800ED1F09 /* WordPressAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 0C4F59A12BEFF4980028BD96 /* WordPressAPI */; };
 		2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852682EAACCA100ED1F09 /* AuthenticationManager.swift */; };
 		2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */; };
+		DD0000012F00000000000002 /* PostEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000012F00000000000001 /* PostEditing.swift */; };
 		2FCF7A593017EC80008F5560 /* DemoAppLocale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FCF7A503017EC80008F5560 /* DemoAppLocale.swift */; };
 		BB0000012F11000000000001 /* GutenbergKitHTTP in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000012F11000000000002 /* GutenbergKitHTTP */; };
 /* End PBXBuildFile section */
@@ -37,6 +38,7 @@
 		0CE8E7892C339B0600B9DC67 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		246852682EAACCA100ED1F09 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
 		246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationStorage.swift; sourceTree = "<group>"; };
+		DD0000012F00000000000001 /* PostEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostEditing.swift; sourceTree = "<group>"; };
 		2FCF7A503017EC80008F5560 /* DemoAppLocale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAppLocale.swift; sourceTree = "<group>"; };
 		AA0000012F00000000000001 /* GutenbergUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GutenbergUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -128,6 +130,7 @@
 				246852682EAACCA100ED1F09 /* AuthenticationManager.swift */,
 				2FCF7A503017EC80008F5560 /* DemoAppLocale.swift */,
 				246852692EAACCA100ED1F09 /* ConfigurationStorage.swift */,
+				DD0000012F00000000000001 /* PostEditing.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -277,6 +280,7 @@
 				2468526B2EAACCA100ED1F09 /* AuthenticationManager.swift in Sources */,
 				2FCF7A593017EC80008F5560 /* DemoAppLocale.swift in Sources */,
 				2468526C2EAACCA100ED1F09 /* ConfigurationStorage.swift in Sources */,
+				DD0000012F00000000000002 /* PostEditing.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
