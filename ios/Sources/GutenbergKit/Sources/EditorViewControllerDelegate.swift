@@ -55,6 +55,14 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// Read the post with ``EditorViewController/currentPost()``.
     func editorDidChangePost(_ viewController: EditorViewController)
 
+    /// The editor's saved version of the post changed: what the editor believes the server has.
+    /// Saving the post and reading it change it, and so can anything else in the editor that
+    /// takes in a copy of the post.
+    ///
+    /// - Parameter change: A JSON object: `modified_gmt`, the saved version's modified date, and
+    ///   `fields`, the fields that changed in it.
+    func editor(_ viewController: EditorViewController, didChangeSavedPost change: Data)
+
     /// Notifies the client about new history state.
     func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState)
 
@@ -126,6 +134,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
 
 extension EditorViewControllerDelegate {
     public func editorDidChangePost(_ viewController: EditorViewController) {}
+    public func editor(_ viewController: EditorViewController, didChangeSavedPost change: Data) {}
     public func editor(_ viewController: EditorViewController, didFailToLoad error: Error) {}
     public func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability) {}
 }

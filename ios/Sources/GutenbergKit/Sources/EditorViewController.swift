@@ -717,6 +717,14 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         return success
     }
 
+    /// Gives the editor a newer version of the post from the server, as its saved version. The
+    /// unsaved edits stay over it.
+    ///
+    /// - Parameter post: The post as a JSON object in the REST API's edit shape.
+    public func setSavedPost(_ post: Data) {
+        evaluate("editor.setSavedPost(\(String(decoding: post, as: UTF8.self)));")
+    }
+
     /// Gives the editor the ID the server gave a new post, once the host has created it there.
     ///
     /// The editor keeps the post's unsaved edits and switches to the ID in place. A reload, such
@@ -1043,6 +1051,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didUpdateContentWithState: state)
             case .onPostChanged:
                 delegate?.editorDidChangePost(self)
+            case .onSavedPostChanged:
+                let change = try JSONSerialization.data(withJSONObject: message.body ?? [:])
+                delegate?.editor(self, didChangeSavedPost: change)
             case .onEditorHistoryChanged:
                 let body = try message.decode(EditorJSMessage.DidUpdateEditorHistoryBody.self)
                 self.state.hasUndo = body.hasUndo

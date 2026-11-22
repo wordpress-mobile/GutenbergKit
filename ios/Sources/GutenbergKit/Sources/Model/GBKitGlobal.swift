@@ -119,6 +119,10 @@ public struct GBKitGlobal: Sendable, Codable {
 
     let preloadData: JSON?
 
+    /// Changes the host has to the post that the server doesn't, which the editor opens with as
+    /// unsaved edits.
+    let postEdits: JSON?
+
     /// Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading.
     let editorAssets: JSON?
 
@@ -177,6 +181,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.hasPostRequestHandler = hasPostRequestHandler
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
+        self.postEdits = try dependencies.postEdits.map { try JSON($0) }
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)
     }
 
