@@ -289,6 +289,26 @@ private struct _EditorView: UIViewControllerRepresentable {
             }
         }
 
+        func editor(_ viewController: EditorViewController, didChangeSavedPost change: Data) {
+            guard let postEditorSession else { return }
+            // wordpress-rs checks the editor's saved version against what it knows the server
+            // has, and has the newer version when the editor's is older.
+            Task {
+                do {
+                    switch try await postEditorSession.recordSavedPostChange(change: change) {
+                    case .inSync:
+                        break
+                    case .newer(let savedPost):
+                        viewController.setSavedPost(savedPost)
+                    case .mismatch(let fields):
+                        Logger.demo.error("The editor's saved version differs from the server's in \(fields)")
+                    }
+                } catch {
+                    Logger.demo.error("Failed to check the saved post: \(String(describing: error))")
+                }
+            }
+        }
+
         // MARK: - EditorViewControllerDelegate
 
         func editorDidLoad(_ viewContoller: EditorViewController) {
@@ -402,7 +422,10 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         func editorDidRequestLatestContent(_ controller: EditorViewController) -> (title: String, content: String)? {
-            viewModel.latestContent.map { ($0.title, $0.content) }
+            // A post open through wordpress-rs starts from its saved version and the working
+            // copy's edits, not from content laid over the saved version.
+            guard postEditorSession == nil else { return nil }
+            return viewModel.latestContent.map { ($0.title, $0.content) }
         }
 
         // MARK: - MediaProcessor

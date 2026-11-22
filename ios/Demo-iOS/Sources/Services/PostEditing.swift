@@ -51,15 +51,32 @@ final class SessionPostRequestHandler: EditorPostRequestHandler {
     }
 }
 
+/// What the editor opens a post with: the server's version as its saved version, with the raw
+/// title, content and status the editor's configuration takes, and the working copy's changes
+/// as edits.
+struct OpenedPost {
+    let savedPost: Data
+    let title: String
+    let content: String
+    let status: String?
+    let edits: Data
+}
+
 extension PostEditorSession {
-    /// The post the editor opens with, and its raw title, content and status for the editor's
-    /// configuration.
-    func editorPostWithFields() throws -> (post: Data, title: String, content: String, status: String?) {
-        let post = try editorPost()
-        let object = try JSONSerialization.jsonObject(with: post) as? [String: Any] ?? [:]
+    /// The post as the editor opens it. `nil` for a post that isn't on the server yet.
+    func openedPost() throws -> OpenedPost? {
+        let editorPost = try editorPost()
+        guard let savedPost = editorPost.savedPost else { return nil }
+        let object = try JSONSerialization.jsonObject(with: savedPost) as? [String: Any] ?? [:]
         func raw(_ key: String) -> String {
             (object[key] as? [String: Any])?["raw"] as? String ?? ""
         }
-        return (post, raw("title"), raw("content"), object["status"] as? String)
+        return OpenedPost(
+            savedPost: savedPost,
+            title: raw("title"),
+            content: raw("content"),
+            status: object["status"] as? String,
+            edits: editorPost.edits
+        )
     }
 }

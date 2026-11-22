@@ -123,18 +123,22 @@ struct PostsListView: View {
     private func openPost(_ postID: Int64, through postEditing: PostEditing) async {
         do {
             let session = try await postEditing.service.openPost(postId: postID)
-            let editorPost = try session.editorPostWithFields()
+            guard let opened = try session.openedPost() else {
+                throw AppError(errorDescription: "Post \(postID) has no saved version to open.")
+            }
             let configuration = viewModel.editorConfiguration.toBuilder()
                 .setPostType(viewModel.postTypeDetails)
                 .setPostID(Int(postID))
-                .setTitle(editorPost.title)
-                .setContent(editorPost.content)
-                .apply(editorPost.status) { $0.setPostStatus($1) }
+                .setTitle(opened.title)
+                .setContent(opened.content)
+                .apply(opened.status) { $0.setPostStatus($1) }
                 .build()
 
             navigation.present(RunnableEditor(
                 configuration: configuration,
-                dependencies: viewModel.editorDependencies?.withPost(id: Int(postID), post: editorPost.post),
+                dependencies: viewModel.editorDependencies?
+                    .withPost(id: Int(postID), post: opened.savedPost)
+                    .withPostEdits(opened.edits),
                 apiClient: viewModel.client,
                 postEditorSession: session
             ))
@@ -149,6 +153,7 @@ struct PostsListView: View {
         guard let postEditing = viewModel.postEditing else { return }
         do {
             let session = try postEditing.service.openNewPost()
+            let edits = try session.editorPost().edits
             let configuration = viewModel.editorConfiguration.toBuilder()
                 .setPostType(viewModel.postTypeDetails)
                 .setPostID(nil)
@@ -158,7 +163,7 @@ struct PostsListView: View {
 
             navigation.present(RunnableEditor(
                 configuration: configuration,
-                dependencies: viewModel.editorDependencies,
+                dependencies: viewModel.editorDependencies?.withPostEdits(edits),
                 apiClient: viewModel.client,
                 postEditorSession: session
             ))
