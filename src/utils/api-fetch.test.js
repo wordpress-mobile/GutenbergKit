@@ -18,6 +18,7 @@ import {
 	withEditedPostType,
 	withRateLimitRetry,
 } from './api-fetch';
+import { adoptPostId } from './adopt-post-id';
 import * as bridge from './bridge';
 import * as logger from './logger';
 
@@ -30,6 +31,7 @@ vi.mock( './bridge', async ( importOriginal ) => {
 	};
 } );
 vi.mock( './logger' );
+vi.mock( './adopt-post-id', () => ( { adoptPostId: vi.fn() } ) );
 // Loading the real core-data store in vitest trips on its ESM dependencies.
 vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
 vi.mock( '@wordpress/data', () => ( { select: vi.fn() } ) );
@@ -404,21 +406,58 @@ describe( 'api-fetch credentials handling', () => {
 			expect( logger.error ).toHaveBeenCalled();
 		} );
 
-		it( "refuses saving a post that isn't on the server yet", async () => {
-			bridge.getGBKit.mockReturnValue( {
-				...gbkit,
-				post: { ...gbkit.post, id: -1 },
+		describe( "saving a post that isn't on the server yet", () => {
+			beforeEach( () => {
+				bridge.getGBKit.mockReturnValue( {
+					...gbkit,
+					post: { ...gbkit.post, id: -1 },
+				} );
 			} );
 
-			await expect(
-				postRequestMiddleware(
-					{ path: '/wp/v2/posts/-1', method: 'PUT', data: {} },
-					vi.fn()
-				)
-			).rejects.toMatchObject( {
-				code: 'gutenberg_kit_post_not_created',
+			it( "switches the editor to the created post's ID before resolving", async () => {
+				answer( 201, { id: 123, title: { raw: 'New' } } );
+				adoptPostId.mockImplementation( () => {
+					expect( bridge.performPostRequest ).toHaveBeenCalled();
+				} );
+
+				await expect(
+					postRequestMiddleware(
+						{ path: '/wp/v2/posts/-1', method: 'PUT', data: {} },
+						vi.fn()
+					)
+				).resolves.toMatchObject( { id: 123 } );
+				expect( adoptPostId ).toHaveBeenCalledWith( 123 );
 			} );
-			expect( bridge.performPostRequest ).not.toHaveBeenCalled();
+
+			it( 'keeps the ID when the save fails', async () => {
+				answer( 500, {
+					code: 'internal_server_error',
+					message: 'Error',
+				} );
+
+				await expect(
+					postRequestMiddleware(
+						{ path: '/wp/v2/posts/-1', method: 'PUT', data: {} },
+						vi.fn()
+					)
+				).rejects.toMatchObject( { code: 'internal_server_error' } );
+				expect( adoptPostId ).not.toHaveBeenCalled();
+			} );
+
+			it( 'keeps the ID for reads', async () => {
+				answer( 404, {
+					code: 'rest_post_invalid_id',
+					message: 'Invalid',
+				} );
+
+				await expect(
+					postRequestMiddleware(
+						{ path: '/wp/v2/posts/-1' },
+						vi.fn()
+					)
+				).rejects.toMatchObject( { code: 'rest_post_invalid_id' } );
+				expect( adoptPostId ).not.toHaveBeenCalled();
+			} );
 		} );
 
 		it( 'lets requests for other paths through', async () => {

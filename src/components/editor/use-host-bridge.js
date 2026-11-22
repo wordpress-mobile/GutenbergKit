@@ -6,13 +6,13 @@ import { parse, serialize, getBlockType } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { insert, create, toHTMLString } from '@wordpress/rich-text';
 import { warn } from '../../utils/logger';
+import { adoptPostId } from '../../utils/adopt-post-id';
 
 window.editor = window.editor || {};
 
 export function useHostBridge( post, editorRef, markBridgeReady ) {
-	const { editEntityRecord, receiveEntityRecords, finishResolution } =
-		useDispatch( coreStore );
-	const { undo, redo, switchEditorMode, savePost, setEditedPost } =
+	const { editEntityRecord } = useDispatch( coreStore );
+	const { undo, redo, switchEditorMode, savePost } =
 		useDispatch( editorStore );
 	const {
 		getEditedPostAttribute,
@@ -21,17 +21,12 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		getCurrentPostType,
 		didPostSaveRequestFail,
 	} = useSelect( editorStore );
-	const {
-		getEntityRecord,
-		getRawEntityRecord,
-		getEntityRecordEdits,
-		getEntityRecordNonTransientEdits,
-	} = useSelect( coreStore );
+	const { getRawEntityRecord, getEntityRecordNonTransientEdits } =
+		useSelect( coreStore );
 	const { updateBlock, selectionChange } = useDispatch( blockEditorStore );
 	const {
 		getSelectedBlockClientId,
 		getBlock,
-		getBlocks,
 		getSelectionStart,
 		getSelectionEnd,
 	} = useSelect( blockEditorStore );
@@ -130,34 +125,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 
 		// Switches the editor to the post's ID on the server, once the host has
 		// created a new post there, keeping its unsaved edits.
-		window.editor.setPostId = ( newId ) => {
-			const { type, id } = getPostKey();
-			if ( newId === id ) {
-				return;
-			}
-
-			const edits = getEntityRecordEdits( 'postType', type, id ) ?? {};
-			receiveEntityRecords( 'postType', type, {
-				...getEntityRecord( 'postType', type, id ),
-				id: newId,
-			} );
-			finishResolution( 'getEntityRecord', [ 'postType', type, newId ] );
-			// GBK's request middlewares read the post's ID from here.
-			window.GBKit.post = { ...window.GBKit.post, id: newId };
-			// Without a `blocks` edit, every block remounts and the next
-			// keystrokes are lost.
-			editEntityRecord(
-				'postType',
-				type,
-				newId,
-				{
-					...edits,
-					blocks: edits.blocks ?? getBlocks(),
-				},
-				{ undoIgnore: true }
-			);
-			setEditedPost( type, newId );
-		};
+		window.editor.setPostId = adoptPostId;
 
 		window.editor.undo = () => {
 			// Do not return the `Promise` return value to avoid host errors.
@@ -280,21 +248,14 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 	}, [
 		editorRef,
 		editContent,
-		editEntityRecord,
 		getPostKey,
 		markBridgeReady,
 		getEditedPostAttribute,
 		getEditedPostContent,
 		getRawEntityRecord,
-		getEntityRecord,
-		getEntityRecordEdits,
 		getEntityRecordNonTransientEdits,
-		receiveEntityRecords,
-		finishResolution,
 		savePost,
-		setEditedPost,
 		didPostSaveRequestFail,
-		getBlocks,
 		redo,
 		switchEditorMode,
 		undo,

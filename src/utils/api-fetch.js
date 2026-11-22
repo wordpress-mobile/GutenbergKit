@@ -279,8 +279,9 @@ function isForSite( options ) {
  * response, which is parsed as if the editor had sent the request itself. A
  * request the host couldn't get an answer to fails as a failed `fetch` does.
  *
- * A post the server doesn't have yet can't be saved: the host creates it and
- * gives the editor its ID first (`window.editor.setPostId()`).
+ * Saving a post the server doesn't have yet creates it there. Gutenberg stores
+ * the post under its ID, so the editor switches to the new ID before Gutenberg
+ * sees the response, which it then stores under the same ID.
  *
  * Exported for testing only.
  *
@@ -297,16 +298,8 @@ export async function postRequestMiddleware( options, next ) {
 
 	const method = ( options.method ?? 'GET' ).toUpperCase();
 	const { id } = getPostReference( getGBKit().post );
-
-	if ( ! SAFE_METHODS.includes( method ) && id === POST_FALLBACKS.id ) {
-		warn(
-			`Refused ${ method } ${ options.path }: the post isn't on the server yet`
-		);
-		throw {
-			code: 'gutenberg_kit_post_not_created',
-			message: "The post isn't on the server yet.",
-		};
-	}
+	const createsPost =
+		! SAFE_METHODS.includes( method ) && id === POST_FALLBACKS.id;
 
 	let response;
 	try {
@@ -321,6 +314,10 @@ export async function postRequestMiddleware( options, next ) {
 			hostError
 		);
 		throw fetchFailure();
+	}
+
+	if ( createsPost ) {
+		await adoptCreatedPost( response );
 	}
 
 	return parseHostResponse( response, options );
@@ -370,6 +367,34 @@ function blockPostWritesMiddleware( options, next ) {
 		code: 'gutenberg_kit_post_write_blocked',
 		message: 'The host app saves the post.',
 	} );
+}
+
+/**
+ * Switches the editor to the ID of the post a save created, if the save
+ * succeeded.
+ *
+ * The editor's stores are imported here, when a post is created, so that this
+ * module doesn't load them.
+ *
+ * @param {import('./bridge').PostResponse} hostResponse The server's response, from the host.
+ * @return {Promise<void>} Resolves once the editor has switched, or at once.
+ */
+async function adoptCreatedPost( { status, body } ) {
+	if ( status < 200 || status >= 300 ) {
+		return;
+	}
+
+	let created;
+	try {
+		created = JSON.parse( body );
+	} catch {
+		return;
+	}
+
+	if ( Number.isInteger( created?.id ) && created.id > 0 ) {
+		const { adoptPostId } = await import( './adopt-post-id' );
+		adoptPostId( created.id );
+	}
 }
 
 /**
