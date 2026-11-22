@@ -10,23 +10,47 @@ import { warn } from '../../utils/logger';
 window.editor = window.editor || {};
 
 export function useHostBridge( post, editorRef, markBridgeReady ) {
-	const { editEntityRecord } = useDispatch( coreStore );
-	const { undo, redo, switchEditorMode } = useDispatch( editorStore );
-	const { getEditedPostAttribute, getEditedPostContent } =
-		useSelect( editorStore );
+	const { editEntityRecord, receiveEntityRecords, finishResolution } =
+		useDispatch( coreStore );
+	const { undo, redo, switchEditorMode, savePost, setEditedPost } =
+		useDispatch( editorStore );
+	const {
+		getEditedPostAttribute,
+		getEditedPostContent,
+		getCurrentPostId,
+		getCurrentPostType,
+		didPostSaveRequestFail,
+	} = useSelect( editorStore );
+	const {
+		getEntityRecord,
+		getRawEntityRecord,
+		getEntityRecordEdits,
+		getEntityRecordNonTransientEdits,
+	} = useSelect( coreStore );
 	const { updateBlock, selectionChange } = useDispatch( blockEditorStore );
 	const {
 		getSelectedBlockClientId,
 		getBlock,
+		getBlocks,
 		getSelectionStart,
 		getSelectionEnd,
 	} = useSelect( blockEditorStore );
 
+	// The editor's post, which `setPostId` can change after the editor opens.
+	const getPostKey = useCallback(
+		() => ( {
+			type: getCurrentPostType() ?? post.type,
+			id: getCurrentPostId() ?? post.id,
+		} ),
+		[ getCurrentPostId, getCurrentPostType, post.id, post.type ]
+	);
+
 	const editContent = useCallback(
 		( edits ) => {
-			editEntityRecord( 'postType', post.type, post.id, edits );
+			const { type, id } = getPostKey();
+			editEntityRecord( 'postType', type, id, edits );
 		},
-		[ editEntityRecord, post.id, post.type ]
+		[ editEntityRecord, getPostKey ]
 	);
 
 	const postTitleRef = useRef( normalizeAttribute( post.title ) );
@@ -78,6 +102,61 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			}
 
 			return { title, content, changed };
+		};
+
+		// The whole post as the editor has it, as JSON in the REST API's edit
+		// shape: the persisted record with the unsaved edits over it, as
+		// `savePost()` sends them.
+		window.editor.getCurrentPost = () => {
+			const { type, id } = getPostKey();
+			const {
+				// Identifiers GBK seeds a post the host didn't preload with.
+				restBase,
+				restNamespace,
+				...currentPost
+			} = {
+				...getRawEntityRecord( 'postType', type, id ),
+				...getEntityRecordNonTransientEdits( 'postType', type, id ),
+				content: getEditedPostContent(),
+			};
+			return JSON.stringify( currentPost );
+		};
+
+		// Runs Gutenberg's save, as the editor's own save button would.
+		window.editor.savePost = async () => {
+			await savePost();
+			return JSON.stringify( { success: ! didPostSaveRequestFail() } );
+		};
+
+		// Switches the editor to the post's ID on the server, once the host has
+		// created a new post there, keeping its unsaved edits.
+		window.editor.setPostId = ( newId ) => {
+			const { type, id } = getPostKey();
+			if ( newId === id ) {
+				return;
+			}
+
+			const edits = getEntityRecordEdits( 'postType', type, id ) ?? {};
+			receiveEntityRecords( 'postType', type, {
+				...getEntityRecord( 'postType', type, id ),
+				id: newId,
+			} );
+			finishResolution( 'getEntityRecord', [ 'postType', type, newId ] );
+			// GBK's request middlewares read the post's ID from here.
+			window.GBKit.post = { ...window.GBKit.post, id: newId };
+			// Without a `blocks` edit, every block remounts and the next
+			// keystrokes are lost.
+			editEntityRecord(
+				'postType',
+				type,
+				newId,
+				{
+					...edits,
+					blocks: edits.blocks ?? getBlocks(),
+				},
+				{ undoIgnore: true }
+			);
+			setEditedPost( type, newId );
 		};
 
 		window.editor.undo = () => {
@@ -188,6 +267,9 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			delete window.editor.setTitle;
 			delete window.editor.getContent;
 			delete window.editor.getTitleAndContent;
+			delete window.editor.getCurrentPost;
+			delete window.editor.savePost;
+			delete window.editor.setPostId;
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
@@ -198,9 +280,21 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 	}, [
 		editorRef,
 		editContent,
+		editEntityRecord,
+		getPostKey,
 		markBridgeReady,
 		getEditedPostAttribute,
 		getEditedPostContent,
+		getRawEntityRecord,
+		getEntityRecord,
+		getEntityRecordEdits,
+		getEntityRecordNonTransientEdits,
+		receiveEntityRecords,
+		finishResolution,
+		savePost,
+		setEditedPost,
+		didPostSaveRequestFail,
+		getBlocks,
 		redo,
 		switchEditorMode,
 		undo,

@@ -5,6 +5,7 @@ import VisualEditor from '../visual-editor';
 import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useSyncSaveAvailability } from './use-sync-save-availability';
+import { useSyncPostChanges } from './use-sync-post-changes';
 import { useHostBridge } from './use-host-bridge';
 import { useEditorReady } from './use-editor-ready';
 import { useHostExceptionLogging } from './use-host-exception-logging';
@@ -35,6 +36,7 @@ export default function Editor( { post, children, hideTitle } ) {
 	useSyncFeaturedImage();
 	useSyncHistoryControls();
 	useSyncSaveAvailability();
+	useSyncPostChanges();
 	useHostExceptionLogging();
 	useMediaUpload();
 	useDevModeNotice();
@@ -47,13 +49,17 @@ export default function Editor( { post, children, hideTitle } ) {
 				__unstableIsEditorReady,
 				getEditorSettings,
 				getEditorMode,
+				getCurrentPostId,
+				getCurrentPostType,
 			} = select( editorStore );
 			const editorSettings = getEditorSettings();
 			const { getEntityRecord } = select( coreStore );
+			// The editor's post, which `window.editor.setPostId()` can change
+			// after the editor opens.
 			const _currentPost = getEntityRecord(
 				'postType',
-				post.type,
-				post.id
+				getCurrentPostType() ?? post.type,
+				getCurrentPostId() ?? post.id
 			);
 
 			return {
