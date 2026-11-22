@@ -43,9 +43,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import org.json.JSONTokener
+import kotlin.coroutines.resume
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
@@ -225,6 +228,24 @@ class GutenbergView : FrameLayout {
             )
             field = value
         }
+
+    /**
+     * Sends the editor's requests for the post being edited, saves included, in place of the
+     * editor. See [EditorPostRequestHandler].
+     *
+     * Same lifecycle rules as [mediaProcessor]: set it before the editor loads.
+     */
+    var postRequestHandler: EditorPostRequestHandler? = null
+        set(value) {
+            check(!hasStartedLoading) { lateMediaAssignmentMessage("postRequestHandler") }
+            field = value
+        }
+
+    /** Notified when something in the post changes. See [EditorPostChangeListener]. */
+    var postChangeListener: EditorPostChangeListener? = null
+
+    /** [savePost] calls waiting for the editor's answer, by ID. */
+    private val pendingPostSaves = ConcurrentHashMap<String, (Boolean) -> Unit>()
 
     private fun lateMediaAssignmentMessage(name: String) =
         "$name must be set before the editor loads (e.g. right after construction). " +
@@ -933,6 +954,7 @@ class GutenbergView : FrameLayout {
             hasStartedLoading = true
             val processor = mediaProcessor
             val uploader = mediaUploader
+            val hasPostRequestHandler = postRequestHandler != null
             val runningServer = uploadServer
             var startedServer: MediaUploadServer? = null
             try {
@@ -943,7 +965,8 @@ class GutenbergView : FrameLayout {
                         configuration,
                         dependencies,
                         nativeUploadPort = server?.port,
-                        nativeUploadToken = server?.token
+                        nativeUploadToken = server?.token,
+                        hasPostRequestHandler = hasPostRequestHandler
                     ).toJsonString()
                 }
             } catch (e: CancellationException) {
@@ -1296,6 +1319,59 @@ class GutenbergView : FrameLayout {
         }
     }
 
+    /**
+     * The whole post as the editor has it now, as a JSON object in the REST API's edit shape:
+     * the post the editor opened or last saved, with the unsaved edits over it.
+     *
+     * @throws EditorNotReadyException when the editor hasn't loaded.
+     */
+    suspend fun currentPost(): ByteArray {
+        if (!isEditorLoaded) throw EditorNotReadyException()
+        val result = withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { continuation ->
+                webView.evaluateJavascript("editor.getCurrentPost();") { continuation.resume(it) }
+            }
+        }
+        // `evaluateJavascript` gives the returned string as a JSON string literal.
+        val post = JSONTokener(result).nextValue() as? String
+            ?: throw JSONException("The editor's post isn't a string: $result")
+        return post.toByteArray(Charsets.UTF_8)
+    }
+
+    /**
+     * Saves the post the way the editor's own save does, running Gutenberg's `savePost()` and
+     * the plugins' save hooks. With a [postRequestHandler], the save reaches the server through
+     * it.
+     *
+     * @return Whether the save request succeeded.
+     * @throws EditorNotReadyException when the editor hasn't loaded.
+     */
+    suspend fun savePost(): Boolean {
+        if (!isEditorLoaded) throw EditorNotReadyException()
+        val id = java.util.UUID.randomUUID().toString()
+        return withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { continuation ->
+                pendingPostSaves[id] = { success -> continuation.resume(success) }
+                continuation.invokeOnCancellation { pendingPostSaves.remove(id) }
+                val quotedId = JSONObject.quote(id)
+                webView.evaluateJavascript(
+                    "editor.savePost().then(" +
+                        "(result) => editorDelegate.onPostSaveFinished($quotedId, result), " +
+                        "() => editorDelegate.onPostSaveFinished($quotedId, '{\"success\":false}'));",
+                    null
+                )
+            }
+        }
+    }
+
+    /**
+     * Gives the editor the ID the server gave a new post, once the host has created it there.
+     * The editor keeps the post's unsaved edits and switches to the ID in place.
+     */
+    fun setPostId(postId: Long) {
+        evaluateIfLoaded("editor.setPostId($postId);")
+    }
+
     fun undo() {
         evaluateIfLoaded("editor.undo();")
     }
@@ -1480,6 +1556,50 @@ class GutenbergView : FrameLayout {
         webView = createWebView()
         addView(webView, 0)
         isWebViewBlank = true
+    }
+
+    @JavascriptInterface
+    fun onPostChanged() {
+        handler.post {
+            postChangeListener?.onPostChanged()
+        }
+    }
+
+    /**
+     * The page's request for the post, which the [postRequestHandler] sends. The page waits
+     * for `editor.resolvePostRequest` or `editor.rejectPostRequest` with [requestId].
+     */
+    @JavascriptInterface
+    fun performPostRequest(requestId: String, request: String) {
+        val postRequestHandler = postRequestHandler
+        coroutineScope.launch(Dispatchers.Main) {
+            val quotedId = JSONObject.quote(requestId)
+            val script = try {
+                val handler = postRequestHandler ?: error("The host has no handler for post requests")
+                val response = handler.perform(parsePostRequest(request))
+                val responseJson = JSONObject()
+                    .put("status", response.status)
+                    .put("headers", JSONObject(response.headers))
+                    .put("body", String(response.body, Charsets.UTF_8))
+                "editor.resolvePostRequest($quotedId, $responseJson);"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+                Log.e(TAG, "The post request failed", e)
+                "editor.rejectPostRequest($quotedId, ${JSONObject.quote(e.message ?: e.toString())});"
+            }
+            webView.evaluateJavascript(script, null)
+        }
+    }
+
+    @JavascriptInterface
+    fun onPostSaveFinished(saveId: String, result: String) {
+        val success = try {
+            JSONObject(result).optBoolean("success")
+        } catch (_: JSONException) {
+            false
+        }
+        pendingPostSaves.remove(saveId)?.invoke(success)
     }
 
     @JavascriptInterface
@@ -1950,6 +2070,16 @@ class GutenbergView : FrameLayout {
  * Reported when the editor is read before it has loaded, or after the view is
  * detached.
  */
+/** The request in a `performPostRequest` call from the editor's page. */
+internal fun parsePostRequest(json: String): EditorPostRequest {
+    val request = JSONObject(json)
+    return EditorPostRequest(
+        method = request.getString("method"),
+        path = request.getString("path"),
+        body = if (request.isNull("body")) null else request.getString("body").toByteArray(Charsets.UTF_8)
+    )
+}
+
 class EditorNotReadyException : IllegalStateException(
     "The editor is not ready. Wait for onEditorAvailable before calling bridge methods."
 )

@@ -64,6 +64,8 @@ data class GBKitGlobal(
     val nativeUploadPort: Int? = null,
     /** Per-session auth token for requests to the local upload server. */
     val nativeUploadToken: String? = null,
+    /** Whether the host sends the requests for the post being edited, through `performPostRequest`. */
+    val hasPostRequestHandler: Boolean = false,
     /** The raw editor settings JSON from the WordPress REST API. */
     val editorSettings: JsonElement?,
     /** Pre-fetched API responses JSON for faster editor initialization. */
@@ -102,12 +104,14 @@ data class GBKitGlobal(
          * @param dependencies The pre-fetched editor dependencies.
          * @param nativeUploadPort Port of the local upload server, or null if not running.
          * @param nativeUploadToken Auth token for the local upload server, or null if not running.
+         * @param hasPostRequestHandler Whether the host sends the requests for the post being edited.
          */
         fun fromConfiguration(
             configuration: EditorConfiguration,
             dependencies: EditorDependencies?,
             nativeUploadPort: Int? = null,
-            nativeUploadToken: String? = null
+            nativeUploadToken: String? = null,
+            hasPostRequestHandler: Boolean = false
         ): GBKitGlobal {
             return GBKitGlobal(
                 siteURL = configuration.siteURL.ifEmpty { null },
@@ -133,6 +137,7 @@ data class GBKitGlobal(
                 enableNetworkLogging = configuration.enableNetworkLogging,
                 nativeUploadPort = nativeUploadPort,
                 nativeUploadToken = nativeUploadToken,
+                hasPostRequestHandler = hasPostRequestHandler,
                 editorSettings = dependencies?.editorSettings?.jsonValue,
                 preloadData = dependencies?.preloadList?.build(),
                 editorAssets = dependencies?.assetBundle?.let { bundle ->
