@@ -22,7 +22,16 @@ data class EditorDependencies(
      *
      * This is `null` if preloading is disabled or no preload data is available.
      */
-    val preloadList: EditorPreloadList?
+    val preloadList: EditorPreloadList?,
+    /**
+     * Changes the host has to the post that the server doesn't, as a JSON object in the shape
+     * the REST API takes in a write, such as `{"excerpt": "Written offline"}`.
+     *
+     * The editor opens with them as unsaved edits over the post's saved version, outside the
+     * undo history. When the editor later takes in another copy of the post from the server,
+     * they stay.
+     */
+    val postEdits: String? = null
 ) {
     companion object {
         /** Empty dependencies for use when no pre-fetched data is available. */

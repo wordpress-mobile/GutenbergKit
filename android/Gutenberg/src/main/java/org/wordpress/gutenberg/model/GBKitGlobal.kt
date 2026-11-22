@@ -70,6 +70,8 @@ data class GBKitGlobal(
     val editorSettings: JsonElement?,
     /** Pre-fetched API responses JSON for faster editor initialization. */
     val preloadData: JsonElement? = null,
+    /** Changes the host has to the post that the server doesn't, which the editor opens with as unsaved edits. */
+    val postEdits: JsonElement? = null,
     /** Pre-fetched editor assets (scripts, styles, allowed block types) for plugin loading. */
     val editorAssets: JsonElement? = null
 ) {
@@ -140,6 +142,7 @@ data class GBKitGlobal(
                 hasPostRequestHandler = hasPostRequestHandler,
                 editorSettings = dependencies?.editorSettings?.jsonValue,
                 preloadData = dependencies?.preloadList?.build(),
+                postEdits = dependencies?.postEdits?.let { json.parseToJsonElement(it) },
                 editorAssets = dependencies?.assetBundle?.let { bundle ->
                     try {
                         json.encodeToJsonElement(bundle.getEditorRepresentation())

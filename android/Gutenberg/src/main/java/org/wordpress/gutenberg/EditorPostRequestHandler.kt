@@ -55,3 +55,16 @@ class EditorPostResponse(
 fun interface EditorPostChangeListener {
     fun onPostChanged()
 }
+
+/**
+ * Notified on the main thread when the editor's saved version of the post changes: what the
+ * editor believes the server has. Saving the post and reading it change it, and so can anything
+ * else in the editor that takes in a copy of the post.
+ */
+fun interface EditorSavedPostChangeListener {
+    /**
+     * @param change A JSON object: `modified_gmt`, the saved version's modified date, and
+     * `fields`, the fields that changed in it.
+     */
+    fun onSavedPostChanged(change: String)
+}

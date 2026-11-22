@@ -244,6 +244,9 @@ class GutenbergView : FrameLayout {
     /** Notified when something in the post changes. See [EditorPostChangeListener]. */
     var postChangeListener: EditorPostChangeListener? = null
 
+    /** Notified when the editor's saved version of the post changes. See [EditorSavedPostChangeListener]. */
+    var savedPostChangeListener: EditorSavedPostChangeListener? = null
+
     /** [savePost] calls waiting for the editor's answer, by ID. */
     private val pendingPostSaves = ConcurrentHashMap<String, (Boolean) -> Unit>()
 
@@ -1365,6 +1368,16 @@ class GutenbergView : FrameLayout {
     }
 
     /**
+     * Gives the editor a newer version of the post from the server, as its saved version. The
+     * unsaved edits stay over it.
+     *
+     * @param post The post as a JSON object in the REST API's edit shape.
+     */
+    fun setSavedPost(post: String) {
+        evaluateIfLoaded("editor.setSavedPost($post);")
+    }
+
+    /**
      * Gives the editor the ID the server gave a new post, once the host has created it there.
      * The editor keeps the post's unsaved edits and switches to the ID in place.
      */
@@ -1556,6 +1569,13 @@ class GutenbergView : FrameLayout {
         webView = createWebView()
         addView(webView, 0)
         isWebViewBlank = true
+    }
+
+    @JavascriptInterface
+    fun onSavedPostChanged(change: String) {
+        handler.post {
+            savedPostChangeListener?.onSavedPostChanged(change)
+        }
     }
 
     @JavascriptInterface
