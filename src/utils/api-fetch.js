@@ -3,7 +3,13 @@ import { store as coreStore } from '@wordpress/core-data';
 import { select } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
 import { isWithinAuthorizationScope } from './authorization-scope';
-import { getGBKit, getPostPath, getPostReference } from './bridge';
+import {
+	getGBKit,
+	getPostPath,
+	getPostReference,
+	performPostRequest,
+	POST_FALLBACKS,
+} from './bridge';
 import { CALLER_TOKEN_HEADER } from './fetch-relay';
 import { info, warn, error as logError } from './logger';
 import { ensureTrailingSlash, stripTrailingSlash } from './url';
@@ -59,7 +65,7 @@ export function configureApiFetch() {
 	apiFetch.use( corsMiddleware );
 	apiFetch.use( apiPathModifierMiddleware );
 	apiFetch.use( tokenAuthMiddleware );
-	apiFetch.use( blockPostWritesMiddleware );
+	apiFetch.use( postRequestMiddleware );
 	// `apiFetch.use` unshifts, so the last registration runs first. Core's media
 	// upload middleware is registered after the native one so that it runs
 	// before it, wrapping it: the native middleware handles an upload without
@@ -265,31 +271,59 @@ function isForSite( options ) {
 }
 
 /**
- * Middleware rejecting writes to the post being edited, including autosaves.
+ * Middleware sending the requests for the post being edited, and for the paths
+ * below it, to the host when the host handles them. Otherwise, writes to the
+ * post are rejected and reads go to the server.
  *
- * The host app saves the post, so a save from the editor, e.g. a plugin calling
- * `savePost()`, would race the host's. Rejecting it, rather than resolving an
- * empty response, keeps core from treating the post as saved and clearing its
- * edits.
+ * The host sends each request to the server and answers with the server's
+ * response, which is parsed as if the editor had sent the request itself. A
+ * request the host couldn't get an answer to fails as a failed `fetch` does.
+ *
+ * A post the server doesn't have yet can't be saved: the host creates it and
+ * gives the editor its ID first (`window.editor.setPostId()`).
+ *
+ * Exported for testing only.
  *
  * @type {APIFetchMiddleware}
- *
- * @todo Remove once the editor saves posts.
  */
-function blockPostWritesMiddleware( options, next ) {
-	const method = ( options.method ?? 'GET' ).toUpperCase();
-
-	if ( SAFE_METHODS.includes( method ) || ! isPostPath( options.path ) ) {
+export async function postRequestMiddleware( options, next ) {
+	if ( ! isPostPath( options.path ) ) {
 		return next( options );
 	}
 
-	warn(
-		`Blocked ${ method } ${ options.path }: the host app saves the post`
-	);
-	return Promise.reject( {
-		code: 'gutenberg_kit_post_write_blocked',
-		message: 'The host app saves the post.',
-	} );
+	if ( ! getGBKit().hasPostRequestHandler ) {
+		return blockPostWritesMiddleware( options, next );
+	}
+
+	const method = ( options.method ?? 'GET' ).toUpperCase();
+	const { id } = getPostReference( getGBKit().post );
+
+	if ( ! SAFE_METHODS.includes( method ) && id === POST_FALLBACKS.id ) {
+		warn(
+			`Refused ${ method } ${ options.path }: the post isn't on the server yet`
+		);
+		throw {
+			code: 'gutenberg_kit_post_not_created',
+			message: "The post isn't on the server yet.",
+		};
+	}
+
+	let response;
+	try {
+		response = await performPostRequest( {
+			method,
+			path: options.path,
+			body: requestBody( options ),
+		} );
+	} catch ( hostError ) {
+		logError(
+			`The host couldn't send ${ method } ${ options.path }`,
+			hostError
+		);
+		throw fetchFailure();
+	}
+
+	return parseHostResponse( response, options );
 }
 
 /**
@@ -310,6 +344,92 @@ function isPostPath( path ) {
 	const pathname = path.split( '?' )[ 0 ];
 
 	return pathname === postPath || pathname.startsWith( `${ postPath }/` );
+}
+
+/**
+ * Middleware rejecting writes to the post being edited, including autosaves.
+ *
+ * Without a request handler, the host app saves the post, so a save from the
+ * editor, e.g. a plugin calling `savePost()`, would race the host's. Rejecting
+ * it, rather than resolving an empty response, keeps core from treating the
+ * post as saved and clearing its edits.
+ *
+ * @type {APIFetchMiddleware}
+ */
+function blockPostWritesMiddleware( options, next ) {
+	const method = ( options.method ?? 'GET' ).toUpperCase();
+
+	if ( SAFE_METHODS.includes( method ) ) {
+		return next( options );
+	}
+
+	warn(
+		`Blocked ${ method } ${ options.path }: the host app saves the post`
+	);
+	return Promise.reject( {
+		code: 'gutenberg_kit_post_write_blocked',
+		message: 'The host app saves the post.',
+	} );
+}
+
+/**
+ * The JSON body of a request, as api-fetch would send it.
+ *
+ * @param {Object} options The api-fetch options.
+ * @return {?string} The body, or `null` when the request has none.
+ */
+function requestBody( options ) {
+	if ( options.data !== undefined ) {
+		return JSON.stringify( options.data );
+	}
+
+	return typeof options.body === 'string' ? options.body : null;
+}
+
+/**
+ * The error api-fetch's default handler rejects with when `fetch` fails.
+ *
+ * @return {{ code: string, message: string }} The error.
+ */
+function fetchFailure() {
+	if ( ! globalThis.navigator.onLine ) {
+		return {
+			code: 'offline_error',
+			message: __(
+				'Unable to connect. Please check your Internet connection.'
+			),
+		};
+	}
+
+	return {
+		code: 'fetch_error',
+		message: __( 'Could not get a valid response from the server.' ),
+	};
+}
+
+/**
+ * Turns the host's answer into what api-fetch resolves with: the parsed body, or
+ * the `Response` itself when the request asked for it with `parse: false`.
+ * Error statuses reject, as in api-fetch.
+ *
+ * @param {import('./bridge').PostResponse} hostResponse The server's response, from the host.
+ * @param {Object}                          options      The api-fetch options.
+ * @return {Promise<unknown>} The parsed body, or the response.
+ */
+function parseHostResponse( hostResponse, options ) {
+	const { status, headers = {}, body } = hostResponse;
+	// These statuses can't have a body, and `Response` refuses one.
+	const hasNoBody = [ 101, 204, 205, 304 ].includes( status );
+	const response = new Response( hasNoBody ? null : body ?? '', {
+		status,
+		headers,
+	} );
+
+	if ( options.parse === false ) {
+		return response.ok ? response : Promise.reject( response );
+	}
+
+	return parseResponse( response, response.ok );
 }
 
 /**
@@ -692,18 +812,7 @@ function rejectUnreachableUpload( connectionError, options ) {
 	// upload's would — not as a raw, code-less TypeError with an
 	// untranslated message. Same codes and strings as api-fetch, so the
 	// existing translations apply.
-	if ( ! globalThis.navigator.onLine ) {
-		throw {
-			code: 'offline_error',
-			message: __(
-				'Unable to connect. Please check your Internet connection.'
-			),
-		};
-	}
-	throw {
-		code: 'fetch_error',
-		message: __( 'Could not get a valid response from the server.' ),
-	};
+	throw fetchFailure();
 }
 
 /**
@@ -1096,14 +1205,15 @@ export function postTypesFallbackMiddleware( options, next ) {
 }
 
 /**
- * Middleware keeping the persisted title and content of the post being edited
- * in fetched copies of it.
+ * Middleware keeping the persisted fields of the post being edited in fetched
+ * copies of it.
  *
- * The post is seeded with the host's title and content, which may hold edits
- * not yet uploaded. Core-data stores a fetched copy over the seeded record,
- * e.g. from `getEntityRecord()` with a query or a list including the post, so
- * the server's values would replace the host's. Other fields, such as embeds,
- * are kept.
+ * The post is seeded with what the host passes in, which may hold edits not yet
+ * uploaded: the title and content, and the fields of the preloaded record.
+ * Core-data stores a fetched copy over the seeded record, e.g. from
+ * `getEntityRecord()` with a query or a list including the post, so the
+ * server's values would replace the host's. The fields the server sets, and
+ * the response's own keys, such as embeds, are kept.
  *
  * Exported for testing only.
  *
@@ -1186,7 +1296,7 @@ function getPersistedPost() {
 }
 
 /**
- * Applies the persisted title and content to copies of the post in a response.
+ * Applies the persisted fields to copies of the post in a response.
  *
  * @param {Object|Object[]} body      A record or list of records.
  * @param {Object}          persisted The post's persisted record.
@@ -1207,9 +1317,13 @@ function overlayPersistedPost( body, persisted ) {
 }
 
 /**
- * Applies the persisted title and content to a record of the post.
+ * Applies the persisted fields to a record of the post.
  *
- * Only raw values are replaced; rendered values stay the server's.
+ * Every field the record and the persisted record both have is replaced, except
+ * the ones the server sets, such as `modified`, and keys starting with `_`, such
+ * as `_embedded`, which describe the response. For fields with a raw value, such
+ * as the title, only the raw value is replaced; rendered values stay the
+ * server's.
  *
  * @param {Object} record    A record from the response.
  * @param {Object} persisted The post's persisted record.
@@ -1222,20 +1336,66 @@ function overlayRecord( record, persisted ) {
 
 	let result = record;
 
-	for ( const field of [ 'title', 'content' ] ) {
-		const raw = persisted[ field ]?.raw;
-		const value = record[ field ];
-
+	for ( const [ field, persistedValue ] of Object.entries( persisted ) ) {
 		if (
-			raw !== undefined &&
-			value?.raw !== undefined &&
-			value.raw !== raw
+			! ( field in record ) ||
+			field.startsWith( '_' ) ||
+			SERVER_POST_FIELDS.includes( field )
 		) {
-			result = { ...result, [ field ]: { ...value, raw } };
+			continue;
+		}
+
+		const value = record[ field ];
+		const raw = rawValue( persistedValue );
+		if ( hasRawValue( value ) && raw === undefined ) {
+			continue;
+		}
+		const overlaid = hasRawValue( value )
+			? { ...value, raw }
+			: persistedValue;
+
+		if ( JSON.stringify( overlaid ) !== JSON.stringify( value ) ) {
+			result = { ...result, [ field ]: overlaid };
 		}
 	}
 
 	return result;
+}
+
+/** The fields of a post the server sets, which fetched copies keep. */
+const SERVER_POST_FIELDS = [
+	'id',
+	'guid',
+	'link',
+	'modified',
+	'modified_gmt',
+	'date_gmt',
+	'type',
+	'permalink_template',
+	'generated_slug',
+];
+
+/**
+ * Whether a field's value is a `{ raw, rendered }` object.
+ *
+ * @param {unknown} value The value.
+ * @return {boolean} True when the value has a raw string.
+ */
+function hasRawValue( value ) {
+	return typeof value?.raw === 'string';
+}
+
+/**
+ * The raw value of a field, whether it's a `{ raw, rendered }` object or the
+ * raw value itself.
+ *
+ * @param {unknown} value The value.
+ * @return {unknown} The raw value.
+ */
+function rawValue( value ) {
+	return value !== null && typeof value === 'object' && 'raw' in value
+		? value.raw
+		: value;
 }
 
 /**

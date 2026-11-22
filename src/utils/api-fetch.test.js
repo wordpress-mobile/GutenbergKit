@@ -12,6 +12,7 @@ import { select } from '@wordpress/data';
 import {
 	configureApiFetch,
 	persistedPostOverlayMiddleware,
+	postRequestMiddleware,
 	postTypesFallbackMiddleware,
 	withCrossOriginRealMethod,
 	withEditedPostType,
@@ -25,6 +26,7 @@ vi.mock( './bridge', async ( importOriginal ) => {
 	return {
 		...actual,
 		getGBKit: vi.fn(),
+		performPostRequest: vi.fn(),
 	};
 } );
 vi.mock( './logger' );
@@ -305,6 +307,130 @@ describe( 'api-fetch credentials handling', () => {
 		} );
 	} );
 
+	describe( 'postRequestMiddleware', () => {
+		const gbkit = {
+			post: { id: 42, restBase: 'posts', restNamespace: 'wp/v2' },
+			hasPostRequestHandler: true,
+		};
+		const post = { id: 42, title: { raw: 'Saved' } };
+		const answer = ( status, body, headers = {} ) =>
+			bridge.performPostRequest.mockResolvedValue( {
+				status,
+				headers,
+				body: JSON.stringify( body ),
+			} );
+
+		beforeEach( () => {
+			bridge.getGBKit.mockReturnValue( gbkit );
+		} );
+
+		it( "sends a save to the host and resolves with the server's post", async () => {
+			answer( 200, post );
+			const next = vi.fn();
+
+			await expect(
+				postRequestMiddleware(
+					{
+						path: '/wp/v2/posts/42',
+						method: 'PUT',
+						data: { title: 'Saved' },
+					},
+					next
+				)
+			).resolves.toEqual( post );
+			expect( bridge.performPostRequest ).toHaveBeenCalledWith( {
+				method: 'PUT',
+				path: '/wp/v2/posts/42',
+				body: '{"title":"Saved"}',
+			} );
+			expect( next ).not.toHaveBeenCalled();
+		} );
+
+		it( 'sends reads and requests below the post to the host', async () => {
+			answer( 200, [] );
+
+			await postRequestMiddleware(
+				{ path: '/wp/v2/posts/42/autosaves?context=edit' },
+				vi.fn()
+			);
+
+			expect( bridge.performPostRequest ).toHaveBeenCalledWith( {
+				method: 'GET',
+				path: '/wp/v2/posts/42/autosaves?context=edit',
+				body: null,
+			} );
+		} );
+
+		it( "rejects with the server's error for an error status", async () => {
+			const serverError = {
+				code: 'rest_cannot_edit',
+				message: 'Sorry, you are not allowed to edit this post.',
+				data: { status: 403 },
+			};
+			answer( 403, serverError );
+
+			await expect(
+				postRequestMiddleware(
+					{ path: '/wp/v2/posts/42', method: 'PUT', data: {} },
+					vi.fn()
+				)
+			).rejects.toEqual( serverError );
+		} );
+
+		it( 'resolves with the response when the request asks for it', async () => {
+			answer( 200, post, { 'X-WP-Total': '1' } );
+
+			const response = await postRequestMiddleware(
+				{ path: '/wp/v2/posts/42', parse: false },
+				vi.fn()
+			);
+
+			expect( response ).toBeInstanceOf( Response );
+			expect( response.headers.get( 'X-WP-Total' ) ).toBe( '1' );
+			await expect( response.json() ).resolves.toEqual( post );
+		} );
+
+		it( "fails as a failed fetch when the host couldn't send the request", async () => {
+			bridge.performPostRequest.mockRejectedValue(
+				new Error( 'Offline' )
+			);
+
+			await expect(
+				postRequestMiddleware(
+					{ path: '/wp/v2/posts/42', method: 'PUT', data: {} },
+					vi.fn()
+				)
+			).rejects.toMatchObject( { code: 'fetch_error' } );
+			expect( logger.error ).toHaveBeenCalled();
+		} );
+
+		it( "refuses saving a post that isn't on the server yet", async () => {
+			bridge.getGBKit.mockReturnValue( {
+				...gbkit,
+				post: { ...gbkit.post, id: -1 },
+			} );
+
+			await expect(
+				postRequestMiddleware(
+					{ path: '/wp/v2/posts/-1', method: 'PUT', data: {} },
+					vi.fn()
+				)
+			).rejects.toMatchObject( {
+				code: 'gutenberg_kit_post_not_created',
+			} );
+			expect( bridge.performPostRequest ).not.toHaveBeenCalled();
+		} );
+
+		it( 'lets requests for other paths through', async () => {
+			const next = vi.fn( () => Promise.resolve( [] ) );
+
+			await postRequestMiddleware( { path: '/wp/v2/posts/421' }, next );
+
+			expect( next ).toHaveBeenCalled();
+			expect( bridge.performPostRequest ).not.toHaveBeenCalled();
+		} );
+	} );
+
 	describe( 'withEditedPostType', () => {
 		const typesPath = '/wp/v2/types?context=view';
 		const preloadData = {
@@ -535,6 +661,38 @@ describe( 'api-fetch credentials handling', () => {
 				)
 			).resolves.toBe( serverRecord );
 			expect( getEntityRecord ).not.toHaveBeenCalled();
+		} );
+
+		it( 'keeps every persisted field the server does not set', async () => {
+			getEntityRecord.mockReturnValue( {
+				...persisted,
+				excerpt: { raw: 'Host excerpt' },
+				categories: [ 3 ],
+				meta: { plugin_meta: 'host' },
+				modified: '2024-01-01T00:00:00',
+			} );
+			const next = vi.fn( () =>
+				Promise.resolve( {
+					...serverRecord,
+					excerpt: { raw: 'Server excerpt', rendered: 'Server' },
+					categories: [ 1 ],
+					meta: { plugin_meta: 'server' },
+					modified: '2024-02-01T00:00:00',
+				} )
+			);
+
+			await expect(
+				persistedPostOverlayMiddleware(
+					{ path: '/wp/v2/posts/42' },
+					next
+				)
+			).resolves.toEqual( {
+				...overlaidRecord,
+				excerpt: { raw: 'Host excerpt', rendered: 'Server' },
+				categories: [ 3 ],
+				meta: { plugin_meta: 'host' },
+				modified: '2024-02-01T00:00:00',
+			} );
 		} );
 
 		it.each( [

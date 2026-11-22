@@ -62,6 +62,54 @@ export function onEditorContentChanged() {
 }
 
 /**
+ * Notifies the native host that something in the post changed: its content,
+ * its settings, or fields plugins add. The host reads the post with
+ * `window.editor.getCurrentPost()`.
+ *
+ * @return {void}
+ */
+export function onPostChanged() {
+	dispatchToBridge( 'onPostChanged', {} );
+}
+
+/**
+ * @typedef {Object} PostRequest
+ * @property {string}  method The HTTP method, uppercased.
+ * @property {string}  path   The REST API path with its query, e.g. `/wp/v2/posts/1`.
+ * @property {?string} body   The JSON body, if the request has one.
+ */
+
+/**
+ * @typedef {Object} PostResponse
+ * @property {number}                 status  The HTTP status.
+ * @property {Object<string, string>} headers The response's headers.
+ * @property {string}                 body    The response's body.
+ */
+
+/**
+ * Sends a request for the post being edited to the native host, which sends it
+ * to the server and answers with the server's response.
+ *
+ * Only iOS has a handler.
+ *
+ * @param {PostRequest} request The request.
+ * @return {Promise<PostResponse>} The server's response; rejects when the host
+ * couldn't get one.
+ */
+export function performPostRequest( request ) {
+	debug( `Bridge event: performPostRequest`, request );
+
+	const handler = window.webkit?.messageHandlers?.performPostRequest;
+	if ( ! handler ) {
+		return Promise.reject(
+			new Error( 'The host has no handler for post requests' )
+		);
+	}
+
+	return handler.postMessage( request );
+}
+
+/**
  * Notifies the native host that the editor history stack has changed.
  *
  * @param {boolean} hasUndo Whether the editor has undo history.
@@ -263,6 +311,7 @@ export function onNetworkRequest( requestData ) {
  * @property {number}    [nativeUploadPort]       Android: port the local HTTP server is listening on. If absent, the native upload override is not activated.
  * @property {string}    [nativeUploadToken]      Per-session token every native upload request must carry: to the upload scheme (iOS) or the local upload server (Android).
  * @property {RestRelay} [restRelay]              iOS: where native code relays the page's requests. If absent, requests go straight from the page.
+ * @property {boolean}   [hasPostRequestHandler]  Whether the host sends the requests for the post being edited, through `performPostRequest`. If absent, the editor reads the post itself and rejects writes to it.
  */
 
 /**
