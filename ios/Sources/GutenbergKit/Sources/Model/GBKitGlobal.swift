@@ -96,6 +96,10 @@ public struct GBKitGlobal: Sendable, Codable {
     /// `nil` when they go straight from the page.
     let restRelay: RestRelayLocation?
 
+    /// Whether the host sends the requests for the post being edited, through the
+    /// `performPostRequest` message handler.
+    let hasPostRequestHandler: Bool
+
     /// Where the native REST relay is.
     struct RestRelayLocation: Codable, Sendable {
         /// The URL the page sends each request to, with that request's URL in the
@@ -132,13 +136,16 @@ public struct GBKitGlobal: Sendable, Codable {
     ///     request to the host's ``EditorHTTPClientDelegate``.
     ///   - schemeCallerToken: The token the page sends to the upload scheme and the
     ///     REST relay, given to the page with each of them.
+    ///   - hasPostRequestHandler: Whether the host sends the requests for the post
+    ///     being edited.
     public init(
         configuration: EditorConfiguration,
         dependencies: EditorDependencies,
         nativeUploadScheme: String? = nil,
         restRelayEndpoint: String? = nil,
         restRelayReportsRequests: Bool = false,
-        schemeCallerToken: String? = nil
+        schemeCallerToken: String? = nil,
+        hasPostRequestHandler: Bool = false
     ) throws {
         self.siteURL = configuration.isOfflineModeEnabled ? nil : configuration.siteURL
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
@@ -167,6 +174,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.restRelay = configuration.isOfflineModeEnabled ? nil : restRelayEndpoint.map {
             RestRelayLocation(endpoint: $0, reportsRequests: restRelayReportsRequests, token: schemeCallerToken)
         }
+        self.hasPostRequestHandler = hasPostRequestHandler
         self.editorSettings = dependencies.editorSettings.jsonValue
         self.preloadData = try dependencies.preloadList?.build()
         self.editorAssets = Self.buildEditorAssets(from: dependencies.assetBundle)

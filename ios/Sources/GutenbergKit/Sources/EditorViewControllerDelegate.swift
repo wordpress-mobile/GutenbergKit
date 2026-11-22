@@ -49,6 +49,12 @@ public protocol EditorViewControllerDelegate: AnyObject {
     /// is probably not how it should be in the production design.
     func editor(_ viewController: EditorViewController, didUpdateContentWithState state: EditorState)
 
+    /// Something in the post changed: its content, a setting such as its categories, or a field
+    /// a plugin adds. Saving the post changes it too.
+    ///
+    /// Read the post with ``EditorViewController/currentPost()``.
+    func editorDidChangePost(_ viewController: EditorViewController)
+
     /// Notifies the client about new history state.
     func editor(_ viewController: EditorViewController, didUpdateHistoryState state: EditorState)
 
@@ -119,6 +125,7 @@ public protocol EditorViewControllerDelegate: AnyObject {
 }
 
 extension EditorViewControllerDelegate {
+    public func editorDidChangePost(_ viewController: EditorViewController) {}
     public func editor(_ viewController: EditorViewController, didFailToLoad error: Error) {}
     public func editor(_ viewController: EditorViewController, didUpdateSaveAvailability availability: EditorSaveAvailability) {}
 }

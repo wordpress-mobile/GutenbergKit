@@ -29,6 +29,8 @@ struct EditorJSMessage {
         case onEditorLoaded
         /// The editor content changed.
         case onEditorContentChanged
+        /// Something in the post changed: its content, its settings, or fields plugins add.
+        case onPostChanged
         /// The editor history (undo, redo) changed.
         case onEditorHistoryChanged
         /// The post's save availability changed.

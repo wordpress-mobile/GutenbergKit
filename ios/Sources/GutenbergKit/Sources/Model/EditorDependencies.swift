@@ -31,4 +31,15 @@ public struct EditorDependencies: Sendable, Equatable, Hashable {
         self.assetBundle = assetBundle
         self.preloadList = preloadList
     }
+
+    /// A copy of these dependencies with `post` as the preloaded post `postID`. See
+    /// ``EditorPreloadList/withPost(id:post:)``. Without a preload list, they're returned as
+    /// they are.
+    public func withPost(id postID: Int, post: Data) -> EditorDependencies {
+        EditorDependencies(
+            editorSettings: editorSettings,
+            assetBundle: assetBundle,
+            preloadList: preloadList?.withPost(id: postID, post: post)
+        )
+    }
 }

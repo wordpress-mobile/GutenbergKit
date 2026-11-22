@@ -179,6 +179,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     /// moves to the uploader.
     public private(set) var mediaUploader: (any MediaUploader)?
 
+    /// Sends the editor's requests for the post being edited, saves included, in place of the
+    /// editor. See ``EditorPostRequestHandler``.
+    ///
+    /// Supplied at `init`, held for the editor's lifetime, and not conformed by the object
+    /// that owns the editor, like ``mediaUploader``.
+    public private(set) var postRequestHandler: (any EditorPostRequestHandler)?
+
     // MARK: - Private Properties (Services)
     private let editorService: EditorService
     private let httpClient: any EditorHTTPClientProtocol
@@ -263,6 +270,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
     ///     lifetime rules, including what a value-type conformer does differently.
     ///   - mediaUploader: Takes over media upload on the host's own stack. Same ownership
     ///     rules as `mediaProcessor`.
+    ///   - postRequestHandler: Sends the editor's requests for the post being edited. Same
+    ///     ownership rules as `mediaProcessor`.
     ///   - httpClient: Replaces the client used for editor and media requests.
     ///   - isWarmupMode: Loads the editor shell without dependencies, to warm WebKit.
     public init(
@@ -271,6 +280,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         mediaPicker: MediaPickerController? = nil,
         mediaProcessor: (any MediaProcessor)? = nil,
         mediaUploader: (any MediaUploader)? = nil,
+        postRequestHandler: (any EditorPostRequestHandler)? = nil,
         httpClient: EditorHTTPClient? = nil,
         isWarmupMode: Bool = false
     ) {
@@ -297,6 +307,7 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         self.mediaPicker = mediaPicker
         self.mediaProcessor = mediaProcessor
         self.mediaUploader = mediaUploader
+        self.postRequestHandler = postRequestHandler
         self.controller = GutenbergEditorController(configuration: configuration)
 
         // The `allowFileAccessFromFileURLs` allows the web view to access the
@@ -311,6 +322,11 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         // Register async message handler for content recovery requests.
         // This allows JavaScript to request the latest persisted content from the native host.
         config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "requestLatestContent")
+
+        // The page sends its requests for the post here when the host handles them.
+        if postRequestHandler != nil {
+            config.userContentController.addScriptMessageHandler(controller, contentWorld: .page, name: "performPostRequest")
+        }
 
         self.bundleProvider.bind(to: config)
 
@@ -560,7 +576,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             nativeUploadScheme: mediaUploadSchemeHandler.isEnabled ? MediaUploadSchemeHandler.scheme : nil,
             restRelayEndpoint: RestRelaySchemeHandler.endpoint,
             restRelayReportsRequests: relayObserver != nil,
-            schemeCallerToken: schemeCallerToken.value
+            schemeCallerToken: schemeCallerToken.value,
+            hasPostRequestHandler: postRequestHandler != nil
         )
         return WKUserScript(
             source: Self.configurationScript(gbkitGlobal: try gbkitGlobal.toString()),
@@ -668,6 +685,45 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             throw NSError(domain: "Invalid data format", code: 0, userInfo: nil)
         }
         return EditorTitleAndContent(title: title, content: content, changed: changed)
+    }
+
+    /// The whole post as the editor has it now, as a JSON object in the REST API's edit shape:
+    /// the post the editor opened or last saved, with the unsaved edits over it.
+    public func currentPost() async throws -> Data {
+        guard isReady else { throw EditorNotReadyError() }
+        let result = try await webView.evaluateJavaScript("editor.getCurrentPost();")
+        guard let json = result as? String else {
+            throw NSError(domain: "Invalid data format", code: 0, userInfo: nil)
+        }
+        return Data(json.utf8)
+    }
+
+    /// Saves the post the way the editor's own save does, running Gutenberg's `savePost()` and
+    /// the plugins' save hooks. With a ``postRequestHandler``, the save reaches the server
+    /// through it.
+    ///
+    /// - Returns: Whether the save request succeeded.
+    public func savePost() async throws -> Bool {
+        guard isReady else { throw EditorNotReadyError() }
+        let result = try await webView.callAsyncJavaScript(
+            "return await editor.savePost();",
+            contentWorld: .page
+        )
+        guard let json = result as? String,
+              let object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+              let success = object["success"] as? Bool else {
+            throw NSError(domain: "Invalid data format", code: 0, userInfo: nil)
+        }
+        return success
+    }
+
+    /// Gives the editor the ID the server gave a new post, once the host has created it there.
+    ///
+    /// The editor keeps the post's unsaved edits and switches to the ID in place. A reload, such
+    /// as after a crash, opens the post with this ID.
+    public func setPostId(_ postID: Int) {
+        configuration = configuration.toBuilder().setPostID(postID).build()
+        evaluate("editor.setPostId(\(postID));", isCritical: true)
     }
 
     /// Steps backwards in the editor history state
@@ -985,6 +1041,8 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
             case .onEditorContentChanged:
                 // TODO: Refactor and remove EditorState entirely?
                 delegate?.editor(self, didUpdateContentWithState: state)
+            case .onPostChanged:
+                delegate?.editorDidChangePost(self)
             case .onEditorHistoryChanged:
                 let body = try message.decode(EditorJSMessage.DidUpdateEditorHistoryBody.self)
                 self.state.hasUndo = body.hasUndo
@@ -1055,6 +1113,10 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     fileprivate func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)? {
         return delegate?.editorDidRequestLatestContent(self)
+    }
+
+    fileprivate func controllerPostRequestHandler(_ controller: GutenbergEditorController) -> (any EditorPostRequestHandler)? {
+        postRequestHandler
     }
 
     fileprivate func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController) {
@@ -1243,6 +1305,7 @@ public struct EditorNotReadyError: LocalizedError {
 private protocol GutenbergEditorControllerDelegate: AnyObject {
     func controller(_ controller: GutenbergEditorController, didReceiveMessage message: EditorJSMessage)
     func controllerDidRequestLatestContent(_ controller: GutenbergEditorController) -> (title: String, content: String)?
+    func controllerPostRequestHandler(_ controller: GutenbergEditorController) -> (any EditorPostRequestHandler)?
     func controllerWebContentProcessDidTerminate(_ controller: GutenbergEditorController)
 }
 
@@ -1262,6 +1325,10 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandlerWithReply
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
+        if message.name == "performPostRequest" {
+            return await performPostRequest(messageBody: message.body)
+        }
+
         guard message.name == "requestLatestContent" else {
             return (nil, "Unknown message handler: \(message.name)")
         }
@@ -1278,6 +1345,27 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
             "title": content.title,
             "content": content.content
         ] as [String: String], nil)
+    }
+
+    /// Sends a request for the post to the host's handler, and answers the page with the
+    /// server's response, or with an error when no response came.
+    private func performPostRequest(messageBody: Any) async -> (Any?, String?) {
+        guard let request = EditorPostRequest(scriptMessageBody: messageBody) else {
+            return (nil, "Invalid post request: \(messageBody)")
+        }
+        let handler = await MainActor.run {
+            delegate?.controllerPostRequestHandler(self)
+        }
+        guard let handler else {
+            return (nil, "The host has no handler for post requests")
+        }
+
+        do {
+            let response = try await handler.perform(request)
+            return (response.scriptMessageReply, nil)
+        } catch {
+            return (nil, error.localizedDescription)
+        }
     }
 
     // MARK: - WKNavigationDelegate

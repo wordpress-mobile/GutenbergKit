@@ -61,6 +61,27 @@ public struct EditorPreloadList: Sendable, Equatable, Hashable {
         self.settingsOptionsData = settingsOptionsData?.asPreloadResponse()
     }
 
+    /// A copy of this list with `post` as the preloaded post `postID`, such as a post the host
+    /// keeps itself.
+    ///
+    /// The editor takes the preloaded post as the post's saved version, with the configuration's
+    /// title and content over it.
+    ///
+    /// - Parameters:
+    ///   - postID: The post's ID.
+    ///   - post: The post as a JSON object in the REST API's edit shape.
+    public func withPost(id postID: Int, post: Data) -> EditorPreloadList {
+        EditorPreloadList(
+            postID: postID,
+            postData: EditorURLResponse(data: post, responseHeaders: EditorHTTPHeaders()),
+            postType: postType,
+            postTypeData: postTypeData,
+            postTypesData: postTypesData,
+            activeThemeData: activeThemeData,
+            settingsOptionsData: settingsOptionsData
+        )
+    }
+
     func build() throws -> JSON {
         return try logExecutionTime("Build Editor Preload List") {
             var getRequests = [
