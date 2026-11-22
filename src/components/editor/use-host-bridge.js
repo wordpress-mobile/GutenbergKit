@@ -104,17 +104,11 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		// `savePost()` sends them.
 		window.editor.getCurrentPost = () => {
 			const { type, id } = getPostKey();
-			const {
-				// Identifiers GBK seeds a post the host didn't preload with.
-				restBase,
-				restNamespace,
-				...currentPost
-			} = {
+			return JSON.stringify( {
 				...getRawEntityRecord( 'postType', type, id ),
 				...getEntityRecordNonTransientEdits( 'postType', type, id ),
 				content: getEditedPostContent(),
-			};
-			return JSON.stringify( currentPost );
+			} );
 		};
 
 		// Runs Gutenberg's save, as the editor's own save button would.

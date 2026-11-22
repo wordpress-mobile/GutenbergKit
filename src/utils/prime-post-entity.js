@@ -73,6 +73,11 @@ async function resolvePostType( post ) {
  * supplies the rest (dates, author, terms, meta, etc.). The host's title and
  * content take precedence over the server's.
  *
+ * The record holds only fields of the post as the REST API has them. The
+ * post's `restBase` and `restNamespace` are where GBK sends its requests for
+ * it, not fields, so they stay out: the host reads the record back with
+ * `window.editor.getCurrentPost()`, and would store them as the post's own.
+ *
  * @param {Post} post The post from the host.
  * @return {Object} The record.
  */
@@ -80,7 +85,8 @@ function buildPostRecord( post ) {
 	const serverRecord = getPreloadedPost( post );
 
 	if ( ! serverRecord ) {
-		return post;
+		const { restBase, restNamespace, ...record } = post;
+		return record;
 	}
 
 	return {
