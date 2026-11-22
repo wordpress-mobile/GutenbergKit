@@ -39,14 +39,44 @@ final class SessionPostRequestHandler: EditorPostRequestHandler {
         self.session = session
     }
 
+    /// Throws only when the request got no answer from the server. When the session refuses a
+    /// request itself, such as a save that would overwrite someone else's change, the editor gets
+    /// a WordPress-style error response, so it shows the session's reason, not a network error.
     func perform(_ request: EditorPostRequest) async throws -> EditorPostResponse {
-        let response = try await session.performEditorRequest(
-            request: EditorRequest(method: request.method, path: request.path, body: request.body)
-        )
+        let response: ServerResponse
+        do {
+            response = try await session.performEditorRequest(
+                request: EditorRequest(method: request.method, path: request.path, body: request.body)
+            )
+        } catch let error as PostEditorError {
+            switch error {
+            case .NotSent, .MaybeSent:
+                throw error
+            case .Conflict:
+                return Self.errorResponse(status: 409, code: "post_editor_conflict", error: error)
+            default:
+                return Self.errorResponse(status: 500, code: "post_editor_error", error: error)
+            }
+        }
         return EditorPostResponse(
             status: Int(response.statusCode),
             headers: response.headers,
             body: response.body
+        )
+    }
+
+    /// An error response in the shape WordPress's REST API gives its errors, which the editor
+    /// shows the message of.
+    private static func errorResponse(status: Int, code: String, error: PostEditorError) -> EditorPostResponse {
+        let body: [String: Any] = [
+            "code": code,
+            "message": String(describing: error),
+            "data": ["status": status]
+        ]
+        return EditorPostResponse(
+            status: status,
+            headers: ["content-type": "application/json"],
+            body: (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
         )
     }
 }

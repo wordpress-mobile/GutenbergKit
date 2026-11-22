@@ -25,7 +25,7 @@
       "location" : "https://github.com/Automattic/wordpress-rs",
       "state" : {
         "branch" : "pr-build/1795",
-        "revision" : "21d8e288d5d474b1e31524cb30651e9c34a2a9de"
+        "revision" : "12c05e6a060c3839aa7ad5401f011e5080a293ec"
       }
     }
   ],
