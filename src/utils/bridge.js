@@ -73,6 +73,32 @@ export function onPostChanged() {
 }
 
 /**
+ * Notifies the native host that the editor's saved version of the post changed:
+ * what the editor believes the server has.
+ *
+ * @param {Object} change              The change.
+ * @param {string} change.modified_gmt The saved version's modified date.
+ * @param {Object} change.fields       The fields that changed in it.
+ *
+ * @return {void}
+ */
+export function onSavedPostChanged( change ) {
+	debug( `Bridge event: onSavedPostChanged`, change );
+
+	// Android's interface takes strings only, as with `onNetworkRequest`.
+	if ( window.editorDelegate ) {
+		window.editorDelegate.onSavedPostChanged?.( JSON.stringify( change ) );
+	}
+
+	if ( window.webkit ) {
+		window.webkit.messageHandlers.editorDelegate.postMessage( {
+			message: 'onSavedPostChanged',
+			body: change,
+		} );
+	}
+}
+
+/**
  * @typedef {Object} PostRequest
  * @property {string}  method The HTTP method, uppercased.
  * @property {string}  path   The REST API path with its query, e.g. `/wp/v2/posts/1`.
@@ -365,6 +391,7 @@ export function onNetworkRequest( requestData ) {
  * @property {string}    [nativeUploadToken]      Per-session token every native upload request must carry: to the upload scheme (iOS) or the local upload server (Android).
  * @property {RestRelay} [restRelay]              iOS: where native code relays the page's requests. If absent, requests go straight from the page.
  * @property {boolean}   [hasPostRequestHandler]  Whether the host sends the requests for the post being edited, through `performPostRequest`. If absent, the editor reads the post itself and rejects writes to it.
+ * @property {Object}    [postEdits]              Changes the host has to the post the server doesn't, which the editor opens with as unsaved edits, in the shape the REST API takes in a write.
  */
 
 /**

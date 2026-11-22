@@ -6,6 +6,7 @@ import './style.scss';
 import { useSyncHistoryControls } from './use-sync-history-controls';
 import { useSyncSaveAvailability } from './use-sync-save-availability';
 import { useSyncPostChanges } from './use-sync-post-changes';
+import { useSyncSavedPost } from './use-sync-saved-post';
 import { useHostBridge } from './use-host-bridge';
 import { useEditorReady } from './use-editor-ready';
 import { useHostExceptionLogging } from './use-host-exception-logging';
@@ -37,6 +38,7 @@ export default function Editor( { post, children, hideTitle } ) {
 	useSyncHistoryControls();
 	useSyncSaveAvailability();
 	useSyncPostChanges();
+	useSyncSavedPost();
 	useHostExceptionLogging();
 	useMediaUpload();
 	useDevModeNotice();

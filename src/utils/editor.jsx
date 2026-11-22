@@ -4,6 +4,7 @@ import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as preferencesStore } from '@wordpress/preferences';
 import { registerCoreBlocks } from '@wordpress/block-library';
+import { parse } from '@wordpress/blocks';
 import Layout from '../components/layout';
 import { unregisterDisallowedBlocks } from './blocks';
 import { getGBKit, getPost } from './bridge';
@@ -60,6 +61,7 @@ export async function initializeEditor( {
 			{},
 			getNewPostTemplate( record )
 		);
+		applyHostEdits( record );
 	}
 
 	applyPostTypeTemplateSettings( post.type );
@@ -72,6 +74,38 @@ export async function initializeEditor( {
 				pluginLoadFailed={ pluginLoadFailed }
 			/>
 		</StrictMode>
+	);
+}
+
+/**
+ * Applies the changes the host has to the post the server doesn't, as unsaved
+ * edits over the saved version the editor opened with.
+ *
+ * Keeping them out of the saved version means that when core-data later takes
+ * in another copy of the post, they stay. They're left out of the undo
+ * history, so undo never goes back to the server's version.
+ *
+ * @param {Object} post The post's saved version.
+ * @return {void}
+ */
+function applyHostEdits( post ) {
+	const { postEdits } = getGBKit();
+	if ( ! postEdits || Object.keys( postEdits ).length === 0 ) {
+		return;
+	}
+
+	// The block editor shows the `blocks` edit, which setting up a new post
+	// may have made from its template, so the host's content replaces it.
+	const edits =
+		'content' in postEdits
+			? { ...postEdits, blocks: parse( postEdits.content ) }
+			: postEdits;
+	dispatch( coreStore ).editEntityRecord(
+		'postType',
+		post.type,
+		post.id,
+		edits,
+		{ undoIgnore: true }
 	);
 }
 

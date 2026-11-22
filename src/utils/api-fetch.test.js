@@ -702,36 +702,19 @@ describe( 'api-fetch credentials handling', () => {
 			expect( getEntityRecord ).not.toHaveBeenCalled();
 		} );
 
-		it( 'keeps every persisted field the server does not set', async () => {
-			getEntityRecord.mockReturnValue( {
-				...persisted,
-				excerpt: { raw: 'Host excerpt' },
-				categories: [ 3 ],
-				meta: { plugin_meta: 'host' },
-				modified: '2024-01-01T00:00:00',
+		it( 'leaves fetched copies alone when the host has a request handler', async () => {
+			bridge.getGBKit.mockReturnValue( {
+				post: { id: 42, type: 'post' },
+				hasPostRequestHandler: true,
 			} );
-			const next = vi.fn( () =>
-				Promise.resolve( {
-					...serverRecord,
-					excerpt: { raw: 'Server excerpt', rendered: 'Server' },
-					categories: [ 1 ],
-					meta: { plugin_meta: 'server' },
-					modified: '2024-02-01T00:00:00',
-				} )
-			);
+			const next = vi.fn( () => Promise.resolve( serverRecord ) );
 
 			await expect(
 				persistedPostOverlayMiddleware(
 					{ path: '/wp/v2/posts/42' },
 					next
 				)
-			).resolves.toEqual( {
-				...overlaidRecord,
-				excerpt: { raw: 'Host excerpt', rendered: 'Server' },
-				categories: [ 3 ],
-				meta: { plugin_meta: 'host' },
-				modified: '2024-02-01T00:00:00',
-			} );
+			).resolves.toBe( serverRecord );
 		} );
 
 		it.each( [

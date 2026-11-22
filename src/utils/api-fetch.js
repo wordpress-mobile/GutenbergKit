@@ -1230,15 +1230,18 @@ export function postTypesFallbackMiddleware( options, next ) {
 }
 
 /**
- * Middleware keeping the persisted fields of the post being edited in fetched
- * copies of it.
+ * Middleware keeping the persisted title and content of the post being edited
+ * in fetched copies of it.
  *
- * The post is seeded with what the host passes in, which may hold edits not yet
- * uploaded: the title and content, and the fields of the preloaded record.
- * Core-data stores a fetched copy over the seeded record, e.g. from
- * `getEntityRecord()` with a query or a list including the post, so the
- * server's values would replace the host's. The fields the server sets, and
- * the response's own keys, such as embeds, are kept.
+ * The post is seeded with the host's title and content, which may hold edits
+ * not yet uploaded. Core-data stores a fetched copy over the seeded record,
+ * e.g. from `getEntityRecord()` with a query or a list including the post, so
+ * the server's values would replace the host's. Other fields, such as embeds,
+ * are kept.
+ *
+ * A host with a post request handler seeds the server's version of the post
+ * as the persisted record, and its own changes as edits, so fetched copies
+ * replace nothing of the host's, and this middleware leaves them as they are.
  *
  * Exported for testing only.
  *
@@ -1247,7 +1250,11 @@ export function postTypesFallbackMiddleware( options, next ) {
 export async function persistedPostOverlayMiddleware( options, next ) {
 	const method = ( options.method ?? 'GET' ).toUpperCase();
 
-	if ( method !== 'GET' || ! isPostReadPath( options.path ) ) {
+	if (
+		getGBKit().hasPostRequestHandler ||
+		method !== 'GET' ||
+		! isPostReadPath( options.path )
+	) {
 		return next( options );
 	}
 
@@ -1321,7 +1328,7 @@ function getPersistedPost() {
 }
 
 /**
- * Applies the persisted fields to copies of the post in a response.
+ * Applies the persisted title and content to copies of the post in a response.
  *
  * @param {Object|Object[]} body      A record or list of records.
  * @param {Object}          persisted The post's persisted record.
@@ -1342,13 +1349,9 @@ function overlayPersistedPost( body, persisted ) {
 }
 
 /**
- * Applies the persisted fields to a record of the post.
+ * Applies the persisted title and content to a record of the post.
  *
- * Every field the record and the persisted record both have is replaced, except
- * the ones the server sets, such as `modified`, and keys starting with `_`, such
- * as `_embedded`, which describe the response. For fields with a raw value, such
- * as the title, only the raw value is replaced; rendered values stay the
- * server's.
+ * Only raw values are replaced; rendered values stay the server's.
  *
  * @param {Object} record    A record from the response.
  * @param {Object} persisted The post's persisted record.
@@ -1361,66 +1364,20 @@ function overlayRecord( record, persisted ) {
 
 	let result = record;
 
-	for ( const [ field, persistedValue ] of Object.entries( persisted ) ) {
-		if (
-			! ( field in record ) ||
-			field.startsWith( '_' ) ||
-			SERVER_POST_FIELDS.includes( field )
-		) {
-			continue;
-		}
-
+	for ( const field of [ 'title', 'content' ] ) {
+		const raw = persisted[ field ]?.raw;
 		const value = record[ field ];
-		const raw = rawValue( persistedValue );
-		if ( hasRawValue( value ) && raw === undefined ) {
-			continue;
-		}
-		const overlaid = hasRawValue( value )
-			? { ...value, raw }
-			: persistedValue;
 
-		if ( JSON.stringify( overlaid ) !== JSON.stringify( value ) ) {
-			result = { ...result, [ field ]: overlaid };
+		if (
+			raw !== undefined &&
+			value?.raw !== undefined &&
+			value.raw !== raw
+		) {
+			result = { ...result, [ field ]: { ...value, raw } };
 		}
 	}
 
 	return result;
-}
-
-/** The fields of a post the server sets, which fetched copies keep. */
-const SERVER_POST_FIELDS = [
-	'id',
-	'guid',
-	'link',
-	'modified',
-	'modified_gmt',
-	'date_gmt',
-	'type',
-	'permalink_template',
-	'generated_slug',
-];
-
-/**
- * Whether a field's value is a `{ raw, rendered }` object.
- *
- * @param {unknown} value The value.
- * @return {boolean} True when the value has a raw string.
- */
-function hasRawValue( value ) {
-	return typeof value?.raw === 'string';
-}
-
-/**
- * The raw value of a field, whether it's a `{ raw, rendered }` object or the
- * raw value itself.
- *
- * @param {unknown} value The value.
- * @return {unknown} The raw value.
- */
-function rawValue( value ) {
-	return value !== null && typeof value === 'object' && 'raw' in value
-		? value.raw
-		: value;
 }
 
 /**

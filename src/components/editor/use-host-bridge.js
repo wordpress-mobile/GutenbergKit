@@ -11,7 +11,7 @@ import { adoptPostId } from '../../utils/adopt-post-id';
 window.editor = window.editor || {};
 
 export function useHostBridge( post, editorRef, markBridgeReady ) {
-	const { editEntityRecord } = useDispatch( coreStore );
+	const { editEntityRecord, receiveEntityRecords } = useDispatch( coreStore );
 	const { undo, redo, switchEditorMode, savePost } =
 		useDispatch( editorStore );
 	const {
@@ -120,6 +120,17 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 		// Switches the editor to the post's ID on the server, once the host has
 		// created a new post there, keeping its unsaved edits.
 		window.editor.setPostId = adoptPostId;
+
+		// Takes a newer version of the post from the server as the editor's
+		// saved version. The unsaved edits stay over it.
+		window.editor.setSavedPost = ( savedPost ) => {
+			const { type, id } = getPostKey();
+			if ( savedPost?.id !== id ) {
+				warn( `Ignored a saved version of post ${ savedPost?.id }` );
+				return;
+			}
+			receiveEntityRecords( 'postType', type, savedPost );
+		};
 
 		window.editor.undo = () => {
 			// Do not return the `Promise` return value to avoid host errors.
@@ -232,6 +243,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 			delete window.editor.getCurrentPost;
 			delete window.editor.savePost;
 			delete window.editor.setPostId;
+			delete window.editor.setSavedPost;
 			delete window.editor.undo;
 			delete window.editor.redo;
 			delete window.editor.switchEditorMode;
@@ -242,6 +254,7 @@ export function useHostBridge( post, editorRef, markBridgeReady ) {
 	}, [
 		editorRef,
 		editContent,
+		receiveEntityRecords,
 		getPostKey,
 		markBridgeReady,
 		getEditedPostAttribute,
