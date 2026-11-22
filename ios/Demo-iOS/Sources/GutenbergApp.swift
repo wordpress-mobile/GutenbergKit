@@ -60,7 +60,8 @@ struct GutenbergApp: App {
                             configuration: editor.configuration,
                             dependencies: editor.dependencies,
                             apiClient: editor.apiClient,
-                            enableNativeMediaUpload: editor.enableNativeMediaUpload
+                            enableNativeMediaUpload: editor.enableNativeMediaUpload,
+                            postEditorSession: editor.postEditorSession
                         )
                     }
                 }

@@ -36,12 +36,16 @@ struct RunnableEditor: Equatable, Hashable {
     let dependencies: EditorDependencies?
     let apiClient: WordPressAPI?
     var enableNativeMediaUpload: Bool = true
+    /// The wordpress-rs editor session the post is open in, if it's open through one. Like
+    /// `apiClient`, it's left out of `==` and `hash(into:)`.
+    let postEditorSession: PostEditorSession?
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies?, apiClient: WordPressAPI? = nil, enableNativeMediaUpload: Bool = true) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies?, apiClient: WordPressAPI? = nil, enableNativeMediaUpload: Bool = true, postEditorSession: PostEditorSession? = nil) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
         self.enableNativeMediaUpload = enableNativeMediaUpload
+        self.postEditorSession = postEditorSession
     }
 
     // `apiClient` is intentionally excluded from `==` and `hash(into:)`:

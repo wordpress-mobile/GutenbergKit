@@ -32,16 +32,18 @@ struct EditorView: View {
     private let dependencies: EditorDependencies?
     private let apiClient: WordPressAPI?
     private let enableNativeMediaUpload: Bool
+    private let postEditorSession: PostEditorSession?
 
     @State private var viewModel = EditorViewModel()
 
     @Environment(\.dismiss) var dismiss
 
-    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil, enableNativeMediaUpload: Bool = true) {
+    init(configuration: EditorConfiguration, dependencies: EditorDependencies? = nil, apiClient: WordPressAPI? = nil, enableNativeMediaUpload: Bool = true, postEditorSession: PostEditorSession? = nil) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
         self.enableNativeMediaUpload = enableNativeMediaUpload
+        self.postEditorSession = postEditorSession
     }
 
     var body: some View {
@@ -50,9 +52,26 @@ struct EditorView: View {
             dependencies: dependencies,
             apiClient: apiClient,
             enableNativeMediaUpload: enableNativeMediaUpload,
+            postEditorSession: postEditorSession,
             viewModel: viewModel
         )
             .toolbar { toolbar }
+            .alert(
+                "Save failed",
+                isPresented: Binding(get: { viewModel.saveError != nil }, set: { if !$0 { viewModel.saveError = nil } }),
+                presenting: viewModel.saveError
+            ) { _ in
+            } message: { message in
+                Text(message)
+            }
+            .onDisappear {
+                // Closing the editor ends its session normally.
+                do {
+                    try postEditorSession?.end()
+                } catch {
+                    print("Failed to end the editor session: \(error)")
+                }
+            }
     }
 
     @ToolbarContentBuilder
@@ -131,6 +150,7 @@ private struct _EditorView: UIViewControllerRepresentable {
     private let dependencies: EditorDependencies?
     private let apiClient: WordPressAPI?
     private let enableNativeMediaUpload: Bool
+    private let postEditorSession: PostEditorSession?
     private let viewModel: EditorViewModel
 
     init(
@@ -138,24 +158,27 @@ private struct _EditorView: UIViewControllerRepresentable {
         dependencies: EditorDependencies? = nil,
         apiClient: WordPressAPI? = nil,
         enableNativeMediaUpload: Bool = true,
+        postEditorSession: PostEditorSession? = nil,
         viewModel: EditorViewModel
     ) {
         self.configuration = configuration
         self.dependencies = dependencies
         self.apiClient = apiClient
         self.enableNativeMediaUpload = enableNativeMediaUpload
+        self.postEditorSession = postEditorSession
         self.viewModel = viewModel
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel)
+        Coordinator(viewModel: viewModel, postEditorSession: postEditorSession)
     }
 
     func makeUIViewController(context: Context) -> EditorViewController {
         let viewController = EditorViewController(
             configuration: configuration,
             dependencies: dependencies,
-            mediaProcessor: enableNativeMediaUpload ? context.coordinator : nil
+            mediaProcessor: enableNativeMediaUpload ? context.coordinator : nil,
+            postRequestHandler: postEditorSession.map { SessionPostRequestHandler(session: $0) }
         )
         viewController.delegate = context.coordinator
         viewController.webView.isInspectable = true
@@ -170,9 +193,14 @@ private struct _EditorView: UIViewControllerRepresentable {
         }
 
         viewModel.hasPostID = configuration.postID != nil
+        viewModel.savesThroughEditor = postEditorSession != nil
 
         viewModel.saveHandler = { [weak viewController, weak viewModel] in
             guard let viewController, let viewModel else { return nil }
+            if let postEditorSession {
+                await savePost(viewController: viewController, viewModel: viewModel, session: postEditorSession)
+                return nil
+            }
             return await persistPost(viewController: viewController, viewModel: viewModel)
         }
 
@@ -181,6 +209,29 @@ private struct _EditorView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ viewController: EditorViewController, context: Context) {
         viewController.isCodeEditorEnabled = viewModel.isCodeEditorEnabled
+    }
+
+    /// Saves the post through the editor, which sends the save to the editor session.
+    ///
+    /// A new post is created on the server first, from its working copy, and the editor is given
+    /// its ID, since the editor can't save a post the server doesn't have.
+    private func savePost(viewController: EditorViewController, viewModel: EditorViewModel, session: PostEditorSession) async {
+        do {
+            if try session.remotePostId() == nil {
+                try session.recordChange(post: try await viewController.currentPost())
+                let response = try await session.push()
+                guard (200..<300).contains(response.statusCode), let postID = try session.remotePostId() else {
+                    viewModel.saveError = "Creating the post failed with status \(response.statusCode): \(String(decoding: response.body, as: UTF8.self).prefix(300))"
+                    return
+                }
+                viewController.setPostId(Int(postID))
+            }
+            if try await !viewController.savePost() {
+                viewModel.saveError = "The editor's save request failed. The editor shows why."
+            }
+        } catch {
+            viewModel.saveError = String(describing: error)
+        }
     }
 
     /// Persists the post via the REST API, returning the content it saved.
@@ -219,9 +270,23 @@ private struct _EditorView: UIViewControllerRepresentable {
     @MainActor
     class Coordinator: NSObject, EditorViewControllerDelegate, MediaProcessor {
         let viewModel: EditorViewModel
+        let postEditorSession: PostEditorSession?
 
-        init(viewModel: EditorViewModel) {
+        init(viewModel: EditorViewModel, postEditorSession: PostEditorSession?) {
             self.viewModel = viewModel
+            self.postEditorSession = postEditorSession
+        }
+
+        func editorDidChangePost(_ viewController: EditorViewController) {
+            guard let postEditorSession else { return }
+            // Every change goes into the post's working copy, whether or not the user saves.
+            Task {
+                do {
+                    try postEditorSession.recordChange(post: try await viewController.currentPost())
+                } catch {
+                    Logger.demo.error("Failed to record the post: \(String(describing: error))")
+                }
+            }
         }
 
         // MARK: - EditorViewControllerDelegate
@@ -417,6 +482,9 @@ private final class EditorViewModel {
     var isSavingLocked = false
 
     var hasPostID = false
+    /// Whether the post is open in a wordpress-rs editor session, which the editor saves through.
+    var savesThroughEditor = false
+    var saveError: String?
 
     /// The newest content read from the editor, held in memory as a host app's autosave would.
     var latestContent: PostContent?
@@ -428,7 +496,10 @@ private final class EditorViewModel {
     }
 
     var canSave: Bool {
-        isEditorReady && !isSaving && !isSavingLocked && hasPostID && hasChanges
+        if savesThroughEditor {
+            return isEditorReady && !isSaving && !isSavingLocked
+        }
+        return isEditorReady && !isSaving && !isSavingLocked && hasPostID && hasChanges
     }
 
     enum Action {

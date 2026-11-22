@@ -73,12 +73,34 @@ struct PostsListView: View {
             }
         }
         .navigationTitle(title)
+        .toolbar {
+            if viewModel.postEditing != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("New Post", systemImage: "square.and.pencil") {
+                        openNewPost()
+                    }
+                }
+            }
+        }
+        .alert(
+            "Couldn't open the post",
+            isPresented: Binding(get: { viewModel.openError != nil }, set: { if !$0 { viewModel.openError = nil } }),
+            presenting: viewModel.openError
+        ) { _ in
+        } message: { error in
+            Text(error.localizedDescription)
+        }
         .task {
             await viewModel.loadPosts()
         }
     }
 
     private func openPost(_ post: AnyPostWithEditContext) {
+        if let postEditing = viewModel.postEditing {
+            Task { await openPost(post.id, through: postEditing) }
+            return
+        }
+
         let configuration = viewModel.editorConfiguration.toBuilder()
             .setPostType(viewModel.postTypeDetails)
             .setPostID(Int(post.id))
@@ -94,6 +116,56 @@ struct PostsListView: View {
 
         navigation.present(editor)
     }
+
+    /// Opens a post in an editor session: wordpress-rs reads it, and the editor opens with its
+    /// working copy, which can hold changes the server doesn't have.
+    @MainActor
+    private func openPost(_ postID: Int64, through postEditing: PostEditing) async {
+        do {
+            let session = try await postEditing.service.openPost(postId: postID)
+            let editorPost = try session.editorPostWithFields()
+            let configuration = viewModel.editorConfiguration.toBuilder()
+                .setPostType(viewModel.postTypeDetails)
+                .setPostID(Int(postID))
+                .setTitle(editorPost.title)
+                .setContent(editorPost.content)
+                .apply(editorPost.status) { $0.setPostStatus($1) }
+                .build()
+
+            navigation.present(RunnableEditor(
+                configuration: configuration,
+                dependencies: viewModel.editorDependencies?.withPost(id: Int(postID), post: editorPost.post),
+                apiClient: viewModel.client,
+                postEditorSession: session
+            ))
+        } catch {
+            viewModel.openError = error
+        }
+    }
+
+    /// Opens a new post in an editor session. The post is created on the server on its first
+    /// save.
+    private func openNewPost() {
+        guard let postEditing = viewModel.postEditing else { return }
+        do {
+            let session = try postEditing.service.openNewPost()
+            let configuration = viewModel.editorConfiguration.toBuilder()
+                .setPostType(viewModel.postTypeDetails)
+                .setPostID(nil)
+                .setTitle("")
+                .setContent("")
+                .build()
+
+            navigation.present(RunnableEditor(
+                configuration: configuration,
+                dependencies: viewModel.editorDependencies,
+                apiClient: viewModel.client,
+                postEditorSession: session
+            ))
+        } catch {
+            viewModel.openError = error
+        }
+    }
 }
 
 @Observable
@@ -106,12 +178,25 @@ class PostsListViewModel {
     let postTypeDetails: PostTypeDetails
     let editorConfiguration: EditorConfiguration
     let editorDependencies: EditorDependencies?
+    /// Opens posts through wordpress-rs, for the `post` type only.
+    let postEditing: PostEditing?
+    var openError: Error?
 
     init(client: WordPressAPI, postTypeDetails: PostTypeDetails, editorConfiguration: EditorConfiguration, editorDependencies: EditorDependencies?) {
         self.client = client
         self.postTypeDetails = postTypeDetails
         self.editorConfiguration = editorConfiguration
         self.editorDependencies = editorDependencies
+        if postTypeDetails.postType == "post" {
+            do {
+                self.postEditing = try PostEditing(client: client, siteURL: editorConfiguration.siteURL)
+            } catch {
+                print("Failed to set up wordpress-rs post editing: \(error)")
+                self.postEditing = nil
+            }
+        } else {
+            self.postEditing = nil
+        }
     }
 
     @MainActor
