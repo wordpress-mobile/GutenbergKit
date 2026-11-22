@@ -90,7 +90,9 @@ export function onPostChanged() {
  * Sends a request for the post being edited to the native host, which sends it
  * to the server and answers with the server's response.
  *
- * Only iOS has a handler.
+ * iOS answers the message directly. Android's bridge can't return a promise, so
+ * the request goes with an ID, and the host settles it later through
+ * `window.editor.resolvePostRequest()` or `window.editor.rejectPostRequest()`.
  *
  * @param {PostRequest} request The request.
  * @return {Promise<PostResponse>} The server's response; rejects when the host
@@ -99,14 +101,65 @@ export function onPostChanged() {
 export function performPostRequest( request ) {
 	debug( `Bridge event: performPostRequest`, request );
 
-	const handler = window.webkit?.messageHandlers?.performPostRequest;
-	if ( ! handler ) {
-		return Promise.reject(
-			new Error( 'The host has no handler for post requests' )
-		);
+	const iosHandler = window.webkit?.messageHandlers?.performPostRequest;
+	if ( iosHandler ) {
+		return iosHandler.postMessage( request );
 	}
 
-	return handler.postMessage( request );
+	if ( window.editorDelegate?.performPostRequest ) {
+		return performAndroidPostRequest( request );
+	}
+
+	return Promise.reject(
+		new Error( 'The host has no handler for post requests' )
+	);
+}
+
+/** Android post requests waiting for the host's answer, by ID. */
+const pendingPostRequests = new Map();
+
+let lastPostRequestId = 0;
+
+/**
+ * Sends a request for the post to Android's bridge, and waits for the host to
+ * settle it by its ID.
+ *
+ * @param {PostRequest} request The request.
+ * @return {Promise<PostResponse>} The server's response.
+ */
+function performAndroidPostRequest( request ) {
+	window.editor = window.editor || {};
+	window.editor.resolvePostRequest ??= ( id, response ) =>
+		settlePostRequest( id, ( { resolve } ) => resolve( response ) );
+	window.editor.rejectPostRequest ??= ( id, message ) =>
+		settlePostRequest( id, ( { reject } ) =>
+			reject( new Error( message ) )
+		);
+
+	const id = String( ++lastPostRequestId );
+	return new Promise( ( resolve, reject ) => {
+		pendingPostRequests.set( id, { resolve, reject } );
+		window.editorDelegate.performPostRequest(
+			id,
+			JSON.stringify( request )
+		);
+	} );
+}
+
+/**
+ * Settles the Android post request with the ID, once.
+ *
+ * @param {string}                                                                                          id     The request's ID.
+ * @param {(pending: {resolve: (response: PostResponse) => void, reject: (reason: Error) => void}) => void} settle Called with the request's `resolve` and `reject`.
+ */
+function settlePostRequest( id, settle ) {
+	const pending = pendingPostRequests.get( id );
+	if ( ! pending ) {
+		error( `No post request with ID ${ id } is waiting` );
+		return;
+	}
+	pendingPostRequests.delete( id );
+	settle( pending );
 }
 
 /**

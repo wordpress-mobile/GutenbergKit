@@ -7,6 +7,7 @@ import {
 	getPostReference,
 	showBlockInserter,
 	onEditorSaveAvailabilityChanged,
+	performPostRequest,
 } from './bridge';
 
 vi.mock( './logger.js', () => ( {
@@ -758,5 +759,52 @@ describe( 'onEditorSaveAvailabilityChanged', () => {
 			message: 'onEditorSaveAvailabilityChanged',
 			body: { isSaveable: false, isSavingLocked: true },
 		} );
+	} );
+} );
+
+describe( 'performPostRequest', () => {
+	const request = { method: 'PUT', path: '/wp/v2/posts/42', body: '{}' };
+	const response = { status: 200, headers: {}, body: '{"id":42}' };
+
+	afterEach( () => {
+		delete window.webkit;
+		delete window.editorDelegate;
+		delete window.editor;
+	} );
+
+	it( "answers with the iOS handler's reply", async () => {
+		const postMessage = vi.fn( () => Promise.resolve( response ) );
+		window.webkit = {
+			messageHandlers: { performPostRequest: { postMessage } },
+		};
+
+		await expect( performPostRequest( request ) ).resolves.toBe( response );
+		expect( postMessage ).toHaveBeenCalledWith( request );
+	} );
+
+	it( 'answers with the response Android resolves the request with', async () => {
+		window.editorDelegate = { performPostRequest: vi.fn() };
+
+		const answer = performPostRequest( request );
+		const [ id, json ] =
+			window.editorDelegate.performPostRequest.mock.calls[ 0 ];
+		window.editor.resolvePostRequest( id, response );
+
+		await expect( answer ).resolves.toBe( response );
+		expect( JSON.parse( json ) ).toEqual( request );
+	} );
+
+	it( 'rejects when Android rejects the request', async () => {
+		window.editorDelegate = { performPostRequest: vi.fn() };
+
+		const answer = performPostRequest( request );
+		const [ id ] = window.editorDelegate.performPostRequest.mock.calls[ 0 ];
+		window.editor.rejectPostRequest( id, 'Offline' );
+
+		await expect( answer ).rejects.toThrow( 'Offline' );
+	} );
+
+	it( 'rejects without a handler', async () => {
+		await expect( performPostRequest( request ) ).rejects.toThrow();
 	} );
 } );
