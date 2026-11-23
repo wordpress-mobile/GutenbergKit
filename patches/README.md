@@ -4,6 +4,8 @@ Sometimes there are problems with dependencies that can be solved by patching th
 
 Existing patches should be described and justified here.
 
+Installs fail when a patch no longer applies, locally and on CI. A patch that applies to a newer version than its filename names only logs a version-mismatch warning, so dependency updates can merge without touching the patch. Regenerate the patch with `npx patch-package <package-name>` when you next change it, or to clear the warning.
+
 ## Patches
 
 ### `@wordpress/block-editor`
