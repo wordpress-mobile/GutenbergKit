@@ -1,8 +1,12 @@
 package org.wordpress.gutenberg.views
 
+import android.app.Activity
 import android.content.res.Configuration
+import android.os.Looper
 import android.view.ContextThemeWrapper
 import android.view.View
+import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.TextView
 import androidx.annotation.StyleRes
@@ -15,8 +19,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.wordpress.gutenberg.R
 
 @RunWith(RobolectricTestRunner::class)
@@ -122,6 +128,49 @@ class EditorErrorViewTest {
 
         assertEquals(0, firstCount)
         assertEquals(1, secondCount)
+    }
+
+    @Test
+    fun `night mode change keeps keyboard focus on the action button`() {
+        val view = attachedCrashView()
+        actionButton(view).isFocusableInTouchMode = true
+        actionButton(view).requestFocus()
+
+        view.dispatchConfigurationChanged(nightModeToggled(view))
+
+        assertTrue(actionButton(view).isFocused)
+    }
+
+    @Test
+    fun `night mode change keeps TalkBack focus on the action button`() {
+        val accessibilityManager = shadowOf(
+            RuntimeEnvironment.getApplication().getSystemService(AccessibilityManager::class.java)
+        )
+        accessibilityManager.setEnabled(true)
+        accessibilityManager.setTouchExplorationEnabled(true)
+        val view = attachedCrashView()
+        actionButton(view).performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null)
+        assertTrue(actionButton(view).createAccessibilityNodeInfo().isAccessibilityFocused)
+
+        view.dispatchConfigurationChanged(nightModeToggled(view))
+
+        assertTrue(actionButton(view).createAccessibilityNodeInfo().isAccessibilityFocused)
+    }
+
+    // Focus needs a window, so these views are shown in an activity.
+    private fun attachedCrashView(): EditorErrorView {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        activity.setTheme(com.google.android.material.R.style.Theme_MaterialComponents_Light)
+        val view = EditorErrorView(activity)
+        view.setActionableState(
+            titleResId = R.string.gbk_editor_crashed_title,
+            descriptionResId = R.string.gbk_editor_crashed_description,
+            actionResId = R.string.gbk_editor_crashed_reload,
+            onAction = {}
+        )
+        activity.setContentView(view)
+        shadowOf(Looper.getMainLooper()).idle()
+        return view
     }
 
     private fun nightModeToggled(view: View) = Configuration(view.resources.configuration).apply {

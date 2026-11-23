@@ -171,6 +171,10 @@ class EditorErrorView @JvmOverloads constructor(
      */
     private fun replaceActionButton() {
         val oldButton = actionButton
+        // Removing the old button drops its focus, which would strand a TalkBack
+        // or keyboard user who was about to tap it.
+        val hadFocus = oldButton.isFocused
+        val hadAccessibilityFocus = oldButton.createAccessibilityNodeInfo().isAccessibilityFocused
         actionButton = createActionButton().apply {
             layoutParams = oldButton.layoutParams
             text = oldButton.text
@@ -179,6 +183,12 @@ class EditorErrorView @JvmOverloads constructor(
         val index = indexOfChild(oldButton)
         removeViewAt(index)
         addView(actionButton, index)
+        if (hadFocus) {
+            actionButton.requestFocus()
+        }
+        if (hadAccessibilityFocus) {
+            actionButton.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null)
+        }
     }
 
     /**
