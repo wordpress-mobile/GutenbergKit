@@ -14,6 +14,7 @@ import androidx.core.view.ViewCompat
 import com.google.android.material.button.MaterialButton
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -83,6 +84,30 @@ class EditorErrorViewTest {
         assertEquals(View.VISIBLE, button.visibility)
         button.performClick()
         assertEquals(1, actionCount)
+    }
+
+    @Test
+    fun `night mode change re-resolves the text and button colors`() {
+        val context = themedContext(com.google.android.material.R.style.Theme_MaterialComponents_Light)
+        val view = EditorErrorView(context)
+        view.setActionableState(
+            titleResId = R.string.gbk_editor_crashed_title,
+            descriptionResId = R.string.gbk_editor_crashed_description,
+            actionResId = R.string.gbk_editor_crashed_reload,
+            onAction = {}
+        )
+        val dayTitleColor = title(view).currentTextColor
+        val dayDescriptionColor = description(view).currentTextColor
+        val dayButtonColor = actionButton(view).currentTextColor
+
+        // Stands in for the platform rebasing a DayNight theme onto its night
+        // variant, which Robolectric's `Theme.rebase()` does not do.
+        context.theme.applyStyle(com.google.android.material.R.style.Theme_MaterialComponents, true)
+        view.dispatchConfigurationChanged(nightModeToggled(view))
+
+        assertNotEquals(dayTitleColor, title(view).currentTextColor)
+        assertNotEquals(dayDescriptionColor, description(view).currentTextColor)
+        assertNotEquals(dayButtonColor, actionButton(view).currentTextColor)
     }
 
     @Test
@@ -189,7 +214,12 @@ class EditorErrorViewTest {
     private fun actionButton(view: EditorErrorView): Button =
         (0 until view.childCount).map(view::getChildAt).filterIsInstance<Button>().single()
 
-    // The action button is a TextView too, so the title is the first that is not one.
-    private fun title(view: EditorErrorView): TextView =
-        (0 until view.childCount).map(view::getChildAt).filterIsInstance<TextView>().first { it !is Button }
+    // The action button is a TextView too, so the title and description are the
+    // first two that are not.
+    private fun title(view: EditorErrorView): TextView = labels(view)[0]
+
+    private fun description(view: EditorErrorView): TextView = labels(view)[1]
+
+    private fun labels(view: EditorErrorView): List<TextView> =
+        (0 until view.childCount).map(view::getChildAt).filterIsInstance<TextView>().filter { it !is Button }
 }
