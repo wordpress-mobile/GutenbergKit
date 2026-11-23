@@ -79,6 +79,51 @@ class EditorErrorViewTest {
         assertEquals(1, actionCount)
     }
 
+    @Test
+    fun `setError after a night mode change hides the replaced button and drops its action`() {
+        val view = EditorErrorView(themedContext(com.google.android.material.R.style.Theme_MaterialComponents_Light))
+        var actionCount = 0
+        view.setActionableState(
+            titleResId = R.string.gbk_editor_crashed_title,
+            descriptionResId = R.string.gbk_editor_crashed_description,
+            actionResId = R.string.gbk_editor_crashed_reload,
+            onAction = { actionCount++ }
+        )
+        view.dispatchConfigurationChanged(nightModeToggled(view))
+
+        view.setError(IllegalStateException("Load failed"))
+
+        val button = actionButton(view)
+        assertEquals(View.GONE, button.visibility)
+        button.performClick()
+        assertEquals(0, actionCount)
+    }
+
+    @Test
+    fun `a new action after a night mode change replaces the old one`() {
+        val view = EditorErrorView(themedContext(com.google.android.material.R.style.Theme_MaterialComponents_Light))
+        var firstCount = 0
+        var secondCount = 0
+        view.setActionableState(
+            titleResId = R.string.gbk_editor_crashed_title,
+            descriptionResId = R.string.gbk_editor_crashed_description,
+            actionResId = R.string.gbk_editor_crashed_reload,
+            onAction = { firstCount++ }
+        )
+        view.dispatchConfigurationChanged(nightModeToggled(view))
+
+        view.setActionableState(
+            titleResId = R.string.gbk_editor_crashed_title,
+            descriptionResId = R.string.gbk_editor_crashed_description,
+            actionResId = R.string.gbk_editor_crashed_reload,
+            onAction = { secondCount++ }
+        )
+        actionButton(view).performClick()
+
+        assertEquals(0, firstCount)
+        assertEquals(1, secondCount)
+    }
+
     private fun nightModeToggled(view: View) = Configuration(view.resources.configuration).apply {
         val nightMode = uiMode and Configuration.UI_MODE_NIGHT_MASK
         val toggled = if (nightMode == Configuration.UI_MODE_NIGHT_YES) {

@@ -134,7 +134,6 @@ class EditorErrorView @JvmOverloads constructor(
         descriptionText.setText(descriptionResId)
         this.onAction = onAction
         actionButton.setText(actionResId)
-        actionButton.setOnClickListener { onAction() }
         actionButton.visibility = VISIBLE
     }
 
@@ -156,7 +155,6 @@ class EditorErrorView @JvmOverloads constructor(
 
     private fun clearAction() {
         onAction = null
-        actionButton.setOnClickListener(null)
         actionButton.visibility = GONE
     }
 
@@ -173,14 +171,10 @@ class EditorErrorView @JvmOverloads constructor(
      */
     private fun replaceActionButton() {
         val oldButton = actionButton
-        val action = onAction
         actionButton = createActionButton().apply {
             layoutParams = oldButton.layoutParams
             text = oldButton.text
             visibility = oldButton.visibility
-            if (action != null) {
-                setOnClickListener { action() }
-            }
         }
         val index = indexOfChild(oldButton)
         removeViewAt(index)
@@ -199,7 +193,9 @@ class EditorErrorView @JvmOverloads constructor(
             TypedValue(),
             true
         )
-        return if (isMaterialTheme) MaterialButton(context) else Button(context)
+        val button = if (isMaterialTheme) MaterialButton(context) else Button(context)
+        // Reads the current action on tap, so a replaced button needs no rewiring.
+        return button.apply { setOnClickListener { onAction?.invoke() } }
     }
 
     private fun dpToPx(dp: Int): Int {
