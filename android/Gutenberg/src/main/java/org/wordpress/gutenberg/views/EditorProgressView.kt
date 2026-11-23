@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg.views
 
 import android.content.Context
+import android.content.res.Configuration
 import android.util.AttributeSet
 import android.view.Gravity
 import android.widget.LinearLayout
@@ -29,8 +30,9 @@ class EditorProgressView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
-    private val progressBar: ProgressBar
+    private var progressBar: ProgressBar
     private val label: TextView
+    private var nightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
     /**
      * The text displayed below the progress bar.
@@ -45,15 +47,7 @@ class EditorProgressView @JvmOverloads constructor(
         orientation = VERTICAL
         gravity = Gravity.CENTER
 
-        // Create progress bar
-        progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
-                marginStart = dpToPx(16)
-                marginEnd = dpToPx(16)
-            }
-            max = 100
-            progress = 0
-        }
+        progressBar = createProgressBar()
 
         // Create label
         label = TextView(context).apply {
@@ -63,11 +57,25 @@ class EditorProgressView @JvmOverloads constructor(
                 marginEnd = dpToPx(16)
             }
             gravity = Gravity.CENTER
-            TextViewCompat.setTextAppearance(this, android.R.style.TextAppearance_Material_Body1)
         }
+        applyLabelAppearance()
 
         addView(progressBar)
         addView(label)
+    }
+
+    /**
+     * Re-resolves theme colors when dark mode changes without recreating the
+     * activity, since colors are resolved only when set.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val newNightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        if (newNightMode != nightMode) {
+            nightMode = newNightMode
+            applyLabelAppearance()
+            replaceProgressBar()
+        }
     }
 
     /**
@@ -83,6 +91,29 @@ class EditorProgressView @JvmOverloads constructor(
         } else {
             progressBar.progress = progressPercent
         }
+    }
+
+    private fun createProgressBar(): ProgressBar =
+        ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dpToPx(16)
+                marginEnd = dpToPx(16)
+            }
+            max = 100
+            progress = 0
+        }
+
+    private fun applyLabelAppearance() {
+        TextViewCompat.setTextAppearance(label, android.R.style.TextAppearance_Material_Body1)
+    }
+
+    // The bar's drawables resolve their theme tints only when created.
+    private fun replaceProgressBar() {
+        val oldBar = progressBar
+        progressBar = createProgressBar().apply { progress = oldBar.progress }
+        val index = indexOfChild(oldBar)
+        removeViewAt(index)
+        addView(progressBar, index)
     }
 
     private fun dpToPx(dp: Int): Int {
