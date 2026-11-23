@@ -45,6 +45,40 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
     }
 
     @MainActor
+    @Test("ignores messages from a main-frame page that isn't the editor's")
+    func ignoresMessagesFromOtherMainFramePages() async throws {
+        let session = ParkedURLSession()
+        let configuration = makeIsolatedConfiguration()
+        defer { removeStorage(for: configuration) }
+        defer { session.release() }
+        let spy = BridgeDelegateSpy()
+        let editor = try await makeLoadedEditor(configuration: configuration, session: session, delegate: spy)
+
+        // The navigation policy would refuse this page, so it's bypassed to reach the bridge's own check.
+        editor.webView.navigationDelegate = nil
+        editor.webView.loadHTMLString(
+            "<!doctype html><title>Other</title><body></body>",
+            baseURL: URL(string: "https://example.com/")!
+        )
+        try await waitUntil(timeout: .seconds(180)) {
+            !editor.webView.isLoading && editor.webView.url?.host == "example.com"
+        }
+
+        // Messages are handled in the order they're posted, so the reply follows the history message.
+        let reply = try await editor.webView.callAsyncJavaScript(
+            """
+            const handlers = window.webkit.messageHandlers;
+            handlers.editorDelegate.postMessage({ message: 'onEditorHistoryChanged', body: { hasUndo: true, hasRedo: true } });
+            const content = await handlers.requestLatestContent.postMessage(null);
+            return JSON.stringify({ content: content ?? null });
+            """,
+            contentWorld: .page
+        )
+        #expect(reply as? String == #"{"content":null}"#)
+        #expect(spy.historyStates.isEmpty)
+    }
+
+    @MainActor
     @Test("drops a message it can't decode, and keeps handling the next", arguments: [
         "undefined",
         "null",
