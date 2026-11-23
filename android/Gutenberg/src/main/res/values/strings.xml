@@ -17,6 +17,7 @@
     <!-- Editor states -->
     <string name="gbk_editor_load_failed_title">Failed to load editor</string>
     <string name="gbk_editor_load_failed_unknown_error">Unknown error</string>
+    <string name="gbk_editor_webview_unsupported">Update Android System WebView to use the editor.</string>
     <string name="gbk_editor_crashed_title">The editor stopped working</string>
     <!--
       Deliberately makes no claim about whether the user's work was saved.

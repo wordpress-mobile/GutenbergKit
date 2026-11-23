@@ -13,15 +13,14 @@ import { isDevMode } from './dev-mode';
 function dispatchToBridge( methodName, args = {} ) {
 	debug( `Bridge event: ${ methodName }`, args );
 
-	// Android bridge - extract values in property definition order
+	// Android bridge - accepts only strings, so the message is serialized
 	if ( window.editorDelegate ) {
-		const method = window.editorDelegate[ methodName ];
-		if ( method ) {
-			method.apply( window.editorDelegate, Object.values( args ) );
-		}
+		window.editorDelegate.postMessage(
+			JSON.stringify( { message: methodName, body: args } )
+		);
 	}
 
-	// iOS webkit bridge - use arguments object directly
+	// iOS webkit bridge - use the message object directly
 	if ( window.webkit ) {
 		window.webkit.messageHandlers.editorDelegate.postMessage( {
 			message: methodName,
@@ -132,32 +131,12 @@ export function showBlockInserter( sourceRect ) {
 		return;
 	}
 
-	const payload = {
+	dispatchToBridge( 'showBlockInserter', {
 		sections: window.blockInserter.sections,
 		patterns: window.blockInserter.patterns,
 		patternCategories: window.blockInserter.patternCategories,
 		sourceRect,
-	};
-
-	debug( `Bridge event: showBlockInserter`, payload );
-
-	// Not using `dispatchToBridge`: its Android branch flattens `args` with
-	// `Object.values` and passes them as positional parameters. That works
-	// when every value is a primitive, but `@JavascriptInterface` can't
-	// receive arrays or objects — they arrive as `"[object Object]"`.
-	// Instead we stringify for Android (single String arg) and pass the
-	// structured body to iOS, matching the pattern used by openMediaLibrary,
-	// onNetworkRequest, and logException.
-	if ( window.editorDelegate ) {
-		window.editorDelegate.showBlockInserter( JSON.stringify( payload ) );
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'showBlockInserter',
-			body: payload,
-		} );
-	}
+	} );
 }
 
 /**
@@ -168,18 +147,7 @@ export function showBlockInserter( sourceRect ) {
  * @return {void}
  */
 export function openMediaLibrary( config ) {
-	debug( `Bridge event: openMediaLibrary`, config );
-
-	if ( window.editorDelegate ) {
-		window.editorDelegate.openMediaLibrary( JSON.stringify( config ) );
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'openMediaLibrary',
-			body: config,
-		} );
-	}
+	dispatchToBridge( 'openMediaLibrary', config );
 }
 
 /**
@@ -232,18 +200,7 @@ export function onModalDialogClosed( dialogType ) {
  * @return {void}
  */
 export function onNetworkRequest( requestData ) {
-	debug( `Bridge event: onNetworkRequest`, requestData );
-
-	if ( window.editorDelegate ) {
-		window.editorDelegate.onNetworkRequest( JSON.stringify( requestData ) );
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'onNetworkRequest',
-			body: requestData,
-		} );
-	}
+	dispatchToBridge( 'onNetworkRequest', requestData );
 }
 
 /**
@@ -363,10 +320,12 @@ export async function requestLatestContent() {
 		}
 	}
 
-	if ( window.editorDelegate?.requestLatestContent ) {
+	if ( window.editorDelegate ) {
 		try {
-			const result = window.editorDelegate.requestLatestContent();
-			return result ? JSON.parse( result ) : null;
+			return (
+				( await requestFromAndroidHost( 'requestLatestContent' ) ) ??
+				null
+			);
 		} catch ( err ) {
 			error( 'Failed to request content from Android host', err );
 			return null;
@@ -374,6 +333,44 @@ export async function requestLatestContent() {
 	}
 
 	return null;
+}
+
+let androidRequestCount = 0;
+
+/**
+ * Posts a request to the Android bridge and resolves with the result of its
+ * reply. Native code replies to every request it receives, tagged with the
+ * request's `id`.
+ *
+ * There is deliberately no timeout: resolving without the host's content would
+ * start the editor from stale content, which is worse than waiting.
+ *
+ * @param {string} message The request's message name.
+ *
+ * @return {Promise<?Object>} The reply's result.
+ */
+function requestFromAndroidHost( message ) {
+	const delegate = window.editorDelegate;
+	const id = ++androidRequestCount;
+
+	return new Promise( ( resolve ) => {
+		function onReply( event ) {
+			let reply;
+			try {
+				reply = JSON.parse( event.data );
+			} catch {
+				return;
+			}
+			if ( reply?.message !== message || reply.body?.id !== id ) {
+				return;
+			}
+			delegate.removeEventListener( 'message', onReply );
+			resolve( reply.body.result );
+		}
+
+		delegate.addEventListener( 'message', onReply );
+		delegate.postMessage( JSON.stringify( { message, body: { id } } ) );
+	} );
 }
 
 /**
@@ -475,20 +472,7 @@ export function logException(
 		handledBy,
 	};
 
-	debug( `Bridge event: logException`, parsedException );
-
-	if ( window.editorDelegate ) {
-		window.editorDelegate.onEditorExceptionLogged(
-			JSON.stringify( parsedException )
-		);
-	}
-
-	if ( window.webkit ) {
-		window.webkit.messageHandlers.editorDelegate.postMessage( {
-			message: 'onEditorExceptionLogged',
-			body: parsedException,
-		} );
-	}
+	dispatchToBridge( 'onEditorExceptionLogged', parsedException );
 }
 
 /**
