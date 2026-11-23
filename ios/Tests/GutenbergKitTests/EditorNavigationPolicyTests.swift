@@ -110,6 +110,8 @@ struct EditorNavigationPolicyTests {
         let policy = EditorNavigationPolicy()
         #expect(policy.isResourceScheme(URL(string: "gbk-cache-https://example.com/asset.js")!))
         #expect(policy.isResourceScheme(URL(string: "gbk-media-file:///Uploads/test-image.jpg")!))
+        #expect(policy.isResourceScheme(URL(string: "gbk-rest://example.com/wp-json/wp/v2/posts")!))
+        #expect(policy.isResourceScheme(URL(string: "gbk-upload://localhost/sessions")!))
         #expect(!policy.isResourceScheme(URL(string: "file:///path/to/editor.html")!))
         #expect(!policy.isResourceScheme(URL(string: "https://example.com/page")!))
     }
@@ -144,11 +146,18 @@ struct EditorNavigationPolicyTests {
     @Test("blocks resource scheme URLs on the dev server's host from replacing the editor page")
     func blocksResourceSchemesOnDevServerHostInMainFrame() {
         let policy = EditorNavigationPolicy(devServerURL: URL(string: "http://localhost:5173")!)
-        let url = URL(string: "gbk-cache-https://localhost:8888/wp-content/plugins/example/index.js")!
+        let urls = [
+            "gbk-cache-https://localhost:8888/wp-content/plugins/example/index.js",
+            "gbk-rest://localhost/wp-json/wp/v2/posts",
+            "gbk-upload://localhost/sessions"
+        ]
 
-        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
-        #expect(!policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
-        #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false))
+        for urlString in urls {
+            let url = URL(string: urlString)!
+            #expect(!policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: true))
+            #expect(!policy.shouldAllowNavigation(url: url, navigationType: .linkActivated, isMainFrame: true))
+            #expect(policy.shouldAllowNavigation(url: url, navigationType: .other, isMainFrame: false))
+        }
     }
 
     // MARK: - Navigation Policy: Subframe Navigation (Video/Embed Support)

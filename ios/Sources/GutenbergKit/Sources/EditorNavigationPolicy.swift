@@ -11,11 +11,17 @@ struct EditorNavigationPolicy {
     /// - `file`: Local bundled editor resources
     private static let allowedSchemes: Set<String> = ["file"]
 
-    /// The editor's own resource schemes. They serve subresources and subframes, so a
+    /// The editor's own custom schemes, which mean nothing outside the editor, so a
     /// navigation that would replace the editor's page with one of them is blocked.
-    /// - `gbk-cache-https`: Cached remote assets served via custom scheme handler
-    /// - `gbk-media-file`: Local media files from the device's photo library
-    private static let resourceSchemes: Set<String> = ["gbk-cache-https", "gbk-media-file"]
+    /// - `gbk-cache-https`: Cached remote assets, for subresources and subframes
+    /// - `gbk-media-file`: Local media files, for subresources and subframes
+    /// - `gbk-rest`, `gbk-upload`: Relays that answer the editor's `fetch` and XHR requests
+    private static let resourceSchemes: Set<String> = [
+        Constants.EditorAssetLibrary.urlScheme,
+        MediaFileSchemeHandler.scheme,
+        RestRelaySchemeHandler.scheme,
+        MediaUploadSchemeHandler.scheme,
+    ]
 
     /// Optional development server URL. Navigation to this host is always allowed.
     let devServerURL: URL?
@@ -57,7 +63,7 @@ struct EditorNavigationPolicy {
             return true
         }
 
-        // The editor's resource schemes load only in subframes, even on the dev server's host
+        // The editor's resource schemes never replace its page, even on the dev server's host
         if isResourceScheme(url) {
             return isMainFrame == false
         }
