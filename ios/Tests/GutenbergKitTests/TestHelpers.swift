@@ -132,6 +132,21 @@ extension MakesTestFixtures {
         return builder.build()
     }
 
+    /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
+    /// Pair every call with `removeStorage(for:)`: nothing else deletes the site's files.
+    func makeIsolatedConfiguration() -> EditorConfiguration {
+        makeConfiguration(
+            siteURL: URL(string: "https://\(UUID().uuidString).example.invalid")!
+        )
+    }
+
+    /// Deletes what the editor wrote for this site. `EditorViewController` can't be
+    /// pointed at a temporary directory the way `makeService` can.
+    func removeStorage(for configuration: EditorConfiguration) {
+        try? FileManager.default.removeItem(at: Paths.storageRoot(for: configuration))
+        try? FileManager.default.removeItem(at: Paths.cacheRoot(for: configuration))
+    }
+
     func makeConfigurationBuilder(postType: PostTypeDetails = .post) -> EditorConfigurationBuilder {
         EditorConfigurationBuilder(
             postType: postType,
