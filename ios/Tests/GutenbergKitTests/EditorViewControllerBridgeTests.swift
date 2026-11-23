@@ -163,14 +163,6 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         #expect(spy.historyStates == [[true, true]])
     }
 
-    /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
-    /// Pair every call with `removeStorage(for:)`: nothing else deletes the site's files.
-    private func makeIsolatedConfiguration() -> EditorConfiguration {
-        makeConfiguration(
-            siteURL: URL(string: "https://\(UUID().uuidString).example.invalid")!
-        )
-    }
-
     /// An editor showing a blank `file://` page, as the editor's own page is, with its
     /// bridge wired to `delegate`.
     @MainActor
@@ -228,11 +220,6 @@ struct EditorViewControllerBridgeTests: MakesTestFixtures {
         document.body.append(frame);
         return JSON.stringify(await reply);
         """#
-
-    private func removeStorage(for configuration: EditorConfiguration) {
-        try? FileManager.default.removeItem(at: Paths.storageRoot(for: configuration))
-        try? FileManager.default.removeItem(at: Paths.cacheRoot(for: configuration))
-    }
 }
 
 /// Records the history states the editor reports, and answers requests for the latest
