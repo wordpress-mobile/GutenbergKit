@@ -6,6 +6,8 @@ Existing patches should be described and justified here.
 
 Installs fail when a patch no longer applies, locally and on CI. A patch that applies to a newer version than its filename names only logs a version-mismatch warning, so dependency updates can merge without touching the patch. Regenerate the patch with `npx patch-package <package-name>` when you next change it, or to clear the warning.
 
+`e2e/dependency-patches.spec.js` tests the behavior each patch provides, since a patch can apply cleanly to a new version yet stop having an effect. Add a test there with each new patch, unless an existing test or the build already fails without it.
+
 ## Patches
 
 ### `@wordpress/block-editor`
