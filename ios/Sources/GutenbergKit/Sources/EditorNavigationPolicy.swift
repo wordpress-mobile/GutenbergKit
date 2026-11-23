@@ -115,10 +115,20 @@ struct EditorNavigationPolicy {
         guard let devServerURL, let devScheme = devServerURL.scheme, let devHost = devServerURL.host else {
             return false
         }
-        // `WKSecurityOrigin` reports a default port as 0.
         return scheme.caseInsensitiveCompare(devScheme) == .orderedSame
             && host.caseInsensitiveCompare(devHost) == .orderedSame
-            && port == (devServerURL.port ?? 0)
+            && Self.originPort(port, scheme: scheme) == Self.originPort(devServerURL.port ?? 0, scheme: devScheme)
+    }
+
+    /// The port as `WKSecurityOrigin` reports it: 0 for the scheme's default port, even
+    /// when a URL spells it out.
+    private static func originPort(_ port: Int, scheme: String) -> Int {
+        switch (scheme.lowercased(), port) {
+        case ("http", 80), ("https", 443):
+            return 0
+        default:
+            return port
+        }
     }
 
     /// Returns `true` if the URL matches the configured dev server host.

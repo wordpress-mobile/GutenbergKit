@@ -77,6 +77,17 @@ struct EditorNavigationPolicyTests {
         #expect(!policy.isEditorOrigin(scheme: "http", host: "example.com", port: 5173))
     }
 
+    @Test("recognizes the dev server's origin when its URL spells out the default port")
+    func recognizesDevServerOriginWithExplicitDefaultPort() {
+        let httpPolicy = EditorNavigationPolicy(devServerURL: URL(string: "http://localhost:80/")!)
+        #expect(httpPolicy.isEditorOrigin(scheme: "http", host: "localhost", port: 0))
+        #expect(!httpPolicy.isEditorOrigin(scheme: "http", host: "localhost", port: 8080))
+
+        let httpsPolicy = EditorNavigationPolicy(devServerURL: URL(string: "https://example.test:443/")!)
+        #expect(httpsPolicy.isEditorOrigin(scheme: "https", host: "example.test", port: 0))
+        #expect(!httpsPolicy.isEditorOrigin(scheme: "http", host: "example.test", port: 0))
+    }
+
     @Test("does not recognize other origins as the editor's")
     func doesNotRecognizeOtherOrigins() {
         let policy = EditorNavigationPolicy()
