@@ -1,7 +1,6 @@
 package org.wordpress.gutenberg.views
 
 import android.app.Activity
-import android.content.res.Configuration
 import android.os.Looper
 import android.view.ContextThemeWrapper
 import android.view.View
@@ -76,7 +75,7 @@ class EditorErrorViewTest {
         )
         val originalButton = actionButton(view)
 
-        view.dispatchConfigurationChanged(nightModeToggled(view))
+        view.dispatchConfigurationChanged(nightModeToggled(view.context))
 
         val button = actionButton(view)
         assertNotSame(originalButton, button)
@@ -103,7 +102,7 @@ class EditorErrorViewTest {
         // Stands in for the platform rebasing a DayNight theme onto its night
         // variant, which Robolectric's `Theme.rebase()` does not do.
         context.theme.applyStyle(com.google.android.material.R.style.Theme_MaterialComponents, true)
-        view.dispatchConfigurationChanged(nightModeToggled(view))
+        view.dispatchConfigurationChanged(nightModeToggled(view.context))
 
         assertNotEquals(dayTitleColor, title(view).currentTextColor)
         assertNotEquals(dayDescriptionColor, description(view).currentTextColor)
@@ -120,7 +119,7 @@ class EditorErrorViewTest {
             actionResId = R.string.gbk_editor_crashed_reload,
             onAction = { actionCount++ }
         )
-        view.dispatchConfigurationChanged(nightModeToggled(view))
+        view.dispatchConfigurationChanged(nightModeToggled(view.context))
 
         view.setError(IllegalStateException("Load failed"))
 
@@ -141,7 +140,7 @@ class EditorErrorViewTest {
             actionResId = R.string.gbk_editor_crashed_reload,
             onAction = { firstCount++ }
         )
-        view.dispatchConfigurationChanged(nightModeToggled(view))
+        view.dispatchConfigurationChanged(nightModeToggled(view.context))
 
         view.setActionableState(
             titleResId = R.string.gbk_editor_crashed_title,
@@ -161,7 +160,7 @@ class EditorErrorViewTest {
         actionButton(view).isFocusableInTouchMode = true
         actionButton(view).requestFocus()
 
-        view.dispatchConfigurationChanged(nightModeToggled(view))
+        view.dispatchConfigurationChanged(nightModeToggled(view.context))
 
         assertTrue(actionButton(view).isFocused)
     }
@@ -177,7 +176,7 @@ class EditorErrorViewTest {
         actionButton(view).performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null)
         assertTrue(actionButton(view).createAccessibilityNodeInfo().isAccessibilityFocused)
 
-        view.dispatchConfigurationChanged(nightModeToggled(view))
+        view.dispatchConfigurationChanged(nightModeToggled(view.context))
 
         assertTrue(actionButton(view).createAccessibilityNodeInfo().isAccessibilityFocused)
     }
@@ -196,16 +195,6 @@ class EditorErrorViewTest {
         activity.setContentView(view)
         shadowOf(Looper.getMainLooper()).idle()
         return view
-    }
-
-    private fun nightModeToggled(view: View) = Configuration(view.resources.configuration).apply {
-        val nightMode = uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val toggled = if (nightMode == Configuration.UI_MODE_NIGHT_YES) {
-            Configuration.UI_MODE_NIGHT_NO
-        } else {
-            Configuration.UI_MODE_NIGHT_YES
-        }
-        uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or toggled
     }
 
     private fun themedContext(@StyleRes theme: Int) =
