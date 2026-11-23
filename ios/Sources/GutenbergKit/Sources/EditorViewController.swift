@@ -571,12 +571,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// The document-start script that installs `window.GBKit`.
     ///
-    /// The configuration carries the site credential, so no copy of it outlives
-    /// the load that injected it. Versions before #613 mirrored it into `localStorage`,
-    /// which persists across launches; the script removes that key, scrubbing an
-    /// upgraded device the next time the editor loads. Nothing reads it any
-    /// more, so the line can go once builds from before #613 are no longer in
-    /// use.
+    /// Builds before #613 kept a copy of this configuration in `localStorage`;
+    /// the script removes that key from upgraded devices. Nothing reads it, so
+    /// the line can go once those builds are no longer in use.
     static func configurationScript(gbkitGlobal: String) -> String {
         """
         window.GBKit = \(gbkitGlobal);

@@ -53,8 +53,10 @@ public struct GBKitGlobal: Sendable, Codable {
     /// Paths starting with any of these prefixes will bypass the namespace insertion middleware.
     let namespaceExcludedPaths: [String]
 
-    /// The authorization header value for authenticated API requests.
-    let authHeader: String
+    /// The site credential, for the page to send with its own requests.
+    ///
+    /// `nil` while ``restRelay`` is set, which adds it natively, and in offline mode.
+    let authHeader: String?
 
     /// Domains that `authHeader` may be sent to, besides the site and its API.
     let authHeaderDomains: [String]
@@ -126,8 +128,8 @@ public struct GBKitGlobal: Sendable, Codable {
     ///   - nativeUploadScheme: The scheme native media uploads use, or nil when the
     ///     editor can't upload natively.
     ///   - restRelayEndpoint: The URL the page relays its requests to other origins
-    ///     through, or nil when it sends them itself. Ignored in offline mode, where
-    ///     there is no site to relay for.
+    ///     through, or nil when it sends them itself. When set, the page gets no
+    ///     `authHeader`. Ignored in offline mode, where there is no site to relay for.
     ///   - restRelayReportsRequests: Whether native code reports each relayed
     ///     request to the host's ``EditorHTTPClientDelegate``.
     ///   - schemeCallerToken: The token the page sends to the upload scheme and the
@@ -144,7 +146,7 @@ public struct GBKitGlobal: Sendable, Codable {
         self.siteApiRoot = configuration.isOfflineModeEnabled ? nil : configuration.siteApiRoot
         self.siteApiNamespace = configuration.siteApiNamespace
         self.namespaceExcludedPaths = configuration.namespaceExcludedPaths
-        self.authHeader = configuration.authHeader
+        self.authHeader = configuration.isOfflineModeEnabled || restRelayEndpoint != nil ? nil : configuration.authHeader
         self.authHeaderDomains = configuration.authHeaderDomains
         self.themeStyles = configuration.shouldUseThemeStyles
         self.plugins = configuration.shouldUsePlugins

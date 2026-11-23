@@ -18,10 +18,10 @@ export function configureAjax() {
 	window.wp.ajax = window.wp.ajax || {};
 	window.wp.ajax.settings = window.wp.ajax.settings || {};
 
-	const { siteURL: rawSiteURL, authHeader } = getGBKit();
+	const { siteURL: rawSiteURL, authHeader, restRelay } = getGBKit();
 	const siteURL = stripTrailingSlash( rawSiteURL );
 	configureAjaxUrl( siteURL );
-	configureAjaxAuth( siteURL, authHeader );
+	configureAjaxAuth( siteURL, authHeader, restRelay );
 	configureMediaAjax();
 }
 
@@ -52,14 +52,20 @@ export function getAjaxUrl( siteURL ) {
 	return `${ stripTrailingSlash( siteURL ) }/wp-admin/admin-ajax.php`;
 }
 
-function configureAjaxAuth( siteURL, authHeader ) {
+function configureAjaxAuth( siteURL, authHeader, restRelay ) {
 	if ( ! siteURL ) {
 		warn( 'Unable to configure AJAX auth without siteURL' );
 		return;
 	}
 
 	if ( ! authHeader ) {
-		warn( 'Unable to configure AJAX auth without authHeader' );
+		if ( restRelay ) {
+			// Native code adds the site credential to relayed requests for the
+			// site's `admin-ajax.php`, so the page has none to send.
+			debug( 'AJAX auth left to the native relay' );
+		} else {
+			warn( 'Unable to configure AJAX auth without authHeader' );
+		}
 		return;
 	}
 

@@ -11,7 +11,7 @@ struct EditorConfigurationScriptTests {
     @MainActor
     @Test("injects the configuration without persisting it")
     func doesNotPersistTheConfiguration() {
-        // The injected configuration carries the site credential.
+        // Builds before #613 kept a copy of the configuration in `localStorage`.
         let script = EditorViewController.configurationScript(
             gbkitGlobal: #"{"authHeader":"Bearer secret"}"#
         )

@@ -34,11 +34,11 @@ export function createRelayFetchWrapper() {
  *
  * Each request goes to `restRelay.endpoint`, with the URL it was for in the
  * `url` query parameter. Native code decides how to send it: a request for the
- * site's REST API gets the site credential if it has no `Authorization` of its
- * own, and native code never adds it to a request for any other host. An
- * `Authorization` the request already has is sent on as it is, wherever the
- * request goes, so which hosts get the site credential is decided here, on the
- * page.
+ * site's REST API or its `admin-ajax.php` gets the site credential if it has no
+ * `Authorization` of its own, and native code never adds it to any other
+ * request. The page holds no site credential of its own while the relay is on.
+ * An `Authorization` the request already has, such as a plugin's own token, is
+ * sent on as it is, wherever the request goes.
  *
  * Each relayed request carries `restRelay.token` in `CALLER_TOKEN_HEADER`.
  * Native code refuses a request without it, so only callers that can read the
