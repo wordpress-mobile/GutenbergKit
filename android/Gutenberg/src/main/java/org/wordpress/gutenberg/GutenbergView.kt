@@ -31,7 +31,6 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
@@ -54,6 +53,7 @@ import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
 import org.wordpress.gutenberg.views.EditorErrorView
 import org.wordpress.gutenberg.views.EditorProgressView
+import org.wordpress.gutenberg.views.EditorSpinnerView
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -316,7 +316,7 @@ class GutenbergView : FrameLayout {
 
     // Internal loading overlay views
     private val progressView: EditorProgressView
-    private val spinnerView: ProgressBar
+    private val spinnerView: EditorSpinnerView
     private val errorView: EditorErrorView
 
     /**
@@ -430,9 +430,8 @@ class GutenbergView : FrameLayout {
         }
         addView(progressView)
 
-        spinnerView = ProgressBar(context).apply {
+        spinnerView = EditorSpinnerView(context).apply {
             layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
-            isIndeterminate = true
             visibility = GONE
         }
         addView(spinnerView)
