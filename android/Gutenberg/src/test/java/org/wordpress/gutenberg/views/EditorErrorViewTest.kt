@@ -1,6 +1,8 @@
 package org.wordpress.gutenberg.views
 
+import android.content.res.Configuration
 import android.view.ContextThemeWrapper
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.annotation.StyleRes
@@ -8,6 +10,7 @@ import androidx.core.view.ViewCompat
 import com.google.android.material.button.MaterialButton
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,6 +55,38 @@ class EditorErrorViewTest {
         // A pane title announces when the view appears, and focusTitleForAccessibility
         // reads the title it lands on, so setting both reads the title twice.
         assertNull(ViewCompat.getAccessibilityPaneTitle(view))
+    }
+
+    @Test
+    fun `night mode change keeps the action button's label, visibility, and action`() {
+        val view = EditorErrorView(themedContext(com.google.android.material.R.style.Theme_MaterialComponents_Light))
+        var actionCount = 0
+        view.setActionableState(
+            titleResId = R.string.gbk_editor_crashed_title,
+            descriptionResId = R.string.gbk_editor_crashed_description,
+            actionResId = R.string.gbk_editor_crashed_reload,
+            onAction = { actionCount++ }
+        )
+        val originalButton = actionButton(view)
+
+        view.dispatchConfigurationChanged(nightModeToggled(view))
+
+        val button = actionButton(view)
+        assertNotSame(originalButton, button)
+        assertEquals(view.context.getString(R.string.gbk_editor_crashed_reload), button.text.toString())
+        assertEquals(View.VISIBLE, button.visibility)
+        button.performClick()
+        assertEquals(1, actionCount)
+    }
+
+    private fun nightModeToggled(view: View) = Configuration(view.resources.configuration).apply {
+        val nightMode = uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val toggled = if (nightMode == Configuration.UI_MODE_NIGHT_YES) {
+            Configuration.UI_MODE_NIGHT_NO
+        } else {
+            Configuration.UI_MODE_NIGHT_YES
+        }
+        uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or toggled
     }
 
     private fun themedContext(@StyleRes theme: Int) =

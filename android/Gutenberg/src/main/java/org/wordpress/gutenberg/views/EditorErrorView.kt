@@ -1,6 +1,7 @@
 package org.wordpress.gutenberg.views
 
 import android.content.Context
+import android.content.res.Configuration
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
@@ -37,7 +38,9 @@ class EditorErrorView @JvmOverloads constructor(
     private val icon: ImageView
     private val titleText: TextView
     private val descriptionText: TextView
-    private val actionButton: Button
+    private var actionButton: Button
+    private var onAction: (() -> Unit)? = null
+    private var nightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
 
     init {
         orientation = VERTICAL
@@ -46,7 +49,6 @@ class EditorErrorView @JvmOverloads constructor(
         // Create error icon
         icon = ImageView(context).apply {
             layoutParams = LayoutParams(dpToPx(48), dpToPx(48))
-            setImageResource(R.drawable.gbk_ic_editor_error)
         }
 
         // Create title
@@ -57,7 +59,6 @@ class EditorErrorView @JvmOverloads constructor(
                 marginEnd = dpToPx(16)
             }
             gravity = Gravity.CENTER
-            TextViewCompat.setTextAppearance(this, android.R.style.TextAppearance_Material_Subhead)
             text = context.getText(R.string.gbk_editor_load_failed_title)
             ViewCompat.setAccessibilityHeading(this, true)
         }
@@ -70,7 +71,6 @@ class EditorErrorView @JvmOverloads constructor(
                 marginEnd = dpToPx(16)
             }
             gravity = Gravity.CENTER
-            TextViewCompat.setTextAppearance(this, android.R.style.TextAppearance_Material_Body1)
         }
 
         // Hidden unless the state gives the user something to do about it.
@@ -81,10 +81,27 @@ class EditorErrorView @JvmOverloads constructor(
             visibility = GONE
         }
 
+        applyThemeColors()
+
         addView(icon)
         addView(titleText)
         addView(descriptionText)
         addView(actionButton)
+    }
+
+    /**
+     * Re-resolves theme colors when dark mode changes without recreating the
+     * activity, as hosts that handle `uiMode` changes themselves do. Colors are
+     * resolved once when set, so the view would otherwise keep the old mode's.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val newNightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        if (newNightMode != nightMode) {
+            nightMode = newNightMode
+            applyThemeColors()
+            replaceActionButton()
+        }
     }
 
     /**
@@ -115,6 +132,7 @@ class EditorErrorView @JvmOverloads constructor(
     ) {
         setTitle(context.getText(titleResId))
         descriptionText.setText(descriptionResId)
+        this.onAction = onAction
         actionButton.setText(actionResId)
         actionButton.setOnClickListener { onAction() }
         actionButton.visibility = VISIBLE
@@ -137,8 +155,36 @@ class EditorErrorView @JvmOverloads constructor(
     }
 
     private fun clearAction() {
+        onAction = null
         actionButton.setOnClickListener(null)
         actionButton.visibility = GONE
+    }
+
+    private fun applyThemeColors() {
+        TextViewCompat.setTextAppearance(titleText, android.R.style.TextAppearance_Material_Subhead)
+        TextViewCompat.setTextAppearance(descriptionText, android.R.style.TextAppearance_Material_Body1)
+        // Reloading the drawable re-resolves its theme-attribute tint.
+        icon.setImageResource(R.drawable.gbk_ic_editor_error)
+    }
+
+    /**
+     * Swaps in a new button, since a Material button resolves its many theme
+     * colors only when created.
+     */
+    private fun replaceActionButton() {
+        val oldButton = actionButton
+        val action = onAction
+        actionButton = createActionButton().apply {
+            layoutParams = oldButton.layoutParams
+            text = oldButton.text
+            visibility = oldButton.visibility
+            if (action != null) {
+                setOnClickListener { action() }
+            }
+        }
+        val index = indexOfChild(oldButton)
+        removeViewAt(index)
+        addView(actionButton, index)
     }
 
     /**
