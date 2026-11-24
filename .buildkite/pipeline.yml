@@ -67,9 +67,7 @@ steps:
           - github_commit_status:
                 context: 'Validate Swift Release'
       if: build.env("NEW_VERSION") != null && build.branch == "trunk" && build.pull_request.id == null
-      # Temporary: drop RBENV_VERSION once .ruby-version is 3.4.13 (AINFRA-3852); the Linux agents lack it until AINFRA-3889/3890/3891.
       command: |
-          export RBENV_VERSION=3.4.13
           install_gems
           bundle exec fastlane validate "version:$NEW_VERSION"
       plugins: &plugins
@@ -113,7 +111,6 @@ steps:
                 context: 'Test Web E2E'
       depends_on: build
       command: |
-          export RBENV_VERSION=3.4.13
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           echo "--- :wordpress: Starting wp-env"
@@ -181,7 +178,6 @@ steps:
       # until it ended: one took 48 minutes to fail.
       timeout_in_minutes: 20
       command: |
-          export RBENV_VERSION=3.4.13
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           restore_swiftpm_cache --package-resolved Package.resolved
@@ -196,7 +192,6 @@ steps:
                 context: 'Test iOS Library Host'
       depends_on: build
       command: |
-          export RBENV_VERSION=3.4.13
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           restore_swiftpm_cache --package-resolved Package.resolved
@@ -211,7 +206,6 @@ steps:
                 context: 'Build iOS Library for App Extensions'
       depends_on: build
       command: |
-          export RBENV_VERSION=3.4.13
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           restore_swiftpm_cache --package-resolved Package.resolved
@@ -228,7 +222,6 @@ steps:
           - build
           - test-ios-library-host
       command: |
-          export RBENV_VERSION=3.4.13
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           install_gems
@@ -257,7 +250,6 @@ steps:
       # and intentionally not gated here.
       if: build.env("NEW_VERSION") == null && build.tag == null && build.pull_request.id == null
       command: |
-          export RBENV_VERSION=3.4.13
           buildkite-agent artifact download '*.xcframework.zip' .
           buildkite-agent artifact download '*.xcframework.zip.checksum.txt' .
           install_gems
@@ -270,7 +262,7 @@ steps:
                 context: 'Publish PR XCFramework'
       depends_on: build-ios-resources-xcframework
       if: build.pull_request.id != null
-      command: RBENV_VERSION=3.4.13 .buildkite/publish-pr-xcframework.sh
+      command: .buildkite/publish-pr-xcframework.sh
       plugins: *plugins
 
     - label: ':ios: Publish Swift Release ${NEW_VERSION:-(Error: No version found!)}'
@@ -292,7 +284,7 @@ steps:
       # triggering aren't exposed to job runtime shells on `queue: mac`, but
       # `$NEW_VERSION` here gets YAML-interpolated at pipeline-upload time
       # so the literal version lands in the command line.
-      command: RBENV_VERSION=3.4.13 .buildkite/release.sh "$NEW_VERSION"
+      command: .buildkite/release.sh "$NEW_VERSION"
       plugins: *plugins
 
     - label: ':ios: Test iOS App E2E'
@@ -302,7 +294,6 @@ steps:
                 context: 'Test iOS App E2E'
       depends_on: build
       command: |
-          export RBENV_VERSION=3.4.13
           buildkite-agent artifact download dist.tar.gz .
           tar -xzf dist.tar.gz
           SPM_RESOLVED=ios/Demo-iOS/Gutenberg.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
@@ -377,5 +368,5 @@ steps:
           - github_commit_status:
                 context: 'Clean Up pr-build/* Branches for Closed PRs'
       if: build.branch == "trunk"
-      command: RBENV_VERSION=3.4.13 .buildkite/cleanup-pr-build-branches.sh
+      command: .buildkite/cleanup-pr-build-branches.sh
       plugins: *plugins
