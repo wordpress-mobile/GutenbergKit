@@ -1,7 +1,7 @@
 # Dependabot (npm and Gradle)
-/package.json                       @wordpress-mobile/content-editor
-/package-lock.json                  @wordpress-mobile/content-editor
-/android/gradle/libs.versions.toml  @wordpress-mobile/content-editor
+/package.json                       @wordpress-mobile/editor
+/package-lock.json                  @wordpress-mobile/editor
+/android/gradle/libs.versions.toml  @wordpress-mobile/editor
 
 # Ruby dependency surface
 Gemfile*              @wordpress-mobile/apps-infra-tooling
