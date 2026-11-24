@@ -22,11 +22,16 @@ import OSLog
 ///
 /// - A URL below the site's REST API root goes to the site, and gets the site
 ///   credential when the caller sent no `Authorization` of its own.
+/// - The site's `admin-ajax.php`, as the page's `ajaxurl` names it, gets the
+///   site credential the same way.
 /// - Any other URL — a plugin calling its own service, for example — goes
 ///   where it was going. The relay never adds the site credential to it.
 ///
+/// Both stay within the site's ``EditorAuthorizationScope``. See
+/// `docs/code/authorization.md`.
+///
 /// A caller's own `Authorization` is always sent as it arrived. See
-/// ``authorization(sentByCaller:toSiteAPI:)``.
+/// ``authorization(sentByCaller:addingSiteCredential:)``.
 ///
 /// ## Security
 ///
@@ -34,25 +39,27 @@ import OSLog
 ///   ``RestRelaySchemeHandler`` refuses a request without the editor's
 ///   ``SchemeCallerToken``. See "Who can use the schemes" in
 ///   `docs/code/media-uploads.md`.
-/// - The relay adds the site credential only to a URL it builds itself, from
-///   the configured API root and the path below it. The page's URL is matched
-///   against the root but never sent with the added credential, so a mistake
-///   in the matching can send a request to the user's own site, but can't make
-///   the relay send the credential to another host. The built URL is
-///   re-checked against the root, and redirects away from it are refused.
+/// - For the site's REST API, the relay adds the site credential only to a URL
+///   it builds itself, from the configured API root and the path below it. The
+///   page's URL is matched against the root but never sent with the added
+///   credential, so a mistake in the matching can send a request to the user's
+///   own site, but can't make the relay send the credential to another host.
+///   The built URL is re-checked against the root, and redirects away from it
+///   are refused.
+/// - For `admin-ajax.php`, the page's URL is sent, and only when its origin
+///   and path are exactly the site's `admin-ajax.php`. A redirect keeps the
+///   credential only to the same origin, as `fetch` would.
 /// - Which route *within* the site is reached is the caller's to choose. The
 ///   query is forwarded as-is, and WordPress registers `rest_route` as a public
 ///   query variable that `WP::parse_request()` prefers over the route the path
 ///   names, so a caller-supplied one wins. There is no boundary here to
 ///   defend: every route reachable that way is one the editor may request
 ///   through the relay directly.
+/// - The page never holds the site credential: `GBKitGlobal` leaves it out
+///   whenever the relay is on, and native code decides which requests get it.
 /// - A caller's own `Authorization` is sent as it is, wherever the request
-///   goes, even when it is the site credential. Jetpack AI signs its requests
-///   to WordPress.com with a token of its own, and the editor's jQuery AJAX setup
-///   sends the site credential to the site's `admin-ajax.php`. Which hosts the page sends the site
-///   credential to is decided on the page, before the request reaches the
-///   relay. Removing it here would protect nothing: the page already holds the
-///   credential, so it can send it anywhere.
+///   goes. A plugin may sign requests to its own service with a token of its
+///   own.
 /// - The relay reaches any `https` URL, so a caller can read another host's
 ///   response without CORS. Without Lockdown Mode the editor page can do that
 ///   anyway.
@@ -78,16 +85,37 @@ struct RestRelay: Sendable {
         /// The site's REST API, at a URL built from the configured root.
         case siteAPI(URL)
 
+        /// The site's `admin-ajax.php`, at the URL the page asked for.
+        case siteAJAX(URL)
+
         /// Any other host, at the URL the page asked for.
         case otherHost(URL)
+
+        /// Whether a request that arrives without `Authorization` gets the site
+        /// credential.
+        var addsSiteCredential: Bool {
+            switch self {
+            case .siteAPI, .siteAJAX: true
+            case .otherHost: false
+            }
+        }
     }
 
     /// The site's REST API root. A site API request goes to a URL built from
     /// it, and every redirect it follows must stay inside it.
     private let apiRoot: SiteAPIRoot
 
-    /// The site credential: added to a site API request that has no
-    /// `Authorization` of its own, and never added to any other request.
+    /// The site's `admin-ajax.php`, as the page's `ajaxurl` names it: the
+    /// site URL's origin and path, then `/wp-admin/admin-ajax.php`.
+    private let siteAJAXURL: URL?
+
+    /// Where the site credential may go at all. Every request the relay adds
+    /// it to is inside.
+    private let authorizationScope: EditorAuthorizationScope
+
+    /// The site credential: added to a request for the site's REST API or its
+    /// `admin-ajax.php` that has no `Authorization` of its own, and never
+    /// added to any other request.
     private let authHeader: String
 
     /// The session upstream requests are sent on.
@@ -153,6 +181,8 @@ struct RestRelay: Sendable {
         observer: (any EditorHTTPClientDelegate)? = nil
     ) {
         self.apiRoot = SiteAPIRoot(configuration.siteApiRoot)
+        self.siteAJAXURL = Self.ajaxURL(forSite: configuration.siteURL)
+        self.authorizationScope = EditorAuthorizationScope(configuration: configuration)
         self.authHeader = configuration.authHeader
         self.session = session ?? Self.sharedSession
         self.observer = observer
@@ -215,7 +245,7 @@ struct RestRelay: Sendable {
         }
         let (upstreamURL, isSiteAPI) = switch destination {
         case .siteAPI(let url): (url, true)
-        case .otherHost(let url): (url, false)
+        case .siteAJAX(let url), .otherHost(let url): (url, false)
         }
 
         if !isSiteAPI, upstreamURL.scheme?.lowercased() == "http", !isSiteHost(upstreamURL) {
@@ -223,13 +253,16 @@ struct RestRelay: Sendable {
             return Response(Self.httpsRequired())
         }
 
+        let callerAuthorization = request.value(forHTTPHeaderField: "Authorization")
+        let addsSiteCredential = destination.addsSiteCredential && authorizationScope.allows(upstreamURL)
+
         var upstreamRequest = URLRequest(url: upstreamURL)
         upstreamRequest.httpMethod = request.httpMethod
         for (name, value) in request.allHTTPHeaderFields ?? [:] where !Self.requestHeadersToStrip.contains(name.lowercased()) {
             upstreamRequest.setValue(value, forHTTPHeaderField: name)
         }
         upstreamRequest.setValue(
-            authorization(sentByCaller: request.value(forHTTPHeaderField: "Authorization"), toSiteAPI: isSiteAPI),
+            authorization(sentByCaller: callerAuthorization, addingSiteCredential: addsSiteCredential),
             forHTTPHeaderField: "Authorization"
         )
         upstreamRequest.httpBody = try Self.body(of: request)
@@ -376,9 +409,10 @@ struct RestRelay: Sendable {
     }
 
     /// Where a request for `url` goes: the site's REST API when `url` is below
-    /// the API root, another host otherwise. `nil` when `url` is below the root
-    /// but its path walks out of it. What counts as below the root, host
-    /// aliases included, is ``SiteAPIRoot/path(below:)``'s to say.
+    /// the API root, the site's `admin-ajax.php` when it is that, another host
+    /// otherwise. `nil` when `url` is below the root but its path walks out of
+    /// it. What counts as below the root, host aliases included, is
+    /// ``SiteAPIRoot/path(below:)``'s to say.
     ///
     /// Anything else goes where it was going, and the relay doesn't add the
     /// site credential to it. The cost is an alias this can't recognize — a
@@ -387,9 +421,38 @@ struct RestRelay: Sendable {
     /// without a credential reaches the site without one.
     func destination(of url: URL) -> Destination? {
         guard let path = apiRoot.path(below: url) else {
-            return .otherHost(url)
+            return isSiteAJAX(url) ? .siteAJAX(url) : .otherHost(url)
         }
         return apiRoot.url(forPath: path).map(Destination.siteAPI)
+    }
+
+    /// Whether `url` is exactly the page's `ajaxurl`, whatever its query.
+    ///
+    /// A longer path is refused: PHP serves `/xmlrpc.php/wp-admin/admin-ajax.php`
+    /// as `xmlrpc.php`.
+    private func isSiteAJAX(_ url: URL) -> Bool {
+        guard let siteAJAXURL, let origin = url.origin else {
+            return false
+        }
+        return origin == siteAJAXURL.origin
+            && url.path(percentEncoded: true) == siteAJAXURL.path(percentEncoded: true)
+    }
+
+    /// The site's `admin-ajax.php`, as `getAjaxUrl()` in `ajax.js` builds it, or
+    /// `nil` for a site URL without an origin.
+    private static func ajaxURL(forSite siteURL: URL) -> URL? {
+        guard siteURL.origin != nil,
+              var components = URLComponents(url: siteURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        var path = components.percentEncodedPath
+        while path.hasSuffix("/") {
+            path.removeLast()
+        }
+        components.percentEncodedPath = path + "/wp-admin/admin-ajax.php"
+        components.query = nil
+        components.fragment = nil
+        return components.url
     }
 
     // MARK: - Authorization
@@ -399,13 +462,17 @@ struct RestRelay: Sendable {
     /// The caller's own header is sent as it arrived, wherever the request
     /// goes. It is never removed or replaced, even when it is the site
     /// credential, or the site credential joined to another value. A request
-    /// that arrives without one gets the site credential if it is for the
-    /// site's REST API, and nothing otherwise.
-    func authorization(sentByCaller callerValue: String?, toSiteAPI: Bool) -> String? {
+    /// that arrives without one gets the site credential when
+    /// `addingSiteCredential`, and nothing otherwise.
+    ///
+    /// - Parameter addingSiteCredential: Whether the request is one the relay
+    ///   signs: for the site's REST API or its `admin-ajax.php`, and within the
+    ///   site's ``EditorAuthorizationScope``.
+    func authorization(sentByCaller callerValue: String?, addingSiteCredential: Bool) -> String? {
         if let callerValue {
             return callerValue
         }
-        return toSiteAPI && !authHeader.isEmpty ? authHeader : nil
+        return addingSiteCredential && !authHeader.isEmpty ? authHeader : nil
     }
 
     /// Refuses redirects that leave the site API root.
@@ -583,7 +650,7 @@ struct RestRelay: Sendable {
     /// local page to the site (and WordPress rejects a `file://` origin — the
     /// exact problem the relay exists to solve); `cookie` is the page's, and
     /// the relay carries the site credential itself; `authorization` is set on
-    /// its own, by ``authorization(sentByCaller:toSiteAPI:)``. The caller token is
+    /// its own, by ``authorization(sentByCaller:addingSiteCredential:)``. The caller token is
     /// for the relay alone.
     private static let requestHeadersToStrip: Set<String> = [
         "host", "connection", "content-length", "accept-encoding",

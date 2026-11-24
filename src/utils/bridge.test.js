@@ -94,63 +94,112 @@ describe( 'requestLatestContent', () => {
 	} );
 
 	describe( 'Android bridge', () => {
-		it( 'should return parsed JSON from Android interface', async () => {
+		/**
+		 * Stands in for the object Android's web message listener injects. Each
+		 * reply `respond` returns for a posted request arrives as a `message`
+		 * event, as native code's replies do.
+		 *
+		 * @param {(request: Object) => Array<Object|string>} respond Returns the replies to a parsed request.
+		 * @return {Object} The fake `window.editorDelegate`.
+		 */
+		function fakeAndroidDelegate( respond ) {
+			const target = new EventTarget();
+			return {
+				postMessage: vi.fn( ( json ) => {
+					for ( const response of respond( JSON.parse( json ) ) ) {
+						const data =
+							typeof response === 'string'
+								? response
+								: JSON.stringify( response );
+						queueMicrotask( () =>
+							target.dispatchEvent(
+								new MessageEvent( 'message', { data } )
+							)
+						);
+					}
+				} ),
+				addEventListener: vi.fn(
+					target.addEventListener.bind( target )
+				),
+				removeEventListener: vi.fn(
+					target.removeEventListener.bind( target )
+				),
+			};
+		}
+
+		function reply( request, result ) {
+			return {
+				message: 'requestLatestContent',
+				body: { id: request.body.id, result },
+			};
+		}
+
+		it( "should return the host's content from its reply", async () => {
 			const mockContent = {
 				title: 'Test Title',
 				content: 'Test Content',
 			};
-			window.editorDelegate = {
-				requestLatestContent: vi
-					.fn()
-					.mockReturnValue( JSON.stringify( mockContent ) ),
-			};
+			window.editorDelegate = fakeAndroidDelegate( ( request ) => [
+				reply( request, mockContent ),
+			] );
 
 			const result = await requestLatestContent();
 
 			expect( result ).toEqual( mockContent );
+			const request = JSON.parse(
+				window.editorDelegate.postMessage.mock.calls[ 0 ][ 0 ]
+			);
+			expect( request ).toEqual( {
+				message: 'requestLatestContent',
+				body: { id: expect.any( Number ) },
+			} );
+		} );
+
+		it( 'should return null when the host has no content', async () => {
+			window.editorDelegate = fakeAndroidDelegate( ( request ) => [
+				reply( request, null ),
+			] );
+
+			const result = await requestLatestContent();
+
+			expect( result ).toBeNull();
+		} );
+
+		it( 'should ignore messages that are not its reply', async () => {
+			const mockContent = { title: 'Mine', content: 'Mine' };
+			window.editorDelegate = fakeAndroidDelegate( ( request ) => [
+				'not valid json',
+				{ message: 'somethingElse', body: { id: request.body.id } },
+				{
+					message: 'requestLatestContent',
+					body: { id: request.body.id + 1, result: {} },
+				},
+				reply( request, mockContent ),
+			] );
+
+			const result = await requestLatestContent();
+
+			expect( result ).toEqual( mockContent );
+		} );
+
+		it( 'should stop listening once it has its reply', async () => {
+			window.editorDelegate = fakeAndroidDelegate( ( request ) => [
+				reply( request, null ),
+			] );
+
+			await requestLatestContent();
+
+			const listener =
+				window.editorDelegate.addEventListener.mock.calls[ 0 ][ 1 ];
 			expect(
-				window.editorDelegate.requestLatestContent
-			).toHaveBeenCalled();
+				window.editorDelegate.removeEventListener
+			).toHaveBeenCalledWith( 'message', listener );
 		} );
 
-		it( 'should return null when Android returns null', async () => {
-			window.editorDelegate = {
-				requestLatestContent: vi.fn().mockReturnValue( null ),
-			};
-
-			const result = await requestLatestContent();
-
-			expect( result ).toBeNull();
-		} );
-
-		it( 'should return null when Android returns empty string', async () => {
-			window.editorDelegate = {
-				requestLatestContent: vi.fn().mockReturnValue( '' ),
-			};
-
-			const result = await requestLatestContent();
-
-			expect( result ).toBeNull();
-		} );
-
-		it( 'should return null when Android returns malformed JSON', async () => {
-			window.editorDelegate = {
-				requestLatestContent: vi
-					.fn()
-					.mockReturnValue( 'not valid json' ),
-			};
-
-			const result = await requestLatestContent();
-
-			expect( result ).toBeNull();
-		} );
-
-		it( 'should return null when Android method throws', async () => {
-			window.editorDelegate = {
-				requestLatestContent: vi.fn().mockImplementation( () => {
-					throw new Error( 'Method error' );
-				} ),
-			};
+		it( 'should return null when posting the request throws', async () => {
+			window.editorDelegate = fakeAndroidDelegate( () => {
+				throw new Error( 'Post error' );
+			} );
 
 			const result = await requestLatestContent();
 
@@ -171,14 +220,6 @@ describe( 'requestLatestContent', () => {
 			window.webkit = {
 				messageHandlers: {},
 			};
-
-			const result = await requestLatestContent();
-
-			expect( result ).toBeNull();
-		} );
-
-		it( 'should return null when editorDelegate exists but method does not', async () => {
-			window.editorDelegate = {};
 
 			const result = await requestLatestContent();
 
@@ -641,30 +682,33 @@ describe( 'showBlockInserter', () => {
 	} );
 
 	it( 'is a no-op when window.blockInserter is unavailable', () => {
-		const editorDelegate = { showBlockInserter: vi.fn() };
+		const editorDelegate = { postMessage: vi.fn() };
 		window.editorDelegate = editorDelegate;
 
 		showBlockInserter( { x: 0, y: 0, width: 10, height: 10 } );
 
-		expect( editorDelegate.showBlockInserter ).not.toHaveBeenCalled();
+		expect( editorDelegate.postMessage ).not.toHaveBeenCalled();
 	} );
 
-	it( 'passes a JSON-stringified payload to the Android bridge', () => {
+	it( 'passes a JSON-stringified message to the Android bridge', () => {
 		window.blockInserter = sampleInserter;
-		const editorDelegate = { showBlockInserter: vi.fn() };
+		const editorDelegate = { postMessage: vi.fn() };
 		window.editorDelegate = editorDelegate;
 
 		const sourceRect = { x: 1, y: 2, width: 3, height: 4 };
 		showBlockInserter( sourceRect );
 
-		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
-		const arg = editorDelegate.showBlockInserter.mock.calls[ 0 ][ 0 ];
+		expect( editorDelegate.postMessage ).toHaveBeenCalledTimes( 1 );
+		const arg = editorDelegate.postMessage.mock.calls[ 0 ][ 0 ];
 		expect( typeof arg ).toBe( 'string' );
 		expect( JSON.parse( arg ) ).toEqual( {
-			sections: sampleInserter.sections,
-			patterns: sampleInserter.patterns,
-			patternCategories: sampleInserter.patternCategories,
-			sourceRect,
+			message: 'showBlockInserter',
+			body: {
+				sections: sampleInserter.sections,
+				patterns: sampleInserter.patterns,
+				patternCategories: sampleInserter.patternCategories,
+				sourceRect,
+			},
 		} );
 	} );
 
@@ -694,7 +738,7 @@ describe( 'showBlockInserter', () => {
 
 	it( 'dispatches to both bridges when both are present', () => {
 		window.blockInserter = sampleInserter;
-		const editorDelegate = { showBlockInserter: vi.fn() };
+		const editorDelegate = { postMessage: vi.fn() };
 		const postMessage = vi.fn();
 		window.editorDelegate = editorDelegate;
 		window.webkit = {
@@ -705,7 +749,7 @@ describe( 'showBlockInserter', () => {
 
 		showBlockInserter();
 
-		expect( editorDelegate.showBlockInserter ).toHaveBeenCalledTimes( 1 );
+		expect( editorDelegate.postMessage ).toHaveBeenCalledTimes( 1 );
 		expect( postMessage ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
@@ -731,16 +775,19 @@ describe( 'onEditorSaveAvailabilityChanged', () => {
 		}
 	} );
 
-	// The Android interface receives the payload values positionally.
-	it( 'passes isSaveable then isSavingLocked to the Android bridge', () => {
-		const editorDelegate = { onEditorSaveAvailabilityChanged: vi.fn() };
+	// `GutenbergView` reads these keys on Android.
+	it( 'passes a keyed message to the Android bridge', () => {
+		const editorDelegate = { postMessage: vi.fn() };
 		window.editorDelegate = editorDelegate;
 
 		onEditorSaveAvailabilityChanged( true, false );
 
 		expect(
-			editorDelegate.onEditorSaveAvailabilityChanged
-		).toHaveBeenCalledWith( true, false );
+			JSON.parse( editorDelegate.postMessage.mock.calls[ 0 ][ 0 ] )
+		).toEqual( {
+			message: 'onEditorSaveAvailabilityChanged',
+			body: { isSaveable: true, isSavingLocked: false },
+		} );
 	} );
 
 	// `EditorSaveAvailability` decodes these keys on iOS.

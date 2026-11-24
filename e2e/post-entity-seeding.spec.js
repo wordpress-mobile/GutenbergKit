@@ -40,14 +40,34 @@ test.describe( 'Post entity seeding', () => {
 		} );
 
 		// Stand in for the Android bridge, which receives host events on
-		// `window.editorDelegate`.
+		// `window.editorDelegate` and answers the editor's request for the
+		// host's latest content, here with none.
 		await page.addInitScript( () => {
 			window.contentChangedCount = 0;
 			window.featuredImageChanges = [];
+			const replies = new EventTarget();
 			window.editorDelegate = {
-				onEditorContentChanged: () => window.contentChangedCount++,
-				onEditorFeaturedImageChanged: ( mediaID ) =>
-					window.featuredImageChanges.push( mediaID ),
+				addEventListener: replies.addEventListener.bind( replies ),
+				removeEventListener:
+					replies.removeEventListener.bind( replies ),
+				postMessage: ( json ) => {
+					const { message, body } = JSON.parse( json );
+					if ( message === 'requestLatestContent' ) {
+						const data = JSON.stringify( {
+							message,
+							body: { id: body.id, result: null },
+						} );
+						setTimeout( () =>
+							replies.dispatchEvent(
+								new MessageEvent( 'message', { data } )
+							)
+						);
+					} else if ( message === 'onEditorContentChanged' ) {
+						window.contentChangedCount++;
+					} else if ( message === 'onEditorFeaturedImageChanged' ) {
+						window.featuredImageChanges.push( body.mediaID );
+					}
+				},
 			};
 		} );
 

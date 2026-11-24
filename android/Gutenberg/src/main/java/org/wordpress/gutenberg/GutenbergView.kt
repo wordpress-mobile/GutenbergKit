@@ -20,7 +20,6 @@ import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -31,10 +30,10 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
+import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import kotlinx.coroutines.CancellationException
@@ -42,10 +41,19 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.json.JSONException
 import org.json.JSONObject
+import org.json.JSONTokener
 import org.wordpress.gutenberg.inserter.BlockPickerDialog
 import org.wordpress.gutenberg.model.BlockInserterPayload
 import org.wordpress.gutenberg.model.EditorConfiguration
@@ -54,9 +62,11 @@ import org.wordpress.gutenberg.model.GBKitGlobal
 import org.wordpress.gutenberg.services.EditorService
 import org.wordpress.gutenberg.views.EditorErrorView
 import org.wordpress.gutenberg.views.EditorProgressView
+import org.wordpress.gutenberg.views.EditorSpinnerView
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 
 const val DEFAULT_ASSET_DOMAIN = "appassets.androidplatform.net"
 const val ASSET_PATH_INDEX = "/assets/index.html"
@@ -142,6 +152,21 @@ class GutenbergView : FrameLayout {
 
     /** The editor document [loadEditor] loaded, the only page given the editor globals. */
     private var editorUri: Uri? = null
+
+    /** The origin of [editorUri], the only origin whose pages get the bridge. */
+    @VisibleForTesting
+    internal var editorOrigin: String? = null
+        private set
+
+    /** The web view the bridge was last exposed in. A web view accepts the bridge once. */
+    private var bridgeWebView: WebView? = null
+
+    /**
+     * Counts the pages bridge messages can come from. It goes up whenever the page
+     * that sent the messages still being parsed goes away: a main-frame page
+     * starting, the web view being replaced, or the view detaching.
+     */
+    private var bridgePage = 0
 
     /** Web views created for new windows that have not navigated yet. */
     private val popupWebViews = mutableSetOf<WebView>()
@@ -316,7 +341,7 @@ class GutenbergView : FrameLayout {
 
     // Internal loading overlay views
     private val progressView: EditorProgressView
-    private val spinnerView: ProgressBar
+    private val spinnerView: EditorSpinnerView
     private val errorView: EditorErrorView
 
     /**
@@ -430,9 +455,8 @@ class GutenbergView : FrameLayout {
         }
         addView(progressView)
 
-        spinnerView = ProgressBar(context).apply {
+        spinnerView = EditorSpinnerView(context).apply {
             layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER)
-            isIndeterminate = true
             visibility = GONE
         }
         addView(spinnerView)
@@ -550,7 +574,7 @@ class GutenbergView : FrameLayout {
         val defaultUserAgent = webView.settings.userAgentString
         webView.settings.userAgentString = "$defaultUserAgent GutenbergKit/${GutenbergKitVersion.VERSION}"
 
-        webView.addJavascriptInterface(this, "editorDelegate")
+        exposeBridge()
 
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
@@ -587,6 +611,11 @@ class GutenbergView : FrameLayout {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 onEditorPageStarted(url)
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                if (url != null && isEditorDocument(Uri.parse(url))) reportMissingBridge()
             }
 
             @RequiresApi(Build.VERSION_CODES.O)
@@ -706,6 +735,25 @@ class GutenbergView : FrameLayout {
                 return true
             }
         }
+    }
+
+    /**
+     * Exposes the bridge as `window.editorDelegate` to the editor's origin alone.
+     * [receiveBridgeMessage] also drops what doesn't come from the main frame.
+     */
+    private fun exposeBridge() {
+        val origin = editorOrigin ?: return
+        if (bridgeWebView === webView) return
+        bridgeRegistrar.register(webView, origin) { _, message, sourceOrigin, isMainFrame, replyProxy ->
+            // `data` throws for any other type, and a message can be an `ArrayBuffer`.
+            val json = message.takeIf { it.type == WebMessageCompat.TYPE_STRING }?.data
+            if (json == null) {
+                Log.w(TAG, "Dropped a bridge message that isn't a string")
+                return@register
+            }
+            receiveBridgeMessage(json, sourceOrigin.toString(), isMainFrame) { reply -> replyProxy.postMessage(reply) }
+        }
+        bridgeWebView = webView
     }
 
     /** Whether [url] is the editor document, ignoring an explicit default port or empty path. */
@@ -881,16 +929,25 @@ class GutenbergView : FrameLayout {
             .addPathHandler("/assets/", AssetsPathHandler(this.context))
             .build()
 
-        // Transition to spinner phase (WebView initialization)
-        showSpinnerPhase()
-
-        initializeWebView()
-
         val assetUrl = "$assetScheme://$assetAuthority$ASSET_PATH_INDEX"
         val editorUrl = BuildConfig.GUTENBERG_EDITOR_URL.ifEmpty {
             assetUrl
         }
         editorUri = Uri.parse(editorUrl)
+        editorOrigin = webOrigin(editorUrl)
+
+        // The bridge needs each message's frame and origin to accept only the
+        // editor's. A WebView that can run the editor's scripts has the feature.
+        if (!bridgeRegistrar.isSupported()) {
+            Log.e(TAG, "This WebView can't restrict the bridge to the editor, so the editor won't load")
+            showErrorPhase(Exception(context.getString(R.string.gbk_editor_webview_unsupported)))
+            return
+        }
+
+        // Transition to spinner phase (WebView initialization)
+        showSpinnerPhase()
+
+        initializeWebView()
 
         WebStorage.getInstance().deleteAllData()
         webView.clearCache(true)
@@ -970,6 +1027,7 @@ class GutenbergView : FrameLayout {
         // is not ready until it reports `onEditorLoaded`.
         isEditorLoaded = false
         didFireEditorLoaded = false
+        bridgePage++
 
         if (url == null) return
 
@@ -1026,6 +1084,20 @@ class GutenbergView : FrameLayout {
     private fun reportOpenModalDialogsClosed() {
         openModalDialogs.forEach { modalDialogStateListener?.onModalDialogClosed(it) }
         openModalDialogs.clear()
+    }
+
+    /**
+     * Logs when the editor page finished loading without the bridge, as when its
+     * origin isn't the one [exposeBridge] allowed. The editor would otherwise
+     * never report itself loaded, with nothing saying why.
+     */
+    private fun reportMissingBridge() {
+        webView.evaluateJavascript(MISSING_BRIDGE_CHECK_SCRIPT) { result ->
+            // The result is JSON: `null` with the bridge, the origin as a string without.
+            if (result == null || result == "null") return@evaluateJavascript
+            val origin = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull() ?: result
+            Log.e(TAG, "The editor page at $origin has no bridge, which is exposed only to $editorOrigin")
+        }
     }
 
     /**
@@ -1253,7 +1325,8 @@ class GutenbergView : FrameLayout {
      *
      * Asked each time the editor page loads, including when it reloads after a
      * crash. Return the newest title and content the host holds, including
-     * anything saved during this session.
+     * anything saved during this session. Asked on the main thread, so it
+     * should answer from memory.
      */
     interface LatestContentProvider {
         /**
@@ -1328,42 +1401,182 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    @JavascriptInterface
-    fun onEditorLoaded() {
+    /**
+     * Dispatches a bridge message to its handler by name, answering a request
+     * through [reply]. The editor posts from its own page in the main frame, so
+     * only messages from the main frame of the editor's origin are handled.
+     *
+     * A message that can't be read, has an unknown name, or lacks a field its
+     * handler needs is dropped and logged. Bodies stay out of the log, as they can
+     * carry post content.
+     *
+     * Messages can be large, such as the inserter's, so they're parsed on
+     * [bridgeParsingExecutor], one at a time to keep their order, and handled on
+     * the main thread. A message whose page has gone by then is dropped, so a late
+     * `onEditorLoaded` can't mark the next page ready. Handlers run within that
+     * check rather than posting again, which would let them outlive their page.
+     */
+    @VisibleForTesting
+    internal fun receiveBridgeMessage(json: String, sourceOrigin: String, isMainFrame: Boolean, reply: (String) -> Unit) {
+        val origin = editorOrigin
+        if (!isMainFrame || origin == null || webOrigin(sourceOrigin) != origin) {
+            Log.d(TAG, "Dropped a bridge message from outside the editor page")
+            return
+        }
+        val page = bridgePage
+        bridgeParsingExecutor.execute {
+            val call = parseBridgeCall(json, reply) ?: return@execute
+            handler.post {
+                if (page != bridgePage) {
+                    Log.d(TAG, "Dropped a bridge message from a page that has since gone")
+                    return@post
+                }
+                call()
+            }
+        }
+    }
+
+    /**
+     * Reads [json] into the handler call it asks for, or null when it's dropped.
+     * Runs off the main thread, so it only parses: no view state, no host code.
+     */
+    private fun parseBridgeCall(json: String, reply: (String) -> Unit): (() -> Unit)? {
+        val message = EditorBridgeMessage.parse(json)
+        if (message == null) {
+            Log.w(TAG, "Dropped a bridge message that isn't a message object")
+            return null
+        }
+        return try {
+            parseBridgeCall(message, reply)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Dropped a '${message.name}' bridge message with a missing or invalid field: ${e.message}")
+            null
+        }
+    }
+
+    @Suppress("CyclomaticComplexMethod") // One branch per message, as iOS's `EditorJSMessage.MessageType`.
+    private fun parseBridgeCall(message: EditorBridgeMessage, reply: (String) -> Unit): (() -> Unit)? {
+        val body = message.body
+        return when (message.name) {
+            "requestLatestContent" -> requireNotNull(body["id"]) { "The 'id' field is missing" }
+                .let { id -> { reply(latestContentReply(id)) } }
+            "onEditorLoaded" -> ::onEditorLoaded
+            "onEditorUnavailable" -> ::onEditorUnavailable
+            "onEditorContentChanged" -> ::onEditorContentChanged
+            "onEditorHistoryChanged" -> (body.requireBoolean("hasUndo") to body.requireBoolean("hasRedo"))
+                .let { (hasUndo, hasRedo) -> { onEditorHistoryChanged(hasUndo, hasRedo) } }
+            "onEditorSaveAvailabilityChanged" ->
+                SaveAvailability(body.requireBoolean("isSaveable"), body.requireBoolean("isSavingLocked"))
+                    .let { availability -> { onEditorSaveAvailabilityChanged(availability) } }
+            "onEditorFeaturedImageChanged" -> body.requireLong("mediaID").let { id -> { onEditorFeaturedImageChanged(id) } }
+            "onBlocksChanged" -> body.requireBoolean("isEmpty").let { isEmpty -> { onBlocksChanged(isEmpty) } }
+            "openMediaLibrary" -> parseMediaLibraryConfig(body).let { config -> { openMediaLibrary(config) } }
+            "onEditorExceptionLogged" -> parseJsException(body)?.let { exception -> { onEditorExceptionLogged(exception) } }
+            "showBlockInserter" -> parseBlockInserterPayload(body).let { payload -> { showBlockInserter(payload) } }
+            "onAutocompleterTriggered" -> body.requireString("type").let { type -> { onAutocompleterTriggered(type) } }
+            "onModalDialogOpened" -> body.requireString("dialogType").let { type -> { onModalDialogOpened(type) } }
+            "onModalDialogClosed" -> body.requireString("dialogType").let { type -> { onModalDialogClosed(type) } }
+            "onNetworkRequest" -> RecordedNetworkRequest.fromJson(body).let { request -> { onNetworkRequest(request) } }
+            else -> {
+                Log.w(TAG, "Dropped a bridge message with an unknown name")
+                null
+            }
+        }
+    }
+
+    private fun parseMediaLibraryConfig(json: JsonObject): OpenMediaLibraryConfig {
+        val allowedTypes = json["allowedTypes"]?.let { types ->
+            require(types is JsonArray) { "The 'allowedTypes' field isn't a list" }
+            types.map { MediaType.getEnum(it.text()) }.toTypedArray()
+        } ?: emptyArray()
+
+        val multiple = json.requireBoolean("multiple")
+
+        val value = json["value"]?.let { value ->
+            if (multiple) {
+                require(value is JsonArray) { "The 'value' field isn't a list" }
+                Value.Multiple(value.map { requireNotNull(it.asLongOrNull()) { "A 'value' isn't a number" }.toInt() }.toIntArray())
+            } else {
+                Value.Single(json.requireLong("value").toInt())
+            }
+        }
+
+        return OpenMediaLibraryConfig(
+            allowedTypes = allowedTypes,
+            multiple = multiple,
+            value = value,
+            contextId = json.requireString("contextId")
+        )
+    }
+
+    /** Reads the exception the editor logged, or null when its shape is wrong. */
+    @Suppress("TooGenericExceptionCaught") // Gson reports a body of the wrong shape with several runtime exceptions.
+    private fun parseJsException(json: JsonObject): GutenbergJsException? = try {
+        GutenbergJsException.fromString(json.toString())
+    } catch (e: RuntimeException) {
+        Log.w(TAG, "Dropped an exception the editor logged, which couldn't be read: ${e.message}")
+        null
+    }
+
+    /** Reads the inserter's payload, or null when it can't be read, so the user is told. */
+    @Suppress("TooGenericExceptionCaught") // Any failure means the same to the user: no inserter.
+    private fun parseBlockInserterPayload(json: JsonObject): BlockInserterPayload? = try {
+        BlockInserterPayload.fromJson(json)
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to parse showBlockInserter payload", e)
+        null
+    }
+
+    /**
+     * Answers the page's request [requestId] for the latest content, which it makes
+     * while loading to recover edits after a reload. Always answers, with a null
+     * result when [LatestContentProvider] has none or fails, as the page waits for it.
+     */
+    @Suppress("TooGenericExceptionCaught") // A failing host starts the editor from its opening content, not a crash.
+    private fun latestContentReply(requestId: JsonElement): String {
+        val latest = try {
+            latestContentProvider?.getLatestContent()
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "The host failed to provide the latest content, so the editor starts from its opening content", e)
+            null
+        }
+        return buildJsonObject {
+            put("message", "requestLatestContent")
+            putJsonObject("body") {
+                put("id", requestId)
+                put("result", latest?.let { buildJsonObject { put("title", it.title); put("content", it.content) } } ?: JsonNull)
+            }
+        }.toString()
+    }
+
+    private fun onEditorLoaded() {
         Log.i("GutenbergView", "EditorLoaded received in native code")
         isEditorLoaded = true
-        handler.post {
-            // The editor can become unavailable before this runs, which resets
-            // readiness and shows the crash notice. Carrying on would report the
-            // editor available again and replace that notice with the ready phase.
-            if (!isEditorLoaded) return@post
-
-            lastKnownConnectivity?.let { isConnected ->
-                if (!isConnected) dispatchConnectivityEvent(false)
+        lastKnownConnectivity?.let { isConnected ->
+            if (!isConnected) dispatchConnectivityEvent(false)
+        }
+        if(!didFireEditorLoaded) {
+            // The web editor always starts in visual mode, so restore code
+            // editor mode when the host enabled it, including after a reload.
+            if (textEditorEnabled) {
+                webView.evaluateJavascript("editor.switchEditorMode('text');", null)
             }
-            if(!didFireEditorLoaded) {
-                // The web editor always starts in visual mode, so restore code
-                // editor mode when the host enabled it, including after a reload.
-                if (textEditorEnabled) {
-                    webView.evaluateJavascript("editor.switchEditorMode('text');", null)
-                }
-                editorDidBecomeAvailableListener?.onEditorAvailable(this)
-                this.didFireEditorLoaded = true
-                showReadyPhase()
+            editorDidBecomeAvailableListener?.onEditorAvailable(this)
+            this.didFireEditorLoaded = true
+            showReadyPhase()
 
-                if (!hasAutofocused && configuration.isNewEmptyPost) {
-                    hasAutofocused = true
+            if (!hasAutofocused && configuration.isNewEmptyPost) {
+                hasAutofocused = true
 
-                    // Focus the editor content
-                    webView.evaluateJavascript("editor.focus();", null)
+                // Focus the editor content
+                webView.evaluateJavascript("editor.focus();", null)
 
-                    // Request focus on the WebView and show the soft keyboard
-                    handler.postDelayed({
-                        webView.requestFocus()
-                        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                        imm?.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
-                    }, 100)
-                }
+                // Request focus on the WebView and show the soft keyboard
+                handler.postDelayed({
+                    webView.requestFocus()
+                    val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                    imm?.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
+                }, 100)
             }
         }
     }
@@ -1376,16 +1589,13 @@ class GutenbergView : FrameLayout {
      * again. Without this, calls keep reaching a web view that can no longer
      * answer them.
      */
-    @JavascriptInterface
-    fun onEditorUnavailable() {
+    private fun onEditorUnavailable() {
         Log.e("GutenbergView", "EditorUnavailable received in native code")
         isEditorLoaded = false
         showEditorCrashPhase()
-        handler.post {
-            // Picks made in an open inserter can no longer reach the editor.
-            blockInserterDialog?.dismiss()
-            editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
-        }
+        // Picks made in an open inserter can no longer reach the editor.
+        blockInserterDialog?.dismiss()
+        editorDidBecomeUnavailableListener?.onEditorUnavailable(this)
     }
 
     /**
@@ -1480,33 +1690,26 @@ class GutenbergView : FrameLayout {
         webView = createWebView()
         addView(webView, 0)
         isWebViewBlank = true
+        bridgePage++
     }
 
-    @JavascriptInterface
-    fun onEditorContentChanged() {
+    private fun onEditorContentChanged() {
         contentChangeListener?.onContentChanged()
     }
 
-    @JavascriptInterface
-    fun onEditorHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
+    private fun onEditorHistoryChanged(hasUndo: Boolean, hasRedo: Boolean) {
         historyChangeListener?.onHistoryChanged(hasUndo, hasRedo)
     }
 
-    @JavascriptInterface
-    fun onEditorSaveAvailabilityChanged(isSaveable: Boolean, isSavingLocked: Boolean) {
-        val availability = SaveAvailability(isSaveable, isSavingLocked)
-        handler.post {
-            saveAvailabilityListener?.onSaveAvailabilityChanged(availability)
-        }
+    private fun onEditorSaveAvailabilityChanged(availability: SaveAvailability) {
+        saveAvailabilityListener?.onSaveAvailabilityChanged(availability)
     }
 
-    @JavascriptInterface
-    fun onEditorFeaturedImageChanged(mediaID: Long) {
+    private fun onEditorFeaturedImageChanged(mediaID: Long) {
         featuredImageChangeListener?.onFeaturedImageChanged(mediaID)
     }
 
-    @JavascriptInterface
-    fun onBlocksChanged(isEmpty: Boolean) {
+    private fun onBlocksChanged(isEmpty: Boolean) {
         if(isEmpty) {
             Log.i("GutenbergView", "BlocksChanged (empty)")
         } else {
@@ -1514,47 +1717,10 @@ class GutenbergView : FrameLayout {
         }
     }
 
-    @JavascriptInterface
-    fun openMediaLibrary(jsonString: String) {
-        try {
-            val jsonObj = JSONObject(jsonString)
-
-            // Parse allowedTypes
-            val allowedTypes = if (jsonObj.has("allowedTypes")) {
-                val allowedTypesArray = jsonObj.getJSONArray("allowedTypes")
-                Array(allowedTypesArray.length()) { index ->
-                    MediaType.getEnum(allowedTypesArray.getString(index))
-                }
-            } else {
-                emptyArray()
-            }
-
-            // Parse multiple
-            val multiple = jsonObj.getBoolean("multiple")
-
-            // Parse value
-            val value = if (jsonObj.has("value")) {
-                if (multiple) {
-                    val valueArray = jsonObj.getJSONArray("value")
-                    Value.Multiple(IntArray(valueArray.length()) { index ->
-                        valueArray.getInt(index)
-                    })
-                } else {
-                    Value.Single(jsonObj.getInt("value"))
-                }
-            } else {
-                null
-            }
-
-            // Store contextId to pass back when media is selected
-            val contextId = jsonObj.getString("contextId")
-            currentMediaContextId = contextId
-
-            val config = OpenMediaLibraryConfig(allowedTypes = allowedTypes, multiple = multiple, value = value, contextId = contextId)
-            openMediaLibraryListener?.onOpenMediaLibrary(config)
-        } catch (e: JSONException) {
-            e.printStackTrace()
-        }
+    private fun openMediaLibrary(config: OpenMediaLibraryConfig) {
+        // Store contextId to pass back when media is selected
+        currentMediaContextId = config.contextId
+        openMediaLibraryListener?.onOpenMediaLibrary(config)
     }
 
     fun setMediaUploadAttachment(media: String) {
@@ -1578,29 +1744,21 @@ class GutenbergView : FrameLayout {
         evaluateIfLoaded("window.blockInserter?.onClose?.();")
     }
 
-    @JavascriptInterface
-    fun onEditorExceptionLogged(exception: String) {
-        val parsedException = GutenbergJsException.fromString(exception)
-        logJsExceptionListener?.onLogJsException(parsedException)
+    private fun onEditorExceptionLogged(exception: GutenbergJsException) {
+        logJsExceptionListener?.onLogJsException(exception)
     }
 
-    @JavascriptInterface
-    fun showBlockInserter(payload: String) {
-        val parsed = try {
-            BlockInserterPayload.fromJson(payload)
-        } catch (e: Exception) {
-            Log.e("GutenbergView", "Failed to parse showBlockInserter payload", e)
-            handler.post {
-                Toast.makeText(
-                    context,
-                    R.string.gbk_block_inserter_failure,
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
+    /** Presents the inserter for [payload], or says it can't when the payload couldn't be read. */
+    private fun showBlockInserter(payload: BlockInserterPayload?) {
+        if (payload == null) {
+            Toast.makeText(
+                context,
+                R.string.gbk_block_inserter_failure,
+                Toast.LENGTH_LONG,
+            ).show()
             return
         }
-
-        handler.post { presentBlockInserter(parsed) }
+        presentBlockInserter(payload)
     }
 
     private fun presentBlockInserter(payload: BlockInserterPayload) {
@@ -1621,61 +1779,27 @@ class GutenbergView : FrameLayout {
         dialog.show()
     }
 
-    @JavascriptInterface
-    fun onAutocompleterTriggered(type: String) {
-        handler.post {
-            autocompleterTriggeredListener?.onAutocompleterTriggered(type)
-        }
+    private fun onAutocompleterTriggered(type: String) {
+        autocompleterTriggeredListener?.onAutocompleterTriggered(type)
     }
 
-    @JavascriptInterface
-    fun onModalDialogOpened(dialogType: String) {
-        handler.post {
-            openModalDialogs.add(dialogType)
-            modalDialogStateListener?.onModalDialogOpened(dialogType)
-        }
+    private fun onModalDialogOpened(dialogType: String) {
+        openModalDialogs.add(dialogType)
+        modalDialogStateListener?.onModalDialogOpened(dialogType)
     }
 
-    @JavascriptInterface
-    fun onModalDialogClosed(dialogType: String) {
-        handler.post {
-            openModalDialogs.remove(dialogType)
-            modalDialogStateListener?.onModalDialogClosed(dialogType)
-        }
+    private fun onModalDialogClosed(dialogType: String) {
+        openModalDialogs.remove(dialogType)
+        modalDialogStateListener?.onModalDialogClosed(dialogType)
     }
 
-    @JavascriptInterface
-    fun onNetworkRequest(requestData: String) {
-        handler.post {
-            try {
-                val json = JSONObject(requestData)
-                val request = RecordedNetworkRequest.fromJson(json)
-                networkRequestListener?.onNetworkRequest(request)
-            } catch (e: Exception) {
-                Log.e("GutenbergView", "Error parsing network request: ${e.message}")
-            }
-        }
-    }
-
-    /**
-     * Called by JavaScript to request the latest persisted content.
-     *
-     * This method is invoked during editor initialization to recover content
-     * after WebView refresh. The host app provides content via [LatestContentProvider].
-     *
-     * @return JSON string with title and content fields, or null if unavailable.
-     */
-    @JavascriptInterface
-    fun requestLatestContent(): String? {
-        val content = latestContentProvider?.getLatestContent() ?: return null
-        return try {
-            JSONObject().apply {
-                put("title", content.title)
-                put("content", content.content)
-            }.toString()
-        } catch (e: JSONException) {
-            Log.e("GutenbergView", "Failed to serialize latest content", e)
-            null
+    /** Reports [request] to the host. A failing listener is logged, as diagnostics shouldn't crash the app. */
+    @Suppress("TooGenericExceptionCaught") // Hosts build their own requests from these, which can throw anything.
+    private fun onNetworkRequest(request: RecordedNetworkRequest) {
+        try {
+            networkRequestListener?.onNetworkRequest(request)
+        } catch (e: Exception) {
+            Log.e(TAG, "The host failed to handle a network request: ${e.message}")
         }
     }
 
@@ -1713,6 +1837,7 @@ class GutenbergView : FrameLayout {
         super.onDetachedFromWindow()
         stopNetworkMonitoring()
         isDetached = true
+        bridgePage++
         editorPageJob?.cancel()
         uploadServer?.stop()
         uploadServer = null
@@ -1816,6 +1941,32 @@ class GutenbergView : FrameLayout {
 
         /** The empty page that holds the frame once the editor stops reloading. */
         private const val BLANK_PAGE_URL = "about:blank"
+
+        /** Evaluates to the page's origin when it has no bridge, and to null otherwise. */
+        @VisibleForTesting
+        internal const val MISSING_BRIDGE_CHECK_SCRIPT = "window.editorDelegate ? null : location.origin"
+
+        /**
+         * Parses bridge messages one at a time, off the main thread. Tests replace it
+         * to parse in place.
+         */
+        @VisibleForTesting
+        internal var bridgeParsingExecutor: Executor = Dispatchers.Default.limitedParallelism(1).asExecutor()
+
+        /** Exposes the bridge to editor pages. Tests replace it, as Robolectric has no WebView provider. */
+        @VisibleForTesting
+        internal var bridgeRegistrar: EditorBridgeRegistrar = WebViewEditorBridgeRegistrar
+
+        /**
+         * Returns [url]'s origin as WebView writes one, `scheme://host[:port]`, with
+         * the port only when it isn't the scheme's default. Null when [url] has no
+         * scheme or host, as an opaque origin's `null` doesn't.
+         */
+        internal fun webOrigin(url: String): String? {
+            val scheme = Uri.parse(url).scheme?.lowercase() ?: return null
+            val authority = originAuthority(url) ?: return null
+            return "$scheme://$authority"
+        }
 
         /**
          * Returns [url]'s origin authority: its host, plus its port when that port

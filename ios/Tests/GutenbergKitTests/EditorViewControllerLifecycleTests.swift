@@ -64,14 +64,6 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
         #expect(!cancelled, "freeing the editor should not cancel the fetch")
     }
 
-    /// A unique `siteId` per call, so no earlier run's cache can serve the fetch.
-    /// Pair every call with `removeStorage(for:)`: nothing else deletes the site's files.
-    private func makeIsolatedConfiguration() -> EditorConfiguration {
-        makeConfiguration(
-            siteURL: URL(string: "https://\(UUID().uuidString).example.invalid")!
-        )
-    }
-
     /// An editor whose every network call lands in `session`.
     @MainActor
     private func makeEditor(
@@ -82,13 +74,6 @@ struct EditorViewControllerLifecycleTests: MakesTestFixtures {
             configuration: configuration,
             httpClient: EditorHTTPClient(configuration: configuration, urlSession: session)
         )
-    }
-
-    /// Deletes what the editor wrote for this site. `EditorViewController` can't be
-    /// pointed at a temporary directory the way `MakesTestFixtures.makeService` can.
-    private func removeStorage(for configuration: EditorConfiguration) {
-        try? FileManager.default.removeItem(at: Paths.storageRoot(for: configuration))
-        try? FileManager.default.removeItem(at: Paths.cacheRoot(for: configuration))
     }
 }
 

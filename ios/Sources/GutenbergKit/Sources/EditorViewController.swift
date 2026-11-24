@@ -571,12 +571,9 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
 
     /// The document-start script that installs `window.GBKit`.
     ///
-    /// The configuration carries the site credential, so no copy of it outlives
-    /// the load that injected it. Versions before #613 mirrored it into `localStorage`,
-    /// which persists across launches; the script removes that key, scrubbing an
-    /// upgraded device the next time the editor loads. Nothing reads it any
-    /// more, so the line can go once builds from before #613 are no longer in
-    /// use.
+    /// Builds before #613 kept a copy of this configuration in `localStorage`;
+    /// the script removes that key from upgraded devices. Nothing reads it, so
+    /// the line can go once those builds are no longer in use.
     static func configurationScript(gbkitGlobal: String) -> String {
         """
         window.GBKit = \(gbkitGlobal);
@@ -1034,22 +1031,13 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
                 delegate?.editor(self, didLogNetworkRequest: networkRequest)
             }
         } catch {
-            // Capture detailed diagnostic information for crash reporting
-            let messageType = message.type
-            let messageBodyDescription = String(describing: message.body)
-
-            let errorMessage = """
-                Failed to decode editor message:
-                - Message type: \(messageType)
-                - Decode error: \(error)
-                - Message body: \(messageBodyDescription)
-                """
-
-            NSLog("❌ GutenbergKit Message Decode Error: %@", errorMessage)
-
-            assertionFailure(errorMessage)
-
-            fatalError(errorMessage)
+            // Drop the message rather than terminate: one bad message shouldn't take down the app.
+            // The body is private, as it can carry post content.
+            Logger.bridge.error("""
+                Failed to decode '\(message.type.rawValue, privacy: .public)' bridge message: \
+                \(String(describing: error), privacy: .public); body: \
+                \(String(describing: message.body), privacy: .private)
+                """)
         }
     }
 
@@ -1262,6 +1250,9 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandlerWithReply
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) async -> (Any?, String?) {
+        guard isFromEditorPage(message) else {
+            return (nil, nil)
+        }
         guard message.name == "requestLatestContent" else {
             return (nil, "Unknown message handler: \(message.name)")
         }
@@ -1286,17 +1277,24 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
         NSLog("navigation: \(String(describing: navigation))")
     }
 
+    // The error describes the failing URL, so it's logged as a value, never as a format string.
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        NSLog("didFailNavigation: \(error)")
+        Logger.navigation.error("didFailNavigation: \(String(describing: error), privacy: .private)")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        NSLog("didFailProvisionalNavigation: \(error)")
+        Logger.navigation.error("didFailProvisionalNavigation: \(String(describing: error), privacy: .private)")
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
         if navigationPolicy.shouldAllowNavigation(for: navigationAction) {
             return .allow
+        }
+
+        // The editor's own resource schemes mean nothing outside the editor.
+        if let url = navigationAction.request.url, navigationPolicy.isResourceScheme(url) {
+            Logger.navigation.warning("Blocked navigation that would replace the editor with \(url.absoluteString, privacy: .private)")
+            return .cancel
         }
 
         // External main frame navigation should open in the system browser.
@@ -1321,12 +1319,32 @@ private final class GutenbergEditorController: NSObject, WKNavigationDelegate, W
     // MARK: - WKScriptMessageHandler
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard isFromEditorPage(message) else {
+            return
+        }
         guard let message = EditorJSMessage(message: message) else {
-            return NSLog("Unsupported message: \(message.body)")
+            Logger.bridge.error("Unsupported bridge message: \(String(describing: message.body), privacy: .private)")
+            return
         }
         MainActor.assumeIsolated {
             delegate?.controller(self, didReceiveMessage: message)
         }
+    }
+
+    /// The editor posts every bridge message from its own page in the main window, so
+    /// messages from any other page are dropped: one a subframe posts through its own
+    /// handlers, such as from a cross-origin or sandboxed embed, or one from a page that
+    /// isn't the editor's. Revisit this if editor code that calls the bridge ever runs
+    /// inside a subframe.
+    private func isFromEditorPage(_ message: WKScriptMessage) -> Bool {
+        let frame = message.frameInfo
+        let origin = frame.securityOrigin
+        guard frame.isMainFrame,
+              navigationPolicy.isEditorOrigin(scheme: origin.protocol, host: origin.host, port: origin.port) else {
+            Logger.bridge.debug("Dropped '\(message.name, privacy: .public)' bridge message from outside the editor page")
+            return false
+        }
+        return true
     }
 }
 
