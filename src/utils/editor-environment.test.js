@@ -14,6 +14,7 @@ import EditorLoadError from '../components/editor-load-error/index.jsx';
 import { error } from './logger.js';
 import { configureAjax } from './ajax.js';
 import { initializeVideoPressAjaxBridge } from './videopress-bridge.js';
+import { initializeVideoPressUnsupportedBlock } from './videopress-unsupported.js';
 import { initializeWordPressGlobals } from './wordpress-globals.js';
 import { configureLocale } from './localization.js';
 import { configureAdminGlobals } from './admin-globals.js';
@@ -33,6 +34,9 @@ vi.mock( './logger.js' );
 vi.mock( './editor-styles.js' );
 vi.mock( './ajax.js' );
 vi.mock( './videopress-bridge.js' );
+vi.mock( './videopress-unsupported.js', () => ( {
+	initializeVideoPressUnsupportedBlock: vi.fn(),
+} ) );
 
 vi.mock( './wordpress-globals.js', () => ( {
 	initializeWordPressGlobals: vi.fn(),
@@ -126,6 +130,10 @@ describe( 'setUpEditorEnvironment', () => {
 			callOrder.push( 'initializeVideoPressAjaxBridge' );
 		} );
 
+		initializeVideoPressUnsupportedBlock.mockImplementation( () => {
+			callOrder.push( 'initializeVideoPressUnsupportedBlock' );
+		} );
+
 		initializeEditor.mockImplementation( () => {
 			callOrder.push( 'initializeEditor' );
 		} );
@@ -143,6 +151,7 @@ describe( 'setUpEditorEnvironment', () => {
 			'configureApiFetch',
 			'configureAjax',
 			'initializeVideoPressAjaxBridge',
+			'initializeVideoPressUnsupportedBlock',
 			'initializeEditor',
 		] );
 	} );
@@ -268,6 +277,9 @@ describe( 'setUpEditorEnvironment', () => {
 
 		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
 		expect( initializeVideoPressAjaxBridge ).toHaveBeenCalledTimes( 1 );
+		expect( initializeVideoPressUnsupportedBlock ).toHaveBeenCalledTimes(
+			1
+		);
 	} );
 
 	it( 'skips VideoPress bridge when videopress/video is in allowed block types', async () => {
@@ -280,6 +292,7 @@ describe( 'setUpEditorEnvironment', () => {
 
 		expect( configureAjax ).toHaveBeenCalledTimes( 1 );
 		expect( initializeVideoPressAjaxBridge ).not.toHaveBeenCalled();
+		expect( initializeVideoPressUnsupportedBlock ).not.toHaveBeenCalled();
 	} );
 
 	it( 'initializes VideoPress bridge when allowed block types is undefined', async () => {

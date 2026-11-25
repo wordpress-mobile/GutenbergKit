@@ -1,0 +1,52 @@
+// Video and caption form one bordered unit, tinted from the theme's text color
+// so it suits light and dark themes.
+.gutenberg-kit-videopress-unsupported {
+	border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+	border-radius: 4px;
+	margin-left: 0;
+	margin-right: 0;
+	overflow: hidden;
+
+	&__preview {
+		background-color: #000;
+		position: relative;
+
+		// The sandbox fills the aspect-ratio box instead of sizing to its content.
+		.components-sandbox {
+			height: 100%;
+			inset: 0;
+			position: absolute;
+			width: 100%;
+		}
+	}
+
+	// Takes the tap that selects the block, so it doesn't start the player.
+	&__overlay {
+		inset: 0;
+		position: absolute;
+	}
+
+	&__placeholder {
+		align-items: center;
+		aspect-ratio: 16 / 9;
+		background-color: #000;
+		display: flex;
+		justify-content: center;
+	}
+
+	&__notice {
+		align-items: flex-start;
+		background-color: color-mix(in srgb, currentColor 8%, transparent);
+		display: flex;
+		font-size: 13px;
+		gap: 8px;
+		line-height: 1.5;
+		margin: 0;
+		padding: 12px;
+
+		svg {
+			fill: currentColor;
+			flex-shrink: 0;
+		}
+	}
+}
