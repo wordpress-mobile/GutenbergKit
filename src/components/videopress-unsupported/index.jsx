@@ -3,7 +3,7 @@ import { parse } from '@wordpress/block-serialization-default-parser';
 import { SandBox, Spinner } from '@wordpress/components';
 import { store as coreStore } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
-import { useMemo } from '@wordpress/element';
+import { useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Icon, info } from '@wordpress/icons';
 import './style.scss';
@@ -11,19 +11,28 @@ import './style.scss';
 /**
  * Placeholder for a `videopress/video` block the editor doesn't allow.
  *
- * Shows a non-interactive preview of the video and explains that its settings
- * can't be edited. The block keeps its original markup.
+ * Shows a playable preview of the video and explains that its settings can't
+ * be edited. The block keeps its original markup.
  *
- * @param {Object} props            Block edit props.
- * @param {Object} props.attributes `core/missing` attributes, including the
- *                                  block's original markup.
+ * @param {Object}  props            Block edit props.
+ * @param {Object}  props.attributes `core/missing` attributes, including the
+ *                                   block's original markup.
+ * @param {boolean} props.isSelected Whether the block is selected.
  *
  * @return {Element} The placeholder.
  */
-export default function VideoPressUnsupported( { attributes } ) {
+export default function VideoPressUnsupported( { attributes, isSelected } ) {
 	const blockProps = useBlockProps( {
 		className: 'gutenberg-kit-videopress-unsupported',
 	} );
+
+	// Like core embeds, an overlay takes the first tap so it selects the block;
+	// later taps reach the player until the block is deselected.
+	const [ isInteractive, setIsInteractive ] = useState( false );
+	if ( ! isSelected && isInteractive ) {
+		setIsInteractive( false );
+	}
+
 	const guid = useMemo(
 		() => getGuid( attributes.originalContent ),
 		[ attributes.originalContent ]
@@ -58,7 +67,17 @@ export default function VideoPressUnsupported( { attributes } ) {
 							'videopress.com'
 						) }
 						type="wp-has-aspect-ratio"
+						onFocus={ () => setIsInteractive( true ) }
 					/>
+					{ ! isInteractive && (
+						// Pointer-only, as in core embeds: keyboard users focus
+						// the player directly, which also removes the overlay.
+						// eslint-disable-next-line jsx-a11y/no-static-element-interactions
+						<div
+							className="gutenberg-kit-videopress-unsupported__overlay"
+							onMouseUp={ () => setIsInteractive( true ) }
+						/>
+					) }
 				</div>
 			) : (
 				<div className="gutenberg-kit-videopress-unsupported__placeholder">

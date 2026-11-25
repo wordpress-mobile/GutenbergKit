@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
 import VideoPressUnsupported from '.';
 
@@ -109,15 +109,57 @@ describe( 'VideoPressUnsupported', () => {
 			'Editing VideoPress settings is not yet supported in the app.'
 		);
 	} );
+
+	describe( 'playback', () => {
+		beforeEach( () => {
+			getEmbedPreview.mockReturnValue( { html: '<iframe></iframe>' } );
+		} );
+
+		it( 'covers the player until the block is tapped', () => {
+			const { container } = renderPlaceholder();
+
+			expect( getOverlay( container ) ).toBeInTheDocument();
+		} );
+
+		it( 'uncovers the player after the tap that selects the block', () => {
+			const { container, rerender } = renderPlaceholder();
+
+			rerender( placeholder( ORIGINAL_CONTENT, true ) );
+			fireEvent.mouseUp( getOverlay( container ) );
+
+			expect( getOverlay( container ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'covers the player again once the block is deselected', () => {
+			const { container, rerender } = renderPlaceholder();
+			rerender( placeholder( ORIGINAL_CONTENT, true ) );
+			fireEvent.mouseUp( getOverlay( container ) );
+
+			rerender( placeholder( ORIGINAL_CONTENT, false ) );
+
+			expect( getOverlay( container ) ).toBeInTheDocument();
+		} );
+	} );
 } );
 
 function renderPlaceholder( originalContent = ORIGINAL_CONTENT ) {
-	render(
+	return render( placeholder( originalContent, false ) );
+}
+
+function placeholder( originalContent, isSelected ) {
+	return (
 		<VideoPressUnsupported
 			attributes={ {
 				originalName: 'videopress/video',
 				originalContent,
 			} }
+			isSelected={ isSelected }
 		/>
+	);
+}
+
+function getOverlay( container ) {
+	return container.querySelector(
+		'.gutenberg-kit-videopress-unsupported__overlay'
 	);
 }

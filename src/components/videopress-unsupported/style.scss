@@ -7,10 +7,8 @@
 	margin-right: 0;
 	overflow: hidden;
 
-	// Like core's embed overlay: taps select the block instead of playing.
 	&__preview {
 		background-color: #000;
-		pointer-events: none;
 		position: relative;
 
 		// The sandbox fills the aspect-ratio box instead of sizing to its content.
@@ -20,6 +18,12 @@
 			position: absolute;
 			width: 100%;
 		}
+	}
+
+	// Takes the tap that selects the block, so it doesn't start the player.
+	&__overlay {
+		inset: 0;
+		position: absolute;
 	}
 
 	&__placeholder {
