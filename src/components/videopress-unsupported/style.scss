@@ -1,0 +1,21 @@
+.gutenberg-kit-videopress-unsupported {
+	margin-left: 0;
+	margin-right: 0;
+
+	// Like core's embed overlay: taps select the block instead of playing.
+	&__preview {
+		pointer-events: none;
+	}
+
+	&__placeholder {
+		align-items: center;
+		aspect-ratio: 16 / 9;
+		background-color: #000;
+		display: flex;
+		justify-content: center;
+	}
+
+	.components-notice {
+		margin: 8px 0 0;
+	}
+}

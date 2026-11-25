@@ -1,0 +1,102 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { useSelect } from '@wordpress/data';
+import VideoPressUnsupported from '.';
+
+vi.mock( '@wordpress/block-editor', () => ( {
+	useBlockProps: ( props ) => props,
+} ) );
+
+vi.mock( '@wordpress/components', () => ( {
+	Notice: ( { children } ) => <div data-testid="notice">{ children }</div>,
+	SandBox: ( { html } ) => <div data-testid="sandbox">{ html }</div>,
+	Spinner: () => <div data-testid="spinner" />,
+} ) );
+
+vi.mock( '@wordpress/core-data', () => ( { store: 'core' } ) );
+
+vi.mock( '@wordpress/data', () => ( { useSelect: vi.fn() } ) );
+
+const ORIGINAL_CONTENT =
+	'<!-- wp:videopress/video {"guid":"AbC123xy","isPrivate":true} /-->';
+
+describe( 'VideoPressUnsupported', () => {
+	let getEmbedPreview;
+
+	beforeEach( () => {
+		getEmbedPreview = vi.fn();
+		useSelect.mockImplementation( ( callback ) =>
+			callback( () => ( { getEmbedPreview } ) )
+		);
+	} );
+
+	it( "requests the preview for the block's guid", () => {
+		renderPlaceholder();
+
+		expect( getEmbedPreview ).toHaveBeenCalledWith(
+			'https://videopress.com/v/AbC123xy'
+		);
+	} );
+
+	it( 'shows a spinner while the preview loads', () => {
+		getEmbedPreview.mockReturnValue( undefined );
+
+		renderPlaceholder();
+
+		expect( screen.getByTestId( 'spinner' ) ).toBeInTheDocument();
+		expect( screen.queryByTestId( 'sandbox' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders the preview once loaded', () => {
+		getEmbedPreview.mockReturnValue( { html: '<iframe></iframe>' } );
+
+		renderPlaceholder();
+
+		expect( screen.getByTestId( 'sandbox' ) ).toHaveTextContent(
+			'<iframe></iframe>'
+		);
+		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'shows an empty box when the preview fails', () => {
+		getEmbedPreview.mockReturnValue( false );
+
+		renderPlaceholder();
+
+		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
+		expect( screen.queryByTestId( 'sandbox' ) ).not.toBeInTheDocument();
+	} );
+
+	it.each( [
+		[ 'no guid', '<!-- wp:videopress/video {"id":1} /-->' ],
+		[
+			'an invalid guid',
+			'<!-- wp:videopress/video {"guid":"a/../b"} /-->',
+		],
+		[ 'no markup', null ],
+	] )( 'skips the preview request for %s', ( _, originalContent ) => {
+		renderPlaceholder( originalContent );
+
+		expect( getEmbedPreview ).not.toHaveBeenCalled();
+		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'explains that the settings are not editable', () => {
+		renderPlaceholder();
+
+		expect( screen.getByTestId( 'notice' ) ).toHaveTextContent(
+			"VideoPress video settings can't be edited in the app yet."
+		);
+	} );
+} );
+
+function renderPlaceholder( originalContent = ORIGINAL_CONTENT ) {
+	render(
+		<VideoPressUnsupported
+			attributes={ {
+				originalName: 'videopress/video',
+				originalContent,
+			} }
+		/>
+	);
+}
