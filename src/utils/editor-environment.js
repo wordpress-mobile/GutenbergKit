@@ -176,6 +176,13 @@ async function initializeEditor( pluginLoadResult = {} ) {
 		// The VideoPress block isn't available, so initialize the bridge to handle
 		// any `core/video` blocks extended to rely upon VideoPress upload services.
 		initializeVideoPressAjaxBridge();
+
+		// Lazy-loaded, like the editor, so its components see the configured
+		// locale and globals. Must run before the editor renders.
+		const { initializeVideoPressUnsupportedBlock } = await import(
+			'./videopress-unsupported'
+		);
+		initializeVideoPressUnsupportedBlock();
 	}
 
 	await _initializeEditor( {
