@@ -1,10 +1,11 @@
 import { useBlockProps } from '@wordpress/block-editor';
 import { parse } from '@wordpress/block-serialization-default-parser';
-import { Notice, SandBox, Spinner } from '@wordpress/components';
+import { SandBox, Spinner } from '@wordpress/components';
 import { store as coreStore } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
 import { useMemo } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
+import { Icon, info } from '@wordpress/icons';
 import './style.scss';
 
 /**
@@ -59,12 +60,15 @@ export default function VideoPressUnsupported( { attributes } ) {
 					{ isLoading && <Spinner /> }
 				</div>
 			) }
-			<Notice status="info" isDismissible={ false }>
-				{ __(
-					"VideoPress video settings can't be edited in the app yet. This video is kept as is. To change its settings, edit the post on the web.",
-					'gutenberg-kit'
-				) }
-			</Notice>
+			<figcaption className="gutenberg-kit-videopress-unsupported__notice">
+				<Icon icon={ info } size={ 20 } />
+				<span>
+					{ __(
+						'Editing VideoPress settings is not yet supported in the app. To make changes, edit the post on the web.',
+						'gutenberg-kit'
+					) }
+				</span>
+			</figcaption>
 		</figure>
 	);
 }

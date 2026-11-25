@@ -8,7 +8,6 @@ vi.mock( '@wordpress/block-editor', () => ( {
 } ) );
 
 vi.mock( '@wordpress/components', () => ( {
-	Notice: ( { children } ) => <div data-testid="notice">{ children }</div>,
 	SandBox: ( { html } ) => <div data-testid="sandbox">{ html }</div>,
 	Spinner: () => <div data-testid="spinner" />,
 } ) );
@@ -81,11 +80,13 @@ describe( 'VideoPressUnsupported', () => {
 		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'explains that the settings are not editable', () => {
+	it( 'captions the video to explain that its settings are not editable', () => {
 		renderPlaceholder();
 
-		expect( screen.getByTestId( 'notice' ) ).toHaveTextContent(
-			"VideoPress video settings can't be edited in the app yet."
+		expect(
+			screen.getByRole( 'figure' ).querySelector( 'figcaption' )
+		).toHaveTextContent(
+			'Editing VideoPress settings is not yet supported in the app.'
 		);
 	} );
 } );

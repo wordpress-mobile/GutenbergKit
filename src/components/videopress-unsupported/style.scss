@@ -1,9 +1,15 @@
+// Video and caption form one bordered unit, tinted from the theme's text color
+// so it suits light and dark themes.
 .gutenberg-kit-videopress-unsupported {
+	border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+	border-radius: 4px;
 	margin-left: 0;
 	margin-right: 0;
+	overflow: hidden;
 
 	// Like core's embed overlay: taps select the block instead of playing.
 	&__preview {
+		background-color: #000;
 		pointer-events: none;
 	}
 
@@ -15,7 +21,19 @@
 		justify-content: center;
 	}
 
-	.components-notice {
-		margin: 8px 0 0;
+	&__notice {
+		align-items: flex-start;
+		background-color: color-mix(in srgb, currentColor 8%, transparent);
+		display: flex;
+		font-size: 13px;
+		gap: 8px;
+		line-height: 1.5;
+		margin: 0;
+		padding: 12px;
+
+		svg {
+			fill: currentColor;
+			flex-shrink: 0;
+		}
 	}
 }
