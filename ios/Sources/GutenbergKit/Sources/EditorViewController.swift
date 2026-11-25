@@ -305,6 +305,12 @@ public final class EditorViewController: UIViewController, GutenbergEditorContro
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
 
+        // Request inline Writing Tools so results apply directly in the post;
+        // otherwise they appear only in a Copy/Replace panel.
+        if #available(iOS 18.0, *) {
+            config.writingToolsBehavior = .complete
+        }
+
         // Set-up communications with the editor.
         config.userContentController.add(controller, name: "editorDelegate")
 
