@@ -42,7 +42,12 @@ export default function VideoPressUnsupported( { attributes } ) {
 	return (
 		<figure { ...blockProps }>
 			{ preview?.html ? (
-				<div className="gutenberg-kit-videopress-unsupported__preview">
+				// Like core embeds, size the preview by the video's aspect ratio
+				// rather than its content height, which can exceed the player.
+				<div
+					className="gutenberg-kit-videopress-unsupported__preview"
+					style={ { aspectRatio: getAspectRatio( preview ) } }
+				>
 					<SandBox
 						allowSameOrigin
 						html={ preview.html }
@@ -52,7 +57,7 @@ export default function VideoPressUnsupported( { attributes } ) {
 							__( 'Embedded content from %s' ),
 							'videopress.com'
 						) }
-						type="video"
+						type="wp-has-aspect-ratio"
 					/>
 				</div>
 			) : (
@@ -88,4 +93,17 @@ function getGuid( originalContent ) {
 	return typeof guid === 'string' && /^[a-z0-9]+$/i.test( guid )
 		? guid
 		: undefined;
+}
+
+/**
+ * Returns the CSS aspect ratio of an oEmbed preview.
+ *
+ * @param {Object} preview        oEmbed response.
+ * @param {number} preview.width  Embed width.
+ * @param {number} preview.height Embed height.
+ *
+ * @return {string} The aspect ratio, 16:9 when the size is unknown.
+ */
+function getAspectRatio( { width, height } ) {
+	return width > 0 && height > 0 ? `${ width } / ${ height }` : '16 / 9';
 }

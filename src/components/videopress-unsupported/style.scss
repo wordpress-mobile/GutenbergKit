@@ -11,6 +11,15 @@
 	&__preview {
 		background-color: #000;
 		pointer-events: none;
+		position: relative;
+
+		// The sandbox fills the aspect-ratio box instead of sizing to its content.
+		.components-sandbox {
+			height: 100%;
+			inset: 0;
+			position: absolute;
+			width: 100%;
+		}
 	}
 
 	&__placeholder {

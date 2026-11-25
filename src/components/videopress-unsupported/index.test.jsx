@@ -57,6 +57,26 @@ describe( 'VideoPressUnsupported', () => {
 		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
 	} );
 
+	it.each( [
+		[
+			"the video's aspect ratio",
+			{ width: 600, height: 338 },
+			'600 / 338',
+		],
+		[ '16:9 without a size', {}, '16 / 9' ],
+	] )( 'sizes the preview by %s', ( _, size, expected ) => {
+		getEmbedPreview.mockReturnValue( {
+			html: '<iframe></iframe>',
+			...size,
+		} );
+
+		renderPlaceholder();
+
+		expect(
+			screen.getByTestId( 'sandbox' ).parentElement.style.aspectRatio
+		).toBe( expected );
+	} );
+
 	it( 'shows an empty box when the preview fails', () => {
 		getEmbedPreview.mockReturnValue( false );
 
